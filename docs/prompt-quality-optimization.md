@@ -17,7 +17,7 @@ provided by the source requirement.
 
 Prompt changes are evaluated with one stable requirement set:
 
-- **Prompt Evaluation Set**: 30 fixed requirements used as the primary quality
+- **Prompt Evaluation Set**: 35 fixed requirements used as the primary quality
   benchmark for prompt changes.
 
 Random sampling may still be used for exploration, but it is not the primary
@@ -73,7 +73,7 @@ See `optimization/manual_review.py` for the implementation.
 
 ## Prompt Evaluation Set V1
 
-These 30 requirements are selected from the existing 64-requirement evaluation
+These 35 requirements are selected from the existing 64-requirement evaluation
 pool in `optimization_runs/log/20260519_v2-full64_evalonly/`.
 
 The machine-readable source of truth is
@@ -98,7 +98,6 @@ the requirement gives enough semantic information.
 | REQ-BMS-OVP-002 | Overvoltage Protection | none |
 | REQ-BMS-OVP-009 | Overvoltage Protection | none |
 | REQ-BMS-ISO-002 | Insulation & HVIL | none |
-| REQ-BMS-ISO-004 | Insulation & HVIL | none |
 | REQ-BMS-COM-004 | Communication & Diagnostics | none |
 | REQ-BMS-STM-002 | BMS State Machine | none |
 
@@ -112,11 +111,17 @@ splitting, and wait/verify separation.
 | REQ-BMS-OVP-001 | Overvoltage Protection | timing |
 | REQ-BMS-OVP-003 | Overvoltage Protection | none |
 | REQ-BMS-OVP-006 | Overvoltage Protection | none |
-| REQ-BMS-OVP-011 | Overvoltage Protection | none |
 | REQ-BMS-CUR-001 | Current Management | none |
+| REQ-BMS-CUR-002 | Current Management | timing |
+| REQ-BMS-CUR-003 | Current Management | none |
 | REQ-BMS-CUR-004 | Current Management | none |
+| REQ-BMS-UVP-001 | Undervoltage Protection | threshold, timing |
+| REQ-BMS-UVP-002 | Undervoltage Protection | timing |
+| REQ-BMS-UVP-003 | Undervoltage Protection | threshold, timing |
 | REQ-BMS-COM-003 | Communication & Diagnostics | none |
 | REQ-BMS-CHG-002 | Charge Management | timing |
+| REQ-BMS-THM-001 | Thermal Management | timing, observation |
+| REQ-BMS-THM-006 | Thermal Management | timing |
 
 ### Missing Information Traps
 
@@ -126,13 +131,13 @@ with a bare `[NEEDS REVIEW]` marker in the generated case.
 | Requirement | Function | Expected missing categories |
 | --- | --- | --- |
 | REQ-BMS-THM-004 | Thermal Management | threshold, timing |
-| REQ-BMS-THM-005 | Thermal Management | threshold, timing |
 | REQ-BMS-PVP-001 | Pack Voltage Protection | threshold, timing |
 | REQ-BMS-DEG-001 | Degradation Monitoring | threshold, observation |
 | REQ-BMS-STM-003 | BMS State Machine | timing |
-| REQ-BMS-STM-007 | BMS State Machine | timing |
+| REQ-BMS-STM-005 | BMS State Machine | timing |
 | REQ-BMS-BAL-002 | Cell Balancing | threshold, timing |
-| REQ-BMS-SOC-004 | SOC/SOH Estimation | threshold, timing |
+| REQ-BMS-CUR-005 | Current Management | timing |
+| REQ-BMS-ISO-003 | Insulation & HVIL | timing |
 
 ### Multi-Branch and Multi-Mode Cases
 
@@ -255,7 +260,7 @@ sampling.
 Completed work:
 
 - Store Prompt Evaluation Set V1 in a machine-readable artifact
-  (`optimization_runs/requirement_sets/prompt_eval_v1.json`, 30 entries).
+  (`optimization_runs/requirement_sets/prompt_eval_v1.json`, 35 entries).
 - Add `--requirement-set <path>` to `optimization.cli run`.
 - Validate that all listed Requirement IDs exist in the source Excel.
 - Validate no duplicate keys, valid expected_missing_categories.

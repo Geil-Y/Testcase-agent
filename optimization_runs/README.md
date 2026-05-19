@@ -25,7 +25,7 @@ optimization_runs/
 ├── checklist_v1.md                         # 初始 checklist（Phase 2 产物）
 ├── README.md                               # 本文件
 ├── requirement_sets/                       # 可执行评估集
-│   └── prompt_eval_v1.json                 # Prompt Evaluation Set V1 (30 条)
+│   └── prompt_eval_v1.json                 # Prompt Evaluation Set V1 (35 条)
 └── run_YYYYMMDD_HHMMSS/
     ├── round_01/
     │   ├── prompts/                        # 本轮使用的 prompt 文件

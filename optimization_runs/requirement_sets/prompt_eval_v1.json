@@ -1,6 +1,6 @@
 {
   "name": "Prompt Evaluation Set V1",
-  "description": "30 fixed requirements selected from the 64-requirement evaluation pool. Used as the primary quality benchmark for prompt changes.",
+  "description": "35 fixed requirements selected from the 64-requirement evaluation pool. Used as the primary quality benchmark for prompt changes.",
   "source_pool": "optimization_runs/log/20260519_v2-full64_evalonly/",
   "entries": [
     {
@@ -17,12 +17,6 @@
     },
     {
       "requirement_key": "REQ-BMS-ISO-002",
-      "evaluation_bucket": "complete_information_baseline",
-      "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
-    },
-    {
-      "requirement_key": "REQ-BMS-ISO-004",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
       "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
@@ -58,22 +52,46 @@
       "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
     },
     {
-      "requirement_key": "REQ-BMS-OVP-011",
-      "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
-    },
-    {
       "requirement_key": "REQ-BMS-CUR-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
       "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
     },
     {
+      "requirement_key": "REQ-BMS-CUR-002",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Discharge overcurrent boundary, symmetric to CUR-001 charge OC; tests directional threshold handling and symbolic parameter usage."
+    },
+    {
+      "requirement_key": "REQ-BMS-CUR-003",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "OC recovery timing chain with hold timer and ramp rate; tests multi-stage sequential timing behavior."
+    },
+    {
       "requirement_key": "REQ-BMS-CUR-004",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
       "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-UVP-001",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Undervoltage domain baseline: single-threshold detection with unspecified power limit value and response timing."
+    },
+    {
+      "requirement_key": "REQ-BMS-UVP-002",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Multi-stage UV escalation with asymmetric recovery threshold (3.00 V); tests L2 escalation and hysteresis semantics."
+    },
+    {
+      "requirement_key": "REQ-BMS-UVP-003",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Proportional power limiting with conditional L2 escalation; tests proportionally-derived limits and state-dependent escalation."
     },
     {
       "requirement_key": "REQ-BMS-COM-003",
@@ -88,13 +106,19 @@
       "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
     },
     {
-      "requirement_key": "REQ-BMS-THM-004",
-      "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "requirement_key": "REQ-BMS-THM-001",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing", "observation"],
+      "rationale": "Over-temperature detection boundary, symmetric to THM-004 under-temperature; tests high-side temperature threshold and DTC storage semantics."
     },
     {
-      "requirement_key": "REQ-BMS-THM-005",
+      "requirement_key": "REQ-BMS-THM-006",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Derived-value threshold comparison (max delta > 15 C); tests whether model handles computed values rather than direct sensor readings."
+    },
+    {
+      "requirement_key": "REQ-BMS-THM-004",
       "evaluation_bucket": "missing_information_traps",
       "expected_missing_categories": ["threshold", "timing"],
       "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
@@ -118,10 +142,10 @@
       "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
     },
     {
-      "requirement_key": "REQ-BMS-STM-007",
+      "requirement_key": "REQ-BMS-STM-005",
       "evaluation_bucket": "missing_information_traps",
       "expected_missing_categories": ["timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "rationale": "Precharge retry counter: tests retry-count semantics and lockout state with genuinely missing retry-interval timing."
     },
     {
       "requirement_key": "REQ-BMS-BAL-002",
@@ -130,10 +154,16 @@
       "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
     },
     {
-      "requirement_key": "REQ-BMS-SOC-004",
+      "requirement_key": "REQ-BMS-CUR-005",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": ["timing"],
+      "rationale": "SCD latch persistence across power cycles: tests non-volatile state semantics with missing diagnostic-clear timing."
+    },
+    {
+      "requirement_key": "REQ-BMS-ISO-003",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["timing"],
+      "rationale": "HVIL hardware interlock interrupt: tests a physically distinct detection mechanism (loop continuity vs. resistance measurement)."
     },
     {
       "requirement_key": "REQ-BMS-THM-007",
