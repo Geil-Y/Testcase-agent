@@ -10,8 +10,9 @@ The script:
 1. Reads the Excel, separating heading/info rows (kept as context) from requirement rows.
 2. Randomly samples N requirement rows.
 3. Injects preceding heading/info as supplementary context.
-4. Runs the pipeline for each requirement.
-5. Saves generated_cases.json in the round directory.
+4. Saves current prompt files to <round_dir>/prompts/ for archival.
+5. Runs the pipeline for each requirement.
+6. Saves generated_cases.json in the round directory.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
 import sys
 from pathlib import Path
 
@@ -136,6 +138,21 @@ def sample_requirements(
     return random.sample(inputs, sample_size)
 
 
+def archive_prompts(round_dir: Path) -> None:
+    """Copy current prompt files into round_dir/prompts/ for archival."""
+    prompts_dir = round_dir / "prompts"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+
+    project_root = Path(__file__).resolve().parents[1]
+    source_dir = project_root / "prompts"
+
+    for src in sorted(source_dir.glob("*.jinja")):
+        # Strip .jinja extension for the archived copy (e.g. generate_case.system.jinja -> generate_case.system.md)
+        dest_name = src.stem + ".md"  # stem = "generate_case.system", removing only .jinja
+        shutil.copy2(src, prompts_dir / dest_name)
+        print(f"  Archived prompt: {src.name} -> {dest_name}")
+
+
 def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
@@ -145,6 +162,7 @@ def run_batch(
     provider = create_provider(settings)
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    archive_prompts(output_dir)
 
     all_results: list[dict] = []
     total_cases = 0
@@ -185,6 +203,7 @@ def run_batch(
                 "objective": case.objective,
                 "precondition": case.precondition,
                 "postcondition": case.postcondition,
+                "related_requirement": case.related_requirement,
                 "steps": [
                     {"order": s.order, "action": s.action, "expected": s.expected}
                     for s in case.steps

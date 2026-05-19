@@ -38,6 +38,7 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
                 "timing": timing,
                 "missing_critical_info": missing_info,
                 "case_coverage": coverage,
+                "requirement_description": req.get("description", ""),
             }
             failed = evaluate_case(case, req_info, {})
             if failed:
@@ -56,7 +57,7 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
         "2. 领域正确性": [],
         "3. NEEDS REVIEW规范": [],
         "4. 步骤质量": [],
-        "5. 覆盖维度匹配": [],
+        "5. 覆盖维度": [],
         "6. 测试工程深度": [],
     }
     for item_id, (desc, cat) in CHECKLIST.items():

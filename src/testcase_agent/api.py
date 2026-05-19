@@ -130,6 +130,7 @@ def generate(req_id: int):
             "objective": case.objective,
             "precondition": case.precondition,
             "postcondition": case.postcondition,
+            "related_requirement": case.related_requirement,
             "steps": [{"order": s.order, "action": s.action, "expected": s.expected} for s in case.steps],
             "raw_html": case.raw_html,
             "quality": {

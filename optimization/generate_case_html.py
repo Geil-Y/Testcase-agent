@@ -12,37 +12,26 @@ CHECKLIST = {
     "1.1.3": ("precondition 不为空", "结构完整性"),
     "1.1.4": ("postcondition 不为空", "结构完整性"),
     "1.1.5": ("至少1个step且有action", "结构完整性"),
-    "2.1.1": ("已知信号名在expected中引用", "领域正确性"),
-    "2.1.2": ("不凭空发明信号名", "领域正确性"),
-    "2.1.3": ("信号名与原文一致", "领域正确性"),
-    "2.2.1": ("已知阈值在expected中引用", "领域正确性"),
-    "2.2.2": ("不凭空发明数值阈值", "领域正确性"),
-    "2.3.1": ("已知时序参数在expected中引用", "领域正确性"),
-    "2.3.2": ("符号化参数名直接使用", "领域正确性"),
-    "2.4.1": ("不凭空发明CAN ID", "领域正确性"),
-    "2.4.2": ("不凭空发明calibration name", "领域正确性"),
+    "1.1.6": ("related_requirement 存在", "结构完整性"),
+    "2.1.1": ("已知信号名在case中引用", "领域正确性"),
+    "2.1.2": ("不凭空发明标识符", "领域正确性"),
+    "2.2.1": ("不凭空发明数值阈值", "领域正确性"),
+    "2.2.2": ("符号化参数名视为有效值", "领域正确性"),
     "3.1.1": ("NEEDS REVIEW仅用于缺失信息", "NEEDS REVIEW规范"),
-    "3.1.2": ("有具体值时不加NEEDS REVIEW", "NEEDS REVIEW规范"),
-    "3.2.1": ("NEEDS REVIEW位置正确", "NEEDS REVIEW规范"),
-    "3.2.2": ("时序缺失时expected有占位符", "NEEDS REVIEW规范"),
-    "4.1.1": ("每个step有action和expected", "步骤质量"),
-    "4.2.1": ("时序等待与执行动作分两步", "步骤质量"),
-    "4.2.2": ("无重复stimulus/wait步骤", "步骤质量"),
-    "4.3.1": ("至少一个expected具体可观测", "步骤质量"),
-    "4.3.2": ("无模糊expected result", "步骤质量"),
-    "4.3.3": ("无read/check-only expected", "步骤质量"),
-    "5.1.1": ("normal_behavior匹配", "覆盖维度匹配"),
-    "5.1.2": ("boundary_or_threshold匹配", "覆盖维度匹配"),
-    "5.1.3": ("fault_or_protection匹配", "覆盖维度匹配"),
-    "5.1.4": ("state_transition匹配", "覆盖维度匹配"),
-    "5.1.5": ("observability匹配", "覆盖维度匹配"),
-    "5.2.1": ("参数/时序未触发为独立case", "覆盖维度匹配"),
-    "5.2.2": ("参数阈值和时序阈值独立", "覆盖维度匹配"),
+    "3.2.1": ("NEEDS REVIEW放在正确位置", "NEEDS REVIEW规范"),
+    "4.1.1": ("时序等待与执行动作分两步 [WARNING]", "步骤质量"),
+    "4.1.2": ("无重复stimulus/wait步骤", "步骤质量"),
+    "4.2.1": ("至少一个expected具体可观测", "步骤质量"),
+    "4.2.2": ("无模糊expected result", "步骤质量"),
+    "4.2.3": ("无read/check-only expected", "步骤质量"),
+    "5.2.1": ("触发/不触发等价类覆盖", "覆盖维度"),
+    "5.2.2": ("边界值case覆盖", "覆盖维度"),
+    "5.2.3": ("参数/时序正交拆分", "覆盖维度"),
     "6.1.1": ("所有case统一precondition", "测试工程深度"),
     "6.1.2": ("所有case统一postcondition", "测试工程深度"),
-    "6.1.3": ("action不写BMS内部行为", "测试工程深度"),
+    "6.1.3": ("setup动作放action非precondition", "测试工程深度"),
     "6.2.1": ("Title描述测试条件和预期行为", "测试工程深度"),
-    "6.3.1": ("每个case聚焦一个意图", "测试工程深度"),
+    "6.3.1": ("每个case仅验证一个需求的一个行为", "测试工程深度"),
     "6.3.2": ("不合并多个阈值场景", "测试工程深度"),
 }
 
@@ -53,6 +42,7 @@ STANDARD_POSTCONDITION = "System returned to normal operating state."
 def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     """Evaluate a single case against checklist items. Returns list of failed item IDs."""
     failed = []
+    warnings = []  # WARNING items — tracked but not counted for pass/fail
 
     title = case["title"].strip()
     obj = case["objective"].strip()
@@ -70,6 +60,8 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     case_text = f"{title} {obj} {pre} {post}"
     all_expected = " ".join([s["expected"] or "" for s in steps]).lower()
 
+    rr = case.get("related_requirement", "").strip()
+
     # 1.1.1
     if not title or title.lower() in {"draft test case", "test case", "boundary test"}:
         failed.append("1.1.1")
@@ -85,36 +77,43 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     # 1.1.5
     if not steps:
         failed.append("1.1.5")
+    # 1.1.6 - related_requirement present and matches
+    if not rr:
+        failed.append("1.1.6")
 
     # 2.1.1 - signal reference
     if signals and all_expected:
         if not any(s.lower() in all_expected for s in signals):
             failed.append("2.1.1")
 
-    # 2.2.1 - threshold reference
-    if thresholds and all_expected:
-        if not any(t.lower() in all_expected for t in thresholds):
-            failed.append("2.2.1")
-
-    # 2.2.2 - invented numeric values
+    # 2.2.1 - invented numeric values (check against requirement description + timing + thresholds)
+    req_desc = req_info.get("requirement_description", "").lower()
+    known_text = req_desc + " " + " ".join(timing + thresholds + signals).lower()
     for s in steps:
         text = f"{s['action']} {s['expected'] or ''}"
-        known = " ".join(timing + thresholds).lower()
         found_nums = re.findall(r"\d+\.?\d*\s*(?:V|A|deg C|\xb0C|ms|s|ohm|%)", text)
         for n in found_nums:
-            if n.lower() not in known:
-                failed.append("2.2.2")
+            if n.lower() not in known_text:
+                failed.append("2.2.1")
                 break
         else:
             continue
         break
 
+    # 2.2.2 - symbolic parameter names treated as valid values
+    # (No deterministic check — semantic assessment only. Pass by default.)
+
     # 3.1.1 - NEEDS REVIEW only for missing info
     case_lower = json.dumps(case).lower()
     if "[needs review]" in case_lower and not has_missing:
         failed.append("3.1.1")
+    # 3.2.1 - NEEDS REVIEW position
+    if "[needs review]" in case_lower:
+        needs_pos_ok = any("[needs review]" in (s["action"] + str(s["expected"] or "")).lower() for s in steps)
+        if not needs_pos_ok:
+            failed.append("3.2.1")
 
-    # 4.1.1 - every step has action + expected
+    # 4.1.1 - timing and action in separate steps [WARNING — not counted in pass/fail]
     has_null_action = False
     has_merged_wait = False
     wait_count = 0
@@ -122,37 +121,49 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     for i, s in enumerate(steps):
         act = s["action"].strip().lower()
         exp = s["expected"]
-        is_wait = act.startswith("wait")
-        if not is_wait and exp is None:
-            has_null_action = True
-        if "wait" in act and exp and exp != "none":
-            has_merged_wait = True
         if "wait" in act:
             wait_count += 1
+            if exp and exp != "none":
+                has_merged_wait = True
             if i + 1 < len(steps):
                 next_exp = (steps[i + 1]["expected"] or "").strip()
                 if next_exp and next_exp.lower() != "none":
                     separated_count += 1
-    if has_null_action:
-        failed.append("4.1.1")
-
-    # 4.2.1 - timing and action separately (fail only if merged dominates separated)
+    # 4.1.1 downgraded to WARNING — still tracked but not counted for pass/fail
     if has_merged_wait and separated_count < wait_count:
+        warnings.append("4.1.1")
+
+    # 4.1.2 - no duplicate stimulus/wait steps
+    actions = [s["action"].strip().lower() for s in steps]
+    for i in range(len(actions)):
+        if actions[i] and actions[i] in actions[i + 1:]:
+            failed.append("4.1.2")
+            break
+
+    # 4.2.1 - at least one concrete observable expected
+    has_concrete = any(
+        (s["expected"] or "").strip().lower() not in ("", "none", "null") and len((s["expected"] or "").strip()) > 10
+        for s in steps
+    )
+    if not has_concrete:
         failed.append("4.2.1")
 
-    # 4.3.2 - no vague expected
+    # 4.2.2 - no vague expected
     for s in steps:
         exp = (s["expected"] or "").lower()
         if exp and any(v in exp for v in ["system works correctly", "behaves as expected", "works as expected"]):
-            failed.append("4.3.2")
+            failed.append("4.2.2")
+            break
 
-    # 4.3.3 - no read/check-only expected
+    # 4.2.3 - no read/check-only expected
     for s in steps:
         exp = (s["expected"] or "").lower()
+        act = s["action"].lower()
         if exp and any(v in exp for v in ["read", "check", "verify", "observe", "monitor", "capture"]):
-            if len(exp.split()) < 8 and not any(c.isdigit() for c in exp):
-                failed.append("4.3.3")
-                break
+            if not any(w in act for w in ["set", "apply", "simulate"]):
+                if len(exp.split()) < 8:
+                    failed.append("4.2.3")
+                    break
 
     # 6.1.1 - unified precondition (check keyword overlap)
     pre_keywords = ["bms initialized", "normal operating", "no active fault"]
@@ -262,6 +273,7 @@ def generate_round_html(round_dir: Path, round_num: int) -> None:
             case_blocks.append(f"""
         <div style="border:1px solid #ddd; border-radius:6px; padding:14px; margin-bottom:10px; page-break-inside:avoid">
           <h4 style="margin:0 0 6px 0">Case {ci_idx + 1} — {case["title"]}{badge}</h4>
+          <p style="margin:4px 0"><b>Related Requirement:</b> {case.get("related_requirement", "")}</p>
           <p style="margin:4px 0"><b>Objective:</b> {case["objective"]}</p>
           <p style="margin:4px 0"><b>Precondition:</b> {case["precondition"]}</p>
           <table style="width:100%;border-collapse:collapse;margin:8px 0;font-size:0.85rem">

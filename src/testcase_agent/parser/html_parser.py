@@ -18,6 +18,7 @@ class GeneratedCase:
     objective: str
     precondition: str
     postcondition: str
+    related_requirement: str = ""
     steps: list[Step] = field(default_factory=list)
     raw_html: str = ""
 
@@ -94,6 +95,10 @@ def parse_generated_case(html: str) -> GeneratedCase:
     post_el = case_el.find("postcondition")
     if post_el:
         result.postcondition = post_el.get_text(strip=True)
+
+    rr_el = case_el.find("related_requirement")
+    if rr_el:
+        result.related_requirement = rr_el.get_text(strip=True)
 
     steps_el = case_el.find("steps")
     if steps_el:

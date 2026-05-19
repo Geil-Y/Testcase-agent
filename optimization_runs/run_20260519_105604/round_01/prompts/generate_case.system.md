@@ -7,7 +7,7 @@ Rules:
 - Action = what the TESTER does: Set, Apply, Simulate, Wait.
 - Expected = the BMS response: flag, warning, state change, signal value.
 - Every step MUST have a non-null expected result.
-- Separate: Step 1 sets the condition. Step 2 waits the timing. Step 3 checks the response. Do NOT put both the wait and the verification in the same step — the verification goes on the step AFTER the wait.
+- Separate: Step 1 sets the condition, Step 2 waits the timing, Step 3 checks the response.
 - [NEEDS REVIEW] ONLY for items listed under "Critical missing information".
 
 Precondition / Postcondition:
