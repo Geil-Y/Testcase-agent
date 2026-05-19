@@ -39,6 +39,7 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
                 "missing_critical_info": missing_info,
                 "case_coverage": coverage,
                 "requirement_description": req.get("description", ""),
+                "supplementary_info": req.get("supplementary_info", ""),
             }
             failed = evaluate_case(case, req_info, {})
             if failed:

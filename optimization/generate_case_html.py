@@ -86,12 +86,13 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
         if not any(s.lower() in all_expected for s in signals):
             failed.append("2.1.1")
 
-    # 2.2.1 - invented numeric values (check against requirement description + timing + thresholds)
+    # 2.2.1 - invented numeric values (check against requirement description + supplementary_info + timing + thresholds + signals)
     req_desc = req_info.get("requirement_description", "").lower()
-    known_text = req_desc + " " + " ".join(timing + thresholds + signals).lower()
+    supp_info = req_info.get("supplementary_info", "").lower()
+    known_text = req_desc + " " + supp_info + " " + " ".join(timing + thresholds + signals).lower()
     for s in steps:
         text = f"{s['action']} {s['expected'] or ''}"
-        found_nums = re.findall(r"\d+\.?\d*\s*(?:V|A|deg C|\xb0C|ms|s|ohm|%)", text)
+        found_nums = re.findall(r"\d+\.?\d*\s*(?:deg\s*C|°C|kOhm|MOhm|mOhm|kΩ|MΩ|mΩ|mV|mA|ms|ohm|Ω|deg|V|A|s|%)(?!\w)", text, re.IGNORECASE)
         for n in found_nums:
             if n.lower() not in known_text:
                 failed.append("2.2.1")
@@ -242,6 +243,8 @@ def generate_round_html(round_dir: Path, round_num: int) -> None:
                 "timing": timing,
                 "missing_critical_info": missing_info,
                 "case_coverage": coverage,
+                "requirement_description": req.get("description", ""),
+                "supplementary_info": req.get("supplementary_info", ""),
             }
             global_data = {
                 "all_preconds": all_preconds,

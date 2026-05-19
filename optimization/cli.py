@@ -32,6 +32,7 @@ from openpyxl import load_workbook
 
 from testcase_agent.config import get_settings
 from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
+from testcase_agent.pipeline.post_process import sanitize_numeric_values
 from testcase_agent.provider.factory import create_provider
 from testcase_agent.quality.gate import evaluate_cases
 
@@ -156,6 +157,7 @@ def archive_prompts(round_dir: Path) -> None:
 def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
+    sanitize: bool = False,
 ) -> dict:
     """Run pipeline for all requirements and save results."""
     settings = get_settings()
@@ -179,6 +181,27 @@ def run_batch(
             })
             print(f"  ERROR: {result.error}")
             continue
+
+        if sanitize and result.analysis:
+            sigs = result.analysis.signals
+            thr = result.analysis.thresholds
+            tim = result.analysis.timing
+            sanitized_cases = []
+            total_replacements = 0
+            for case in result.cases:
+                sc, reps = sanitize_numeric_values(
+                    case,
+                    requirement_description=req.description,
+                    supplementary_info=req.supplementary_info,
+                    extracted_signals=sigs,
+                    extracted_thresholds=thr,
+                    extracted_timing=tim,
+                )
+                sanitized_cases.append(sc)
+                total_replacements += len(reps)
+            result.cases = sanitized_cases
+            if total_replacements:
+                print(f"  sanitize: {total_replacements} value(s) replaced with [NEEDS REVIEW]")
 
         quality_reports = evaluate_cases(result.cases)
 
@@ -281,6 +304,7 @@ def main():
     run_parser.add_argument("--desc-col", default="Requirement Description")
     run_parser.add_argument("--type-col", default="Type")
     run_parser.add_argument("--func-col", default="function")
+    run_parser.add_argument("--sanitize", action="store_true", help="Post-process cases to replace invented numeric values with [NEEDS REVIEW]")
 
     args = parser.parse_args()
 
@@ -299,7 +323,7 @@ def main():
         sampled = sample_requirements(all_inputs, args.sample, args.seed)
         print(f"Sampled {len(sampled)} requirements (seed={args.seed})")
 
-        run_batch(sampled, Path(args.output_dir))
+        run_batch(sampled, Path(args.output_dir), sanitize=args.sanitize)
 
     else:
         parser.print_help()
