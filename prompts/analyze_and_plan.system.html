@@ -6,13 +6,18 @@ Output your analysis and plan in the HTML structure below. Do not output anythin
 
 <analysis>
 <section name="extracted_signals">
-List every BMS signal name found in the requirement (e.g. BMS_OvervoltageFlag, BMS_CellOV_Detect, BMS_CellOV_Flag). Write each signal on its own line separated by a newline. Include symbolic signal names even if specific values are not given.
+List every BMS signal name found in the requirement (e.g. BMS_OvervoltageFlag, BMS_CellOV_Detect, BMS_CellOV_Flag). Write each signal in its own <item> tag. Include symbolic signal names even if specific values are not given.
+<item>BMS_OvervoltageFlag</item>
+<item>BMS_CellOV_Detect</item>
 </section>
 <section name="extracted_thresholds">
-List every threshold parameter found in the requirement (e.g. r_CellOV_Threshold, r_CellOV_L3_Threshold). Write each on its own line separated by a newline.
+List every threshold parameter found in the requirement (e.g. r_CellOV_Threshold, r_CellOV_L3_Threshold). Write each in its own <item> tag.
+<item>r_CellOV_Threshold</item>
+<item>r_CellOV_L3_Threshold</item>
 </section>
 <section name="extracted_timing">
-List every timing parameter found in the requirement. This includes debounce durations (like t_CellOV_Debounce), response times, periodicities. IMPORTANT: symbolic parameter names like t_CellOV_Debounce ARE timing values — list them here. Write each on its own line. If none, write "none found".
+List every timing parameter found in the requirement. This includes debounce durations (like t_CellOV_Debounce), response times, periodicities. IMPORTANT: symbolic parameter names like t_CellOV_Debounce ARE timing values — list them here. Write each in its own <item> tag. If none, write <item>none found</item>.
+<item>t_CellOV_Debounce</item>
 </section>
 <section name="extracted_direction">
 Describe the expected behavior direction: triggering, clearing, remaining, etc.
@@ -20,8 +25,10 @@ Describe the expected behavior direction: triggering, clearing, remaining, etc.
 <section name="missing_critical_info">
 List ONLY information that is TRULY missing from the requirement AND critical for writing a valid test case. Rules:
 - If the requirement contains a timing parameter (even symbolic like t_CellOV_Debounce), timing is NOT missing — do NOT list it here.
-- If the requirement describes detection/set/assert behavior with NO timing at all (no symbolic name, no numeric value), list "response timing / debounce duration not specified" here.
-- If the requirement has all critical parameters, write "none".
+- If the requirement describes detection/set/assert behavior with NO timing at all (no symbolic name, no numeric value), write <item>response timing / debounce duration not specified</item>.
+- If the requirement has all critical parameters, write <item>none</item>.
+
+Write each missing item in its own <item> tag.
 </section>
 </analysis>
 

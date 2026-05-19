@@ -147,9 +147,9 @@ def archive_prompts(round_dir: Path) -> None:
     project_root = Path(__file__).resolve().parents[1]
     source_dir = project_root / "prompts"
 
-    for src in sorted(source_dir.glob("*.jinja")):
-        # Strip .jinja extension for the archived copy (e.g. generate_case.system.jinja -> generate_case.system.md)
-        dest_name = src.stem + ".md"  # stem = "generate_case.system", removing only .jinja
+    for src in sorted(source_dir.glob("*.html")):
+        # Strip .html extension for the archived copy (e.g. generate_case.system.html -> generate_case.system.md)
+        dest_name = src.stem + ".md"
         shutil.copy2(src, prompts_dir / dest_name)
         print(f"  Archived prompt: {src.name} -> {dest_name}")
 

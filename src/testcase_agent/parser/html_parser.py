@@ -48,17 +48,19 @@ def parse_analysis(html: str) -> AnalysisResult:
     if analysis:
         for section in analysis.find_all("section"):
             name = section.get("name", "")
-            text = section.get_text(strip=True)
-            if name == "extracted_signals":
-                result.signals = _lines(text)
-            elif name == "extracted_thresholds":
-                result.thresholds = _lines(text)
-            elif name == "extracted_timing":
-                result.timing = _lines(text)
-            elif name == "extracted_direction":
-                result.direction = text
-            elif name == "missing_critical_info":
-                result.missing_critical_info = _lines(text)
+            if name == "extracted_direction":
+                result.direction = section.get_text(strip=True)
+            else:
+                items = [it.get_text(strip=True) for it in section.find_all("item")]
+                value = items if items else _lines(section.get_text(strip=True))
+                if name == "extracted_signals":
+                    result.signals = value
+                elif name == "extracted_thresholds":
+                    result.thresholds = value
+                elif name == "extracted_timing":
+                    result.timing = value
+                elif name == "missing_critical_info":
+                    result.missing_critical_info = value
 
     plan = soup.find("coverage_plan")
     if plan:
