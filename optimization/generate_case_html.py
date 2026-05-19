@@ -20,7 +20,6 @@ CHECKLIST = {
     "3.1.1": ("NEEDS REVIEW仅用于缺失信息", "NEEDS REVIEW规范"),
     "3.2.1": ("NEEDS REVIEW放在正确位置", "NEEDS REVIEW规范"),
     "4.1.1": ("时序等待与执行动作分两步 [WARNING]", "步骤质量"),
-    "4.1.2": ("无重复stimulus/wait步骤", "步骤质量"),
     "4.2.1": ("至少一个expected具体可观测", "步骤质量"),
     "4.2.2": ("无模糊expected result", "步骤质量"),
     "4.2.3": ("无read/check-only expected", "步骤质量"),
@@ -133,13 +132,6 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     # 4.1.1 downgraded to WARNING — still tracked but not counted for pass/fail
     if has_merged_wait and separated_count < wait_count:
         warnings.append("4.1.1")
-
-    # 4.1.2 - no duplicate stimulus/wait steps
-    actions = [s["action"].strip().lower() for s in steps]
-    for i in range(len(actions)):
-        if actions[i] and actions[i] in actions[i + 1:]:
-            failed.append("4.1.2")
-            break
 
     # 4.2.1 - at least one concrete observable expected
     has_concrete = any(

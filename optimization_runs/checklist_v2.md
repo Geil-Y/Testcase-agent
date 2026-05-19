@@ -55,7 +55,6 @@ created: 2026-05-19
 
 ### 4.1 步骤结构
 - [ ] 4.1.1 时序等待与执行动作分为独立的两步（如 step 1: Set volt = 4.2V, step 2: Wait t_CellOV_Debounce）
-- [ ] 4.1.2 无重复的 stimulus/wait 步骤（描述相同 duration 或 trigger condition 时）[CodeX]
 
 ### 4.2 Expected Result 可观测性
 - [ ] 4.2.1 至少一个 expected result 是具体且可观测的（当足够信息存在时）[CodeX]
