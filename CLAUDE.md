@@ -23,6 +23,18 @@ Uses five canonical labels: needs-triage, needs-info, ready-for-agent, ready-for
 
 Single-context — CONTEXT.md at root, ADRs under docs/adr/. See `docs/agents/domain.md`.
 
+### ADR 触发条件
+
+以下任一发生时，AI 应向用户提议是否写 ADR（不自动写，最终决定权在用户）：
+
+- 新增包/依赖（改动 `pyproject.toml` dependencies）
+- 新增或删除顶层目录（`src/`、`tests/`、`prompts/` 等同级目录）
+- 新增架构约束规则到 `CLAUDE.md` 本身
+- 管道流程变更（pipeline 阶段增删、LLM 调用顺序调整）
+- 用户在设计讨论中明确做了二选一决策
+
+ADR 格式：遵循 `docs/adr/` 下已有风格，~5 行即可，重点记录**当时为什么这么选**，而非描述现状。
+
 ### Git commit
 
 提交时使用 `git-commit` skill，遵循 Conventional Commits 规范（`<type>[scope]: <description>`）。
