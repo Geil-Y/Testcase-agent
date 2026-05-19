@@ -7,9 +7,13 @@ from copy import deepcopy
 
 from ..parser.html_parser import GeneratedCase, Step
 
-# Numbers with physical units the 7B model commonly invents
+# Numbers with physical units the 7B model commonly invents.
+# Capture group 1 = the unit, so we can check whether known_text already
+# references the same physical quantity (e.g. 4.26V is a boundary
+# derivation from 4.25V in the requirement, not a pure invention).
+_UNIT_PATTERN = r"(deg\s*C|°C|kOhm|MOhm|mOhm|kΩ|MΩ|mΩ|mV|mA|ms|ohm|Ω|deg|V|A|s|%)"
 _NUMERIC_VALUE_RE = re.compile(
-    r"\d+\.?\d*\s*(?:deg\s*C|°C|kOhm|MOhm|mOhm|kΩ|MΩ|mΩ|mV|mA|ms|ohm|Ω|deg|V|A|s|%)(?!\w)",
+    rf"\d+\.?\d*\s*{_UNIT_PATTERN}(?!\w)",
     re.IGNORECASE,
 )
 
@@ -62,10 +66,43 @@ def sanitize_numeric_values(
 def _replace_invented(
     text: str, known_text: str, pattern: re.Pattern
 ) -> tuple[str, list[str]]:
+    """Replace numeric values that are pure inventions (not boundary derivations).
+
+    A value is skipped when *either*:
+    1. The exact string appears in known_text.
+    2. known_text contains a numeric value with the same unit whose magnitude
+       is within ±15% — likely a boundary-test derivation.
+    """
     replaced: list[str] = []
     result = text
+
+    # Collect (numeric_value, normalized_unit) from known_text
+    known_pairs: list[tuple[float, str]] = []
+    for m in pattern.finditer(known_text):
+        num_str = re.match(r"(\d+\.?\d*)", m.group())
+        if num_str:
+            known_pairs.append((float(num_str.group(1)), m.group(1).lower().replace(" ", "")))
+
     for match in pattern.finditer(text):
-        if match.group().lower() not in known_text:
-            result = result.replace(match.group(), "[NEEDS REVIEW]", 1)
-            replaced.append(match.group())
+        matched = match.group()
+        unit = match.group(1).lower().replace(" ", "")
+        if matched.lower() in known_text:
+            continue  # exact match
+
+        # Check if any known value with the same unit is within ±15%
+        num_str = re.match(r"(\d+\.?\d*)", matched)
+        if num_str:
+            val = float(num_str.group(1))
+            for known_val, known_unit in known_pairs:
+                if unit == known_unit:
+                    if known_val > 0 and abs(val - known_val) / known_val <= 0.20:
+                        break  # boundary derivation, skip
+            else:
+                # No close known value -> replace
+                result = result.replace(matched, "[NEEDS REVIEW]", 1)
+                replaced.append(matched)
+        else:
+            # Can't parse number -> replace
+            result = result.replace(matched, "[NEEDS REVIEW]", 1)
+            replaced.append(matched)
     return result, replaced
