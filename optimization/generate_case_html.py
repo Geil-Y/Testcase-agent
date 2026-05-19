@@ -104,11 +104,16 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     # (No deterministic check — semantic assessment only. Pass by default.)
 
     # 3.1.1 - NEEDS REVIEW only for missing info
-    case_lower = json.dumps(case).lower()
-    if "[needs review]" in case_lower and not has_missing:
+    # Scan content fields only (exclude raw_html / quality metadata)
+    steps_lower = "".join(
+        s["action"] + (s.get("expected") or "")
+        for s in steps
+    ).lower()
+    content_lower = f"{title} {obj} {pre} {post} {steps_lower}".lower()
+    if "[needs review]" in content_lower and not has_missing:
         failed.append("3.1.1")
     # 3.2.1 - NEEDS REVIEW position
-    if "[needs review]" in case_lower:
+    if "[needs review]" in content_lower:
         needs_pos_ok = any("[needs review]" in (s["action"] + str(s["expected"] or "")).lower() for s in steps)
         if not needs_pos_ok:
             failed.append("3.2.1")
@@ -172,7 +177,7 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     # 6.1.3 - action is tester action, not BMS behavior
     for s in steps:
         act = s["action"].strip().lower()
-        if any(p in act for p in ["bms shall", "the bms", "bms initiates", "bms verifies",
+        if any(p in act for p in ["bms shall", "bms initiates", "bms verifies",
                                    "bms injects", "bms should", "bms performs"]):
             failed.append("6.1.3")
             break

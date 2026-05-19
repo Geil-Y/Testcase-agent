@@ -7,6 +7,34 @@ from copy import deepcopy
 
 from ..parser.html_parser import GeneratedCase, Step
 
+_NEEDS_REVIEW_RE = re.compile(r"\s*\[NEEDS REVIEW\]\s*", re.IGNORECASE)
+
+
+def strip_needless_markers(case: GeneratedCase, *, has_missing: bool) -> GeneratedCase:
+    """Remove [NEEDS REVIEW] markers when LLM#1 says nothing is missing.
+
+    When has_missing is False, the markers are inconsistent — either LLM#2
+    added them unnecessarily or the numeric sanitizer injected them.  Strip
+    them so that checklist items 3.1.1 and 3.2.1 treat the case consistently.
+    """
+    if has_missing:
+        return case
+    sanitized = deepcopy(case)
+    new_steps = []
+    for step in sanitized.steps:
+        new_action = _NEEDS_REVIEW_RE.sub(" ", step.action).strip()
+        new_expected = step.expected
+        if step.expected:
+            new_expected = _NEEDS_REVIEW_RE.sub(" ", step.expected).strip()
+        new_steps.append(
+            Step(order=step.order, action=new_action, expected=new_expected)
+        )
+    sanitized.steps = new_steps
+    # Also strip from raw_html so evaluator doesn't find residual markers
+    if sanitized.raw_html:
+        sanitized.raw_html = _NEEDS_REVIEW_RE.sub(" ", sanitized.raw_html)
+    return sanitized
+
 # Numbers with physical units the 7B model commonly invents.
 # Capture group 1 = the unit, so we can check whether known_text already
 # references the same physical quantity (e.g. 4.26V is a boundary
