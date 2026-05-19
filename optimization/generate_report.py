@@ -8,7 +8,12 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_case_html import evaluate_case, CHECKLIST
+from generate_case_html import (
+    CHECKLIST,
+    _enrich_req_info,
+    evaluate_case,
+    evaluate_missing_info_hard_gates,
+)
 
 
 def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_rate: float | None = None) -> float:
@@ -19,12 +24,10 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
     total_cases = 0
     case_failures = []  # list of (case_key, failed_items)
     item_fail_counts = Counter()
+    item_warning_counts = Counter()
 
     for req in data:
-        signals = req["analysis"]["signals"]
-        thresholds = req["analysis"].get("thresholds", [])
-        timing = [t for t in req.get("analysis", {}).get("timing", []) if t.strip().lower() != "none found"]
-        missing_info = req.get("analysis", {}).get("missing_critical_info", [])
+        base_info = _enrich_req_info(req)
 
         for ci_idx, case in enumerate(req["cases"]):
             total_cases += 1
@@ -32,20 +35,18 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
             if ci_idx < len(req["analysis"]["case_intents"]):
                 coverage = req["analysis"]["case_intents"][ci_idx]["coverage"]
 
-            req_info = {
-                "signals": signals,
-                "thresholds": thresholds,
-                "timing": timing,
-                "missing_critical_info": missing_info,
-                "case_coverage": coverage,
-                "requirement_description": req.get("description", ""),
-                "supplementary_info": req.get("supplementary_info", ""),
-            }
-            failed = evaluate_case(case, req_info, {})
+            req_info = dict(base_info)
+            req_info["case_coverage"] = coverage
+            failed, warnings = evaluate_case(case, req_info, {})
             if failed:
                 case_failures.append((f"{req['requirement_key']} :: {case['title'][:60]}", failed))
                 for item in failed:
                     item_fail_counts[item] += 1
+            for w in warnings:
+                item_warning_counts[w] += 1
+
+    # Missing information hard gates
+    hard_gate_records = evaluate_missing_info_hard_gates(data)
 
     total_passed = total_cases - len(case_failures)
     case_pass_rate = round(total_passed / total_cases * 100, 1) if total_cases else 0
@@ -176,8 +177,8 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
 </p>
 
 <div class="note">
-  <strong>评估方式:</strong> Case 级通过率 = 35 项 checklist 全部 PASS 的 case 数 / 总 case 数。
-  一个 case 只要有一项不通过即算 FAIL。
+  <strong>评估方式:</strong> Case 级通过率 = CHECKLIST 项全部 PASS 的 case 数 / 总 case 数。
+  一个 case 只要有一项不通过即算 FAIL。WARNING 项不计入通过率。
 </div>
 
 <div class="summary-grid">
@@ -224,11 +225,20 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
   {"".join(item_rows)}
 </table>
 
+{_render_warning_items(item_warning_counts, total_cases)}
+
 <h2>失败 case 样例</h2>
 <table>
   <tr><th>Case</th><th>失败项数</th><th>失败项</th></tr>
   {failed_case_html}
 </table>
+
+<h2>Missing Information Hard Gates</h2>
+<p style="color:var(--muted);font-size:0.88rem;margin-bottom:8px">
+  比较 Prompt Evaluation Set 的 expected_missing_categories 与 LLM#1 实际输出的 missing_info_items。
+  仅适用于通过 <code>--requirement-set</code> 生成的 run。
+</p>
+{_render_hard_gate_section(hard_gate_records)}
 
 </div>
 </body>
@@ -238,6 +248,95 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
     report_path.write_text(html, encoding="utf-8")
     print(f"Round {round_num}: case_pass_rate={case_pass_rate}% ({total_passed}/{total_cases}) -> {report_path}")
     return case_pass_rate
+
+
+def _render_hard_gate_section(records: list[dict]) -> str:
+    """Render the Missing Information Hard Gates HTML."""
+    if not records:
+        return "<p style='color:var(--muted)'>无 Prompt Evaluation Set 数据。使用 <code>--requirement-set</code> 生成 run 后可显示缺失信息硬门禁评估。</p>"
+
+    rows: list[str] = []
+    for rec in records:
+        req_key = rec["requirement_key"]
+        bucket = rec["evaluation_bucket"]
+        expected = ", ".join(rec["expected_missing_categories"]) or "—"
+        actual = ", ".join(rec["actual_missing_categories"]) or "—"
+        missing = ", ".join(rec["missing_from_actual"])
+        extra = ", ".join(rec["extra_in_actual"])
+        item_ids = ", ".join(rec.get("item_ids", [])) or "—"
+
+        severity = ""
+        issue_color = "var(--muted)"
+        if rec["missing_from_actual"]:
+            severity = "⚠️ LLM#1 遗漏"
+            issue_color = "var(--fail)"
+        elif rec["extra_in_actual"]:
+            severity = "ℹ️ LLM#1 多报"
+            issue_color = "var(--warn)"
+        elif rec["case_issues"]:
+            severity = "⚠️ case 缺 [NEEDS REVIEW]"
+            issue_color = "var(--fail)"
+        else:
+            severity = "✅ 匹配"
+            issue_color = "var(--pass)"
+
+        case_detail = ""
+        for ci in rec["case_issues"]:
+            item_id = ci.get("item_id", "")
+            case_detail += (
+                f'<div style="font-size:0.8rem;color:var(--fail);margin-left:16px">'
+                f'  [{item_id}] {ci["case_title"][:80]} — {ci["issue"]}'
+                f'  ({", ".join(ci["missing_categories"])})'
+                f'</div>'
+            )
+
+        rows.append(f"""<tr>
+          <td>{req_key}</td>
+          <td style="font-size:0.82rem">{bucket}</td>
+          <td style="font-size:0.85rem">{expected}</td>
+          <td style="font-size:0.85rem">{actual}</td>
+          <td style="color:{issue_color};font-weight:600">{severity}</td>
+          <td style="font-size:0.82rem">{item_ids}</td>
+          <td style="font-size:0.82rem">{case_detail if case_detail else '—'}</td>
+        </tr>""")
+
+    return f"""<table>
+      <tr>
+        <th>Requirement</th>
+        <th>Bucket</th>
+        <th>Expected Missing</th>
+        <th>Actual Missing</th>
+        <th>Severity</th>
+        <th>Item IDs</th>
+        <th>Case Issues</th>
+      </tr>
+      {"".join(rows)}
+    </table>"""
+
+
+def _render_warning_items(warning_counts: Counter, total_cases: int) -> str:
+    """Render WARNING-only checklist items that do not count toward pass/fail."""
+    if not warning_counts:
+        return ""
+
+    rows: list[str] = []
+    for item_id in sorted(warning_counts.keys()):
+        count = warning_counts[item_id]
+        desc, cat = CHECKLIST.get(item_id, (item_id, ""))
+        rows.append(
+            f"<tr><td>{item_id}</td><td>{desc}</td><td>{cat}</td>"
+            f"<td>{count}</td><td style='color:var(--warn);font-weight:600'>WARNING</td></tr>"
+        )
+
+    return f"""
+    <h2>WARNING 检查项</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:8px">
+      WARNING 项不计入 case pass/fail。以下展示触发次数供审阅。
+    </p>
+    <table>
+      <tr><th>#</th><th>检查项</th><th>分类</th><th>触发次数</th><th>级别</th></tr>
+      {"".join(rows)}
+    </table>"""
 
 
 def main():

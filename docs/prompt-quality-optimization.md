@@ -216,22 +216,14 @@ Recommended changes:
 - Forbid placing `[NEEDS REVIEW]` in unrelated title, objective, precondition,
   or postcondition fields.
 
-Current status: the checklist document has been partially updated, but the
-automated evaluator and report generator still need to be synchronized with the
-new hard-gate semantics.
+Current status: Phase 3 (Hard-Gate Evaluation) is complete. The automated
+evaluator and reports now include v2 Section 3 hard-gate items and a
+Missing Information Hard Gates section that compares Prompt Evaluation Set
+expected categories against LLM#1 actual output.
 
-Known gaps:
-
-- `optimization/generate_case_html.py` does not yet fully represent the new
-  hard-gate item IDs from `checklist_v2.md`.
-- `evaluate_case()` does not yet compare expected missing categories from the
-  Prompt Evaluation Set against actual LLM#1 missing information categories.
-- `evaluate_case()` cannot reliably detect every case that should contain
-  `[NEEDS REVIEW]` but does not; this requires Prompt Evaluation Set metadata
-  plus semantic review.
-- `optimization/generate_report.py` still reports checklist pass rate as the
-  primary metric and does not render severe missing-information failures or
-  Manual Review Scores.
+Remaining gap: automated detection of 3.2.2 (invented semantics) is limited to
+threshold/pattern matching. Full detection of invented signals, states, and
+observations requires semantic review (Phase 4).
 
 ## Implementation Plan
 
@@ -272,17 +264,28 @@ Completed work:
   is not given.
 - Requirements are selected in set order when using `--requirement-set`.
 
-### Phase 3: Hard-Gate Evaluation
+### Phase 3: Hard-Gate Evaluation ✅
+
+Completed 2026-05-19.
 
 Goal: align the automated evaluator and reports with the missing-information
 quality policy.
 
-Required work:
+Completed work:
 
-- Synchronize `CHECKLIST` and `evaluate_case()` with `checklist_v2.md`.
-- Report missing-information hard-gate failures separately from ordinary
-  checklist failures.
-- Show expected vs actual missing categories in evaluation reports.
+- Synchronized `CHECKLIST` with `checklist_v2.md` Section 3 (6 new/replaced
+  items: 3.2.1 [HARD], 3.2.2 [HARD], 3.2.3 [WARNING], 3.3.1, 3.3.2, 3.3.3).
+- `evaluate_case()` now accepts `expected_missing_categories` from Prompt
+  Evaluation Set metadata and returns `(failed, warnings)` tuple.
+- `evaluate_missing_info_hard_gates()` compares expected vs actual missing
+  categories and detects case-level [NEEDS REVIEW] gaps.
+- `evaluation_report.html` includes a "Missing Information Hard Gates" section
+  with per-requirement expected/actual comparison and severity ratings.
+- `cases_report.html` shows `evaluation_bucket`, expected/actual missing
+  categories, states, and observations per requirement.
+- 26 new evaluator tests covering all 3.x items and hard gate logic.
+- WARNING items (3.2.3, 4.1.1) are tracked separately and do not count toward
+  pass/fail.
 
 ### Phase 4: Manual Review Score
 
