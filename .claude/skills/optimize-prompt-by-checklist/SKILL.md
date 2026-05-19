@@ -1,27 +1,83 @@
 ---
 name: optimize-prompt-by-checklist
-description: Iteratively improve LLM prompts through checklist-based evaluation. Run the full optimization loop — generate cases, evaluate quality, diagnose failures, modify prompts, repeat. Use when the user wants to optimize prompts, improve generation quality, run optimization rounds, tune LLM output against a checklist, or mentions "checklist", "optimization loop", "prompt tuning", "evaluation report".
+description: Iteratively improve LLM prompts through checklist-based evaluation. Run the full optimization loop — generate cases, evaluate quality, diagnose failures, modify prompts, repeat. Also supports eval-only mode for one-shot evaluation without prompt changes. Use when the user wants to optimize prompts, improve generation quality, run optimization rounds, tune LLM output against a checklist, or mentions "checklist", "optimization loop", "prompt tuning", "evaluation report".
 ---
 
 # Optimize Prompt by Checklist
 
-Iteratively tune LLM prompts against a quality checklist. The core loop: generate → evaluate → diagnose → fix prompts → repeat.
+Iteratively tune LLM prompts against a quality checklist. Two work modes:
+
+- **Optimization mode** — full loop: generate → evaluate → diagnose → fix prompts → repeat.
+- **Eval-only mode** — generate and/or evaluate once, no prompt changes, no git branch, no commits.
 
 ## Startup: interactive configuration
 
-Before any work begins, ask the user these 3 questions with `AskUserQuestion`. Use the defaults if the user doesn't override them:
+Before any work begins, ask the user these 4 questions with `AskUserQuestion`. Use the defaults if the user doesn't override them:
 
 | Question | Default |
 |----------|---------|
-| 最多运行几轮？ | 5 |
+| 是否为仅评估模式？ | 否（优化模式） |
+| 最多运行几轮？ | 5（仅评估模式固定为 1） |
 | Case 成功率到达多少后自动结束？ | 90% |
 | 每轮随机采样多少条需求生成 case？ | 20 |
 
-Once answered, store these as `MAX_ROUNDS`, `TARGET_PASS_RATE`, and `SAMPLE_SIZE` for the rest of the session. The stop condition in step 3 uses these values instead of hardcoded numbers.
+### Eval-only mode — follow-up questions
 
-## Git workflow
+When the user selects eval-only mode, ask 2 additional questions:
 
-This is **mandatory** — every execution must follow these steps:
+| Question | Default |
+|----------|---------|
+| 数据来源？ | 生成新的（使用当前 prompts + LLM） |
+| 是否开启 `--sanitize`？ | 否 |
+
+If the user chooses **使用已有 JSON**, ask for the path to `generated_cases.json`.  Skip generation entirely — go straight to evaluation.
+
+For data source, the options are:
+- **生成新的** — run `cli.py run` with the specified seed + sample size
+- **使用已有 JSON** — provide path to an existing `generated_cases.json`
+
+## Eval-only mode
+
+When eval-only mode is active, the following rules apply:
+
+- **No git branch** — work on the current branch, no branching or committing
+- **No prompt modification** — skip diagnosis and prompt editing entirely
+- **Single round only** — `MAX_ROUNDS` is forced to 1
+- **Output directory** — use `optimization_runs/log/<YYYYMMDD>_v<version>-<goal>_evalonly/`
+- **Generate case display HTML** — run `generate_round_html()` in addition to `generate_report()` so the user can browse individual cases
+- **Report annotation** — note in the output that this is an eval-only run (not an optimization round)
+
+### Eval-only flow
+
+#### If generating new cases
+
+```
+python -m optimization.cli run \
+  --excel <path> \
+  --sample <SAMPLE_SIZE> \
+  --seed <n> \
+  [--sanitize] \
+  --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>_evalonly/
+```
+
+Then run evaluation (step 2 below).
+
+#### If using existing JSON
+
+Skip generation. Copy or symlink the JSON into the output directory, then run evaluation directly:
+
+```python
+# Produce evaluation_report.html
+from pathlib import Path
+from optimization.generate_report import generate_report
+generate_report(Path('<output_dir>'), 1, max_rounds=1)
+
+# Produce cases_report.html (case display)
+from optimization.generate_case_html import generate_round_html
+generate_round_html(Path('<output_dir>'), 1)
+```
+
+## Git workflow (optimization mode only)
 
 ### 1. Create a dedicated branch
 
@@ -68,24 +124,39 @@ Each commit captures the full state: modified prompts, generated cases, evaluati
 
 ## Output directory
 
-All run artifacts go under `optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/`. This directory is git-ignored (see `.gitignore`), so the log contents won't be committed — only the prompt changes and evaluation results tracked in the branch commits.
+| Mode | Path |
+|------|------|
+| Optimization | `optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/` |
+| Eval-only | `optimization_runs/log/<YYYYMMDD>_v<version>-<goal>_evalonly/` |
+
+These directories are git-ignored (see `.gitignore`), so log contents won't be committed — only prompt changes and evaluation results tracked in the branch commits (optimization mode).
 
 ## Quick start
 
-1. Ask the 3 configuration questions
-2. Ask for a topic name, then create the git branch
+### Optimization mode
+
+1. Ask the 4 startup questions
+2. Ask for checklist version + goal, then create the git branch
 3. Read the current checklist at `optimization_runs/checklist_v2.md`
 4. Read the evaluation engine at `optimization/generate_case_html.py` (CHECKLIST dict + evaluate_case())
 5. Run one round of generation + evaluation:
    ```
    python -m optimization.cli run --excel <file.xlsx> --sample <SAMPLE_SIZE> --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/round_01
-   python -m optimization.generate_report  # adjust main() to point at the round dir
+   python -c "from pathlib import Path; from optimization.generate_report import generate_report; generate_report(Path('<dir>'), 1)"
    ```
 6. Read the generated `evaluation_report.html` in the round directory
 7. Identify the top-failing checklist items and diagnose root cause
 8. Modify prompt files under `prompts/` to address failures
 9. Commit: `git commit -m "perf(prompts): round 1 — case pass rate X%"`
 10. Repeat for next round with updated prompts
+
+### Eval-only mode
+
+1. Ask the 4 startup questions → select eval-only
+2. Ask the 2 follow-up questions (data source + sanitize)
+3. If generating new → run `cli.py run`; if using existing JSON → skip
+4. Run `generate_report()` and `generate_round_html()` on the output directory
+5. Report the pass rate and item breakdown to the user — done
 
 ## The optimization round
 
