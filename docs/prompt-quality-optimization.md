@@ -65,9 +65,11 @@ Hard gates:
 It does not cover HIL channel names, tool commands, bench configuration, or
 other execution-environment details.
 
-Current status: this rubric is a manual review policy. The repository does not
-yet provide score input files, weighted score calculation, or report rendering
-for these four scores.
+Current status: Phase 4 is complete. Manual review scores are loaded from
+`manual_review_scores.json`, weighted, hard-gated, and rendered in the report
+alongside (but separate from) the automated checklist pass rate.
+
+See `optimization/manual_review.py` for the implementation.
 
 ## Prompt Evaluation Set V1
 
@@ -287,17 +289,31 @@ Completed work:
 - WARNING items (3.2.3, 4.1.1) are tracked separately and do not count toward
   pass/fail.
 
-### Phase 4: Manual Review Score
+### Phase 4: Manual Review Score ✅
+
+Completed 2026-05-19.
 
 Goal: capture the human review rubric as structured data.
 
-Required work:
+Completed work:
 
-- Define a review input format for the four manual scores.
-- Compute the weighted score.
-- Apply hard gates before accepting any weighted score.
-- Render Manual Review Scores in the report without mixing them into automated
-  checklist pass rate.
+- Defined `manual_review_scores.json` as the review input format. Each entry has
+  `requirement_key`, `case_index` (0-based), four 1-5 scores, optional
+  `reviewer` and `notes`. See `optimization/manual_review.py`.
+- Weighted score formula: 20% executability + 20% observability + 20%
+  coverage_value + 40% missing_information_detection, rounded to 1 decimal.
+- Hard gates applied before accepting any weighted score:
+  `missing_information_detection < 3` → unacceptable; expected missing
+  categories but no `[NEEDS REVIEW]` in case → unacceptable; invented
+  numeric values for missing semantics → unacceptable; unnecessary
+  `[NEEDS REVIEW]` → warning (not automatically severe).
+- Manual Review Scores section rendered in `evaluation_report.html` alongside
+  but separate from automated checklist pass rate. Shows average weighted score,
+  dimension averages, score distribution, unacceptable cases, and scored
+  case detail table. When `manual_review_scores.json` is absent, the section
+  is omitted (no error).
+- 29 tests covering weighted score computation, hard gates, file validation,
+  review summary aggregation, and report HTML rendering.
 
 ## Acceptance Criteria
 

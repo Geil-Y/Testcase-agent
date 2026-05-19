@@ -14,6 +14,10 @@ from generate_case_html import (
     evaluate_case,
     evaluate_missing_info_hard_gates,
 )
+from manual_review import (
+    get_review_summary,
+    load_review_scores,
+)
 
 
 def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_rate: float | None = None) -> float:
@@ -47,6 +51,16 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
 
     # Missing information hard gates
     hard_gate_records = evaluate_missing_info_hard_gates(data)
+
+    # Manual Review Scores (optional — only when manual_review_scores.json exists)
+    review_summary: dict = {}
+    review_path = round_dir / "manual_review_scores.json"
+    if review_path.exists():
+        try:
+            review_entries = load_review_scores(str(review_path))
+            review_summary = get_review_summary(review_entries, data)
+        except ValueError as exc:
+            review_summary = {"_error": str(exc)}
 
     total_passed = total_cases - len(case_failures)
     case_pass_rate = round(total_passed / total_cases * 100, 1) if total_cases else 0
@@ -240,6 +254,8 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
 </p>
 {_render_hard_gate_section(hard_gate_records)}
 
+{_render_manual_review_section(review_summary)}
+
 </div>
 </body>
 </html>"""
@@ -336,6 +352,135 @@ def _render_warning_items(warning_counts: Counter, total_cases: int) -> str:
     <table>
       <tr><th>#</th><th>检查项</th><th>分类</th><th>触发次数</th><th>级别</th></tr>
       {"".join(rows)}
+    </table>"""
+
+
+def _render_manual_review_section(review_summary: dict) -> str:
+    """Render the Manual Review Score section if review data is present."""
+    if not review_summary:
+        return ""
+
+    if "_error" in review_summary:
+        return f"""
+        <h2>Manual Review Scores</h2>
+        <p style="color:var(--fail)">加载 review 文件失败: {review_summary["_error"]}</p>"""
+
+    avg = review_summary["average_weighted_score"]
+    dim_avg = review_summary["dimension_averages"]
+    total = review_summary["total_entries"]
+    unacceptable_count = review_summary["total_unacceptable"]
+    dist = review_summary["score_distribution"]
+
+    # Score color
+    if avg >= 4.0:
+        score_color = "var(--pass)"
+    elif avg >= 3.0:
+        score_color = "var(--warn)"
+    else:
+        score_color = "var(--fail)"
+
+    # Dimension averages
+    dim_rows = []
+    dim_labels = {
+        "executability": "Executability (20%)",
+        "observability": "Observability (20%)",
+        "coverage_value": "Coverage Value (20%)",
+        "missing_information_detection": "Missing Info Detection (40%)",
+    }
+    for dim, label in dim_labels.items():
+        val = dim_avg.get(dim, 0)
+        color = "var(--pass)" if val >= 4 else "var(--warn)" if val >= 3 else "var(--fail)"
+        dim_rows.append(
+            f"<tr><td>{label}</td>"
+            f"<td style='font-weight:700;color:{color}'>{val}</td></tr>"
+        )
+
+    # Unacceptable list
+    unacceptable_html = ""
+    if review_summary["unacceptable"]:
+        items = ""
+        for u in review_summary["unacceptable"]:
+            reasons = "; ".join(u["unacceptable_reasons"])
+            items += (
+                f"<tr><td>{u['requirement_key']}</td>"
+                f"<td>{u['case_title']}</td>"
+                f"<td style='color:var(--fail);font-size:0.85rem'>{reasons}</td></tr>"
+            )
+        unacceptable_html = f"""
+        <h3 style="margin-top:12px">❌ Unacceptable Cases ({unacceptable_count})</h3>
+        <table>
+          <tr><th>Requirement</th><th>Case</th><th>Reason</th></tr>
+          {items}
+        </table>"""
+
+    # Score distribution
+    dist_bars = ""
+    for bucket, count in dist.items():
+        pct = round(count / total * 100) if total else 0
+        bar_color = "var(--pass)" if bucket in ("4-5", "3-4") else "var(--warn)"
+        dist_bars += (
+            f'<div style="display:flex;align-items:center;gap:8px;margin:2px 0">'
+            f'<span style="width:40px;font-size:0.82rem">{bucket}</span>'
+            f'<div class="progress-bar" style="flex:1;max-width:200px;margin:0">'
+            f'<div class="progress-fill" style="width:{max(pct, 2)}%;background:{bar_color}"></div>'
+            f'</div><span style="font-size:0.82rem;color:var(--muted)">{count} case(s)</span></div>'
+        )
+
+    # Detail table (top 10 by weighted score ascending)
+    details = review_summary.get("entry_details", [])
+    details_sorted = sorted(details, key=lambda d: d["weighted_score"])[:10]
+    detail_rows = ""
+    for d in details_sorted:
+        status = "❌" if d["unacceptable"] else "✅"
+        warn_note = ""
+        if d["warnings"]:
+            warn_note = f' <span style="color:var(--warn);font-size:0.78rem">[WARN]</span>'
+        detail_rows += (
+            f"<tr>"
+            f"<td>{d['requirement_key']}</td>"
+            f"<td style='font-size:0.85rem'>{d['case_title']}</td>"
+            f"<td>{d['executability']}</td><td>{d['observability']}</td>"
+            f"<td>{d['coverage_value']}</td><td>{d['missing_information_detection']}</td>"
+            f"<td style='font-weight:700'>{d['weighted_score']}</td>"
+            f"<td>{status}{warn_note}</td>"
+            f"</tr>"
+        )
+
+    return f"""
+    <h2>Manual Review Scores</h2>
+    <p style="color:var(--muted);font-size:0.88rem;margin-bottom:8px">
+      ⚠️ 人工评分，独立于自动化 checklist pass rate。权重: Exec 20% + Obs 20% + Cov 20% + MissingInfo 40%。
+    </p>
+
+    <div class="summary-grid" style="margin-bottom:16px">
+      <div class="summary-card">
+        <div class="value" style="color:{score_color}">{avg}</div>
+        <div class="label">Average Weighted Score (0-5)</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{total}</div>
+        <div class="label">Reviewed Cases</div>
+      </div>
+      <div class="summary-card">
+        <div class="value" style="color:{'var(--pass)' if unacceptable_count == 0 else 'var(--fail)'}">{unacceptable_count}</div>
+        <div class="label">Unacceptable</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:12px">Dimension Averages</h3>
+    <table style="max-width:500px">
+      {"".join(dim_rows)}
+    </table>
+
+    <h3 style="margin-top:12px">Score Distribution</h3>
+    {dist_bars}
+
+    {unacceptable_html}
+
+    <h3 style="margin-top:16px">Scored Cases (lowest first)</h3>
+    <table>
+      <tr><th>Req</th><th>Case</th><th>Exec</th><th>Obs</th><th>Cov</th><th>MissInfo</th><th>Weighted</th><th>Status</th></tr>
+      {detail_rows if detail_rows else '<tr><td colspan="8" style="color:var(--muted)">No scored cases</td></tr>'}
     </table>"""
 
 
