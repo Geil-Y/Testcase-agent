@@ -20,10 +20,12 @@ CHECKLIST = {
     "3.1.1": ("NEEDS REVIEW仅用于缺失信息", "NEEDS REVIEW规范"),
     "3.2.1": ("NEEDS REVIEW放在正确位置", "NEEDS REVIEW规范"),
     "4.1.1": ("时序等待与执行动作分两步 [WARNING]", "步骤质量"),
+    "4.1.4": ("action 不包含意图叙述（无 such that / in order to 等）", "步骤质量"),
+    "4.1.5": ("action 不冗长（每条 ≤15 词）", "步骤质量"),
     "4.2.1": ("至少一个expected具体可观测", "步骤质量"),
     "4.2.2": ("无模糊expected result", "步骤质量"),
     "4.2.3": ("无read/check-only expected", "步骤质量"),
-    "4.2.4": ("expected 不冗长（每条 ≤25 词）", "步骤质量"),
+    "4.2.4": ("expected 不冗长（每条 ≤15 词）", "步骤质量"),
     "5.2.1": ("触发/不触发等价类覆盖", "覆盖维度"),
     "5.2.2": ("边界值case覆盖", "覆盖维度"),
     "5.2.3": ("参数/时序正交拆分", "覆盖维度"),
@@ -139,6 +141,24 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
     if has_merged_wait and separated_count < wait_count:
         warnings.append("4.1.1")
 
+    # 4.1.4 - action should not describe intent (no "such that", "in order to", etc.)
+    _INTENT_PATTERNS = ["such that", "in order to", "to verify", "to ensure",
+                        "to check", "so that", "to confirm", "to validate"]
+    for s in steps:
+        act = s["action"].strip().lower()
+        if any(p in act for p in _INTENT_PATTERNS):
+            failed.append("4.1.4")
+            break
+
+    # 4.1.5 - action not overly verbose (max 15 words)
+    for s in steps:
+        act = s["action"].strip()
+        if not act:
+            continue
+        if len(act.split()) > 15:
+            failed.append("4.1.5")
+            break
+
     # 4.2.1 - at least one concrete observable expected
     has_concrete = any(
         (s["expected"] or "").strip().lower() not in ("", "none", "null") and len((s["expected"] or "").strip()) > 10
@@ -164,12 +184,12 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
                     failed.append("4.2.3")
                     break
 
-    # 4.2.4 - expected not overly verbose (max 25 words)
+    # 4.2.4 - expected not overly verbose (max 15 words)
     for s in steps:
         exp = (s["expected"] or "").strip()
         if not exp or exp.lower() == "none":
             continue
-        if len(exp.split()) > 25:
+        if len(exp.split()) > 15:
             failed.append("4.2.4")
             break
 

@@ -55,12 +55,14 @@ created: 2026-05-19
 
 ### 4.1 步骤结构
 - [ ] 4.1.1 时序等待与执行动作分为独立的两步（如 step 1: Set volt = 4.2V, step 2: Wait t_CellOV_Debounce）
+- [ ] 4.1.4 action 不包含意图叙述（无 "such that"、"in order to"、"to verify" 等连接词）；action 应只描述具体操作
+- [ ] 4.1.5 每条 action 不超过 15 词，避免意图叙述式长句
 
 ### 4.2 Expected Result 可观测性
 - [ ] 4.2.1 至少一个 expected result 是具体且可观测的（当足够信息存在时）[CodeX]
 - [ ] 4.2.2 不包含模糊的 expected result（如 "system works correctly"、"behaves as expected"）[CodeX]
 - [ ] 4.2.3 不包含只描述 "read/check/verify/observe/monitor/capture" 但不说明具体期望值的预期结果 [CodeX]
-- [ ] 4.2.4 每条 expected result 不超过 25 词，避免段落式叙述
+- [ ] 4.2.4 每条 expected result 不超过 15 词，避免段落式叙述
 
 ---
 
