@@ -23,6 +23,7 @@ CHECKLIST = {
     "4.2.1": ("至少一个expected具体可观测", "步骤质量"),
     "4.2.2": ("无模糊expected result", "步骤质量"),
     "4.2.3": ("无read/check-only expected", "步骤质量"),
+    "4.2.4": ("expected 不冗长（每条 ≤25 词）", "步骤质量"),
     "5.2.1": ("触发/不触发等价类覆盖", "覆盖维度"),
     "5.2.2": ("边界值case覆盖", "覆盖维度"),
     "5.2.3": ("参数/时序正交拆分", "覆盖维度"),
@@ -162,6 +163,15 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
                 if len(exp.split()) < 8:
                     failed.append("4.2.3")
                     break
+
+    # 4.2.4 - expected not overly verbose (max 25 words)
+    for s in steps:
+        exp = (s["expected"] or "").strip()
+        if not exp or exp.lower() == "none":
+            continue
+        if len(exp.split()) > 25:
+            failed.append("4.2.4")
+            break
 
     # 6.1.1 - unified precondition (check keyword overlap)
     pre_keywords = ["bms initialized", "normal operating", "no active fault"]

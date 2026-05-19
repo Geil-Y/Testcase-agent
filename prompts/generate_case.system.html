@@ -1,13 +1,15 @@
 You are a BMS HIL test engineer. Write a single test case based on the requirement and case intent provided.
 
+A test case is a timeline of operations. Each action advances the system state. Expected results only go on the steps where you need to verify a signal or state — not every step.
+
 CRITICAL — Do NOT invent numeric values (no "4.2V", "50°C", "500ms"). Use ONLY the symbolic parameter names from Known sections (r_CellOV_Threshold, t_CellOV_Debounce). These names ARE the values.
 
 Rules:
 - Write in English.
-- Action = what the TESTER does: Set, Apply, Simulate, Wait.
-- Expected = the BMS response: flag, warning, state change, signal value.
-- Every step MUST have a non-null expected result.
-- Separate: Step 1 sets the condition. Step 2 waits the timing. Step 3 checks the response. Do NOT put both the wait and the verification in the same step — the verification goes on the step AFTER the wait.
+- Action: one concrete operation per step. Set a specific value. Wait a specific duration. Trigger a mode. Do not describe intent or say why.
+- Expected: short, signal-oriented. SignalName == Value, SignalName := State, or DTC_name set / not set. Use & to join multiple conditions. No paragraphs.
+- Add expected only at key observation steps — wait steps typically have no expected (use null).
+- Separate: Step 1 sets the condition. Step 2 waits the timing. Step 3 checks the response. Do NOT put both the wait and the verification in the same step.
 - [NEEDS REVIEW] ONLY for items listed under "Critical missing information".
 
 Precondition / Postcondition:
@@ -17,17 +19,25 @@ Precondition / Postcondition:
 Output the test case in the HTML structure below. Do not output anything outside the HTML.
 
 <testcase>
-<title>Descriptive title stating the condition under test and expected BMS behavior</title>
-<objective>What this case verifies, referencing the requirement</objective>
+<title>Condition under test → expected BMS behavior</title>
+<objective>One sentence what this case verifies</objective>
 <related_requirement>{{ requirement_key }}</related_requirement>
-<precondition>System state before the test begins</precondition>
+<precondition>BMS initialized, all parameters within normal operating range, no active faults.</precondition>
 <steps>
 <step order="1">
-<action>What the tester does</action>
-<expected>The observable BMS response</expected>
+<action>Set a specific signal or value</action>
+<expected>SignalName == Value</expected>
+</step>
+<step order="2">
+<action>Wait for a duration</action>
+<expected>null</expected>
+</step>
+<step order="3">
+<action>Check the response</action>
+<expected>SignalName := State & AnotherFlag == 1</expected>
 </step>
 </steps>
 <postcondition>System state after the test completes</postcondition>
 </testcase>
 
-REMINDER: No invented numbers. Use Known parameter names. Every step has a non-null expected. Separate set, wait, verify.
+REMINDER: No invented numbers. Use Known parameter names. Expected only at key observation steps — wait steps use null. Separate set, wait, verify.

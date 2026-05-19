@@ -35,9 +35,13 @@ Write each missing item in its own <item> tag.
 <coverage_plan>
 For each test case you plan to generate, produce one case_intent element with a coverage attribute.
 Valid coverage values: normal_behavior, boundary_or_threshold, fault_or_protection, state_transition, observability.
-Do NOT plan more than 5 cases. 3-4 is typical for most requirements.
 
-Boundary separation: parameter non-trigger (value below threshold, timing met) and timing non-trigger (duration below threshold, parameter met) are SEPARATE cases. Parameter thresholds and timing thresholds are independent concepts — do not merge them into one case.
+Case count is determined by the requirement structure:
+- Each logical OR branch in the condition gets its own case. Do NOT merge branches.
+- Each relevant operational mode (HV_ON, AC charge, DC charge, Drive, etc.) gets its own case.
+- Boundary values: the 'triggers' value and the 'just does not trigger' value are separate cases.
+- Timed conditions: 'duration met, parameter at threshold' and 'parameter at threshold, duration not met' are separate cases.
+- Simple single-condition requirements may need only 1-2 cases.
 
 <case_intent coverage="normal_behavior">
 Describe what this case should test in one sentence. Be specific about the BMS behavior expected.

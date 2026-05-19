@@ -60,6 +60,7 @@ created: 2026-05-19
 - [ ] 4.2.1 至少一个 expected result 是具体且可观测的（当足够信息存在时）[CodeX]
 - [ ] 4.2.2 不包含模糊的 expected result（如 "system works correctly"、"behaves as expected"）[CodeX]
 - [ ] 4.2.3 不包含只描述 "read/check/verify/observe/monitor/capture" 但不说明具体期望值的预期结果 [CodeX]
+- [ ] 4.2.4 每条 expected result 不超过 25 词，避免段落式叙述
 
 ---
 
