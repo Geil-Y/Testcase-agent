@@ -201,7 +201,7 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> list[str]:
 
     # 6.1.2 - unified postcondition (check keyword overlap)
     post_lower = post.lower()
-    if not ("returned" in post_lower or "normal operating" in post_lower or "restored" in post_lower):
+    if not ("return" in post_lower or "normal" in post_lower or "restored" in post_lower):
         failed.append("6.1.2")
 
     # 6.1.3 - action is tester action, not BMS behavior

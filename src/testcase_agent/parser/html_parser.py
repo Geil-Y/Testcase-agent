@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from bs4 import BeautifulSoup
@@ -105,7 +106,13 @@ def parse_generated_case(html: str) -> GeneratedCase:
     steps_el = case_el.find("steps")
     if steps_el:
         for step_el in steps_el.find_all("step"):
-            order = int(step_el.get("order", 0))
+            try:
+                order = int(step_el.get("order", 0))
+            except (ValueError, TypeError):
+                # Malformed order attribute — extract digits or fall back
+                raw = step_el.get("order", "0")
+                m = re.search(r"\d+", str(raw))
+                order = int(m.group()) if m else 0
             action = ""
             expected = None
             action_el = step_el.find("action")
