@@ -7,4 +7,4 @@ sandbox_runs/
 local_testdata/
 .pytest_cache/
 .ruff_cache/
-optimization_runs/run_*/
+optimization_runs/log/
