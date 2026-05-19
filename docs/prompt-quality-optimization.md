@@ -27,9 +27,9 @@ The Prompt Evaluation Set is not a set of reference test cases. It is a fixed
 set of source requirements used to generate and compare test cases across
 prompt versions.
 
-Current status: Prompt Evaluation Set V1 is defined in this document only. It
-is not yet a machine-readable input to `optimization/cli.py`, and the CLI still
-uses random sampling unless requirements are supplied by another mechanism.
+Current status: Prompt Evaluation Set V1 is machine-readable and can be run by
+`optimization/cli.py` with `--requirement-set`. Random sampling remains
+available for exploration, but it is no longer the only CLI path.
 
 ## Manual Review Rubric
 
@@ -74,10 +74,17 @@ for these four scores.
 These 30 requirements are selected from the existing 64-requirement evaluation
 pool in `optimization_runs/log/20260519_v2-full64_evalonly/`.
 
-Current status: this table is the normative definition of the set for now, but
-it is not directly executable. A later implementation should move this data
-into a machine-readable artifact while preserving the same Requirement IDs,
-Evaluation Buckets, expected missing categories, and rationale.
+The machine-readable source of truth is
+`optimization_runs/requirement_sets/prompt_eval_v1.json`. The Markdown tables
+below are human-readable documentation and should stay in sync with the JSON.
+
+The set is executable via:
+```
+python -m optimization.cli run \
+  --excel requirements.xlsx \
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
+  --output-dir ...
+```
 
 ### Complete Information Baseline
 
@@ -244,17 +251,26 @@ Completed work:
 - Remove unconditional `strip_needless_markers()` path that conflicted with
   LLM#2 fallback authority.
 
-### Phase 2: Prompt Evaluation Set Execution
+### Phase 2: Prompt Evaluation Set Execution ✅
+
+Completed 2026-05-19.
 
 Goal: make Prompt Evaluation Set V1 executable instead of relying on random
 sampling.
 
-Required work:
+Completed work:
 
-- Store Prompt Evaluation Set V1 in a machine-readable artifact.
-- Add a CLI path that runs exactly the listed requirements.
+- Store Prompt Evaluation Set V1 in a machine-readable artifact
+  (`optimization_runs/requirement_sets/prompt_eval_v1.json`, 30 entries).
+- Add `--requirement-set <path>` to `optimization.cli run`.
 - Validate that all listed Requirement IDs exist in the source Excel.
-- Save the set name and per-requirement metadata into generated run artifacts.
+- Validate no duplicate keys, valid expected_missing_categories.
+- Save the set name, path, and entry count in `summary.json`.
+- Enrich `generated_cases.json` entries with `evaluation_bucket`,
+  `expected_missing_categories`, and `requirement_set_note`.
+- Preserve original `--sample` / `--seed` behavior when `--requirement-set`
+  is not given.
+- Requirements are selected in set order when using `--requirement-set`.
 
 ### Phase 3: Hard-Gate Evaluation
 

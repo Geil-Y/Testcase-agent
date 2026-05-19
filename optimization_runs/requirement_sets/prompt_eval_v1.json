@@ -1,0 +1,187 @@
+{
+  "name": "Prompt Evaluation Set V1",
+  "description": "30 fixed requirements selected from the 64-requirement evaluation pool. Used as the primary quality benchmark for prompt changes.",
+  "source_pool": "optimization_runs/log/20260519_v2-full64_evalonly/",
+  "entries": [
+    {
+      "requirement_key": "REQ-BMS-OVP-002",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-009",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-ISO-002",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-ISO-004",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-COM-004",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-STM-002",
+      "evaluation_bucket": "complete_information_baseline",
+      "expected_missing_categories": [],
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-001",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-003",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-006",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-011",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-CUR-001",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-CUR-004",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-COM-003",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": [],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-CHG-002",
+      "evaluation_bucket": "threshold_timing_boundary_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+    },
+    {
+      "requirement_key": "REQ-BMS-THM-004",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-THM-005",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-PVP-001",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-DEG-001",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "observation"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-STM-003",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-STM-007",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-BAL-002",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-SOC-004",
+      "evaluation_bucket": "missing_information_traps",
+      "expected_missing_categories": ["threshold", "timing"],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+    },
+    {
+      "requirement_key": "REQ-BMS-THM-007",
+      "evaluation_bucket": "multi_branch_and_multi_mode_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+    },
+    {
+      "requirement_key": "REQ-BMS-CHG-001",
+      "evaluation_bucket": "multi_branch_and_multi_mode_cases",
+      "expected_missing_categories": ["observation"],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+    },
+    {
+      "requirement_key": "REQ-BMS-CHG-004",
+      "evaluation_bucket": "multi_branch_and_multi_mode_cases",
+      "expected_missing_categories": ["state", "observation"],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+    },
+    {
+      "requirement_key": "REQ-BMS-STM-004",
+      "evaluation_bucket": "multi_branch_and_multi_mode_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+    },
+    {
+      "requirement_key": "REQ-BMS-OVP-004",
+      "evaluation_bucket": "state_observation_and_diagnostic_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+    },
+    {
+      "requirement_key": "REQ-BMS-BAL-003",
+      "evaluation_bucket": "state_observation_and_diagnostic_cases",
+      "expected_missing_categories": ["observation"],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+    },
+    {
+      "requirement_key": "REQ-BMS-FLT-001",
+      "evaluation_bucket": "state_observation_and_diagnostic_cases",
+      "expected_missing_categories": ["timing"],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+    },
+    {
+      "requirement_key": "REQ-BMS-STM-006",
+      "evaluation_bucket": "state_observation_and_diagnostic_cases",
+      "expected_missing_categories": ["state", "timing"],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+    }
+  ]
+}

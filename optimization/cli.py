@@ -6,9 +6,14 @@ Usage:
         --sample 20 \
         --output-dir optimization_runs/run_20260518_140000/round_01
 
+    python -m optimization.cli run \
+        --excel path/to/requirements.xlsx \
+        --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
+        --output-dir optimization_runs/run_20260519_eval/round_01
+
 The script:
 1. Reads the Excel, separating heading/info rows (kept as context) from requirement rows.
-2. Randomly samples N requirement rows.
+2. Selects requirements via random --sample or a fixed --requirement-set.
 3. Injects preceding heading/info as supplementary context.
 4. Saves current prompt files to <round_dir>/prompts/ for archival.
 5. Runs the pipeline for each requirement.
@@ -35,6 +40,8 @@ from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
 from testcase_agent.pipeline.post_process import sanitize_numeric_values
 from testcase_agent.provider.factory import create_provider
 from testcase_agent.quality.gate import evaluate_cases
+
+_VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
 
 def _cell_str(row: tuple, index: int) -> str:
@@ -139,6 +146,107 @@ def sample_requirements(
     return random.sample(inputs, sample_size)
 
 
+# ── Requirement set loading ──────────────────────────────────────────────
+
+
+def load_requirement_set(path: str) -> dict:
+    """Load and validate a requirement set JSON file.
+
+    Returns the parsed dict on success. Raises ValueError with a
+    human-readable message on failure.
+    """
+    set_path = Path(path)
+    if not set_path.exists():
+        raise ValueError(f"Requirement set file not found: {path}")
+
+    try:
+        data = json.loads(set_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Requirement set file is not valid JSON: {exc}") from exc
+
+    validate_requirement_set(data, path)
+    return data
+
+
+def validate_requirement_set(data: dict, path: str) -> None:
+    """Validate a loaded requirement set dict in-place. Raises ValueError."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Requirement set must be a JSON object, got {type(data).__name__}")
+
+    name = data.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(f"Requirement set is missing a non-empty 'name' field")
+
+    entries = data.get("entries")
+    if not isinstance(entries, list) or len(entries) == 0:
+        raise ValueError(f"Requirement set '{name}' has no 'entries' list")
+
+    keys_seen: set[str] = set()
+    for i, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError(f"Entry {i} in '{name}' is not a JSON object")
+
+        key = entry.get("requirement_key")
+        if not isinstance(key, str) or not key.strip():
+            raise ValueError(f"Entry {i} in '{name}' is missing a valid 'requirement_key'")
+
+        if key in keys_seen:
+            raise ValueError(f"Duplicate requirement_key '{key}' at entry {i} in '{name}'")
+        keys_seen.add(key)
+
+        bucket = entry.get("evaluation_bucket")
+        if not isinstance(bucket, str) or not bucket.strip():
+            raise ValueError(f"Entry '{key}' in '{name}' is missing 'evaluation_bucket'")
+
+        cats = entry.get("expected_missing_categories")
+        if not isinstance(cats, list):
+            raise ValueError(
+                f"Entry '{key}' in '{name}': 'expected_missing_categories' must be a list"
+            )
+        invalid = [c for c in cats if c not in _VALID_CATEGORIES]
+        if invalid:
+            raise ValueError(
+                f"Entry '{key}' in '{name}': invalid expected_missing_categories {invalid}. "
+                f"Allowed: {sorted(_VALID_CATEGORIES)}"
+            )
+
+
+def select_by_requirement_set(
+    all_inputs: list[RequirementInput],
+    req_set_data: dict,
+) -> list[RequirementInput]:
+    """Select and order RequirementInputs by a requirement set.
+
+    Preserves the order in the set. Raises ValueError if any requirement
+    key in the set is not found in all_inputs.
+    """
+    lookup: dict[str, RequirementInput] = {
+        ri.requirement_key: ri for ri in all_inputs
+    }
+    entries = req_set_data["entries"]
+    selected: list[RequirementInput] = []
+    missing: list[str] = []
+
+    for entry in entries:
+        key = entry["requirement_key"]
+        req = lookup.get(key)
+        if req is None:
+            missing.append(key)
+        else:
+            selected.append(req)
+
+    if missing:
+        raise ValueError(
+            f"{len(missing)} requirement key(s) from the set not found in Excel: "
+            + ", ".join(missing)
+        )
+
+    return selected
+
+
+# ── Core pipeline ────────────────────────────────────────────────────────
+
+
 def archive_prompts(round_dir: Path) -> None:
     """Copy current prompt files into round_dir/prompts/ for archival."""
     prompts_dir = round_dir / "prompts"
@@ -158,13 +266,25 @@ def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
     sanitize: bool = False,
+    requirement_set_data: dict | None = None,
 ) -> dict:
-    """Run pipeline for all requirements and save results."""
+    """Run pipeline for all requirements and save results.
+
+    When requirement_set_data is provided, each requirement entry in
+    generated_cases.json is enriched with evaluation_bucket,
+    expected_missing_categories, and requirement_set_note from the set.
+    """
     settings = get_settings()
     provider = create_provider(settings)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     archive_prompts(output_dir)
+
+    # Build per-key lookup from the set if provided
+    set_lookup: dict[str, dict] = {}
+    if requirement_set_data:
+        for entry in requirement_set_data["entries"]:
+            set_lookup[entry["requirement_key"]] = entry
 
     all_results: list[dict] = []
     total_cases = 0
@@ -245,14 +365,21 @@ def run_batch(
                 },
             })
 
-        all_results.append({
+        entry: dict = {
             "requirement_key": req.requirement_key,
             "function_name": req.function_name,
             "description": req.description,
             "supplementary_info": req.supplementary_info,
             "analysis": analysis_data,
             "cases": cases_data,
-        })
+        }
+        # Enrich with requirement set metadata when available
+        set_meta = set_lookup.get(req.requirement_key)
+        if set_meta:
+            entry["evaluation_bucket"] = set_meta["evaluation_bucket"]
+            entry["expected_missing_categories"] = set_meta["expected_missing_categories"]
+            entry["requirement_set_note"] = set_meta.get("rationale", "")
+        all_results.append(entry)
         total_cases += len(cases_data)
         print(f"  {len(cases_data)} cases generated, quality passed: {all(report.passed for report in quality_reports)}")
 
@@ -278,12 +405,20 @@ def run_batch(
         encoding="utf-8",
     )
 
-    summary = {
+    summary: dict = {
         "total_requirements": len(requirements),
         "total_cases": total_cases,
         "errors": len(errors),
         "error_details": errors,
     }
+    if requirement_set_data:
+        summary["requirement_set_name"] = requirement_set_data.get("name", "")
+        summary["requirement_set_path"] = str(
+            requirement_set_data.get("_source_path", "")
+        )
+        summary["total_requirement_set_entries"] = len(
+            requirement_set_data.get("entries", [])
+        )
     summary_path = output_dir / "summary.json"
     summary_path.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2),
@@ -304,8 +439,9 @@ def main():
     run_parser = sub.add_parser("run", help="Generate cases for sampled requirements")
     run_parser.add_argument("--excel", required=True, help="Path to Excel requirements file")
     run_parser.add_argument("--output-dir", required=True, help="Output directory for this round")
-    run_parser.add_argument("--sample", type=int, default=20, help="Number of requirements to sample (default: 20)")
+    run_parser.add_argument("--sample", type=int, default=20, help="Number of requirements to sample (default: 20, ignored with --requirement-set)")
     run_parser.add_argument("--seed", type=int, default=None, help="Random seed for sampling (for reproducibility)")
+    run_parser.add_argument("--requirement-set", default=None, help="Path to a requirement set JSON file (e.g. prompt_eval_v1.json)")
     run_parser.add_argument("--key-col", default="Requirement ID")
     run_parser.add_argument("--desc-col", default="Requirement Description")
     run_parser.add_argument("--type-col", default="Type")
@@ -326,10 +462,31 @@ def main():
         all_inputs = build_requirement_inputs(rows)
         print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
 
-        sampled = sample_requirements(all_inputs, args.sample, args.seed)
-        print(f"Sampled {len(sampled)} requirements (seed={args.seed})")
+        requirement_set_data: dict | None = None
 
-        run_batch(sampled, Path(args.output_dir), sanitize=args.sanitize)
+        if args.requirement_set:
+            set_path = args.requirement_set
+            if not Path(set_path).is_absolute():
+                # Resolve relative to project root (where the CLI is invoked from)
+                set_path = str(_PROJECT_ROOT / set_path)
+            requirement_set_data = load_requirement_set(set_path)
+            requirement_set_data["_source_path"] = set_path
+            name = requirement_set_data["name"]
+            count = len(requirement_set_data["entries"])
+            print(f"Using requirement set: {name} ({count} entries)")
+
+            selected = select_by_requirement_set(all_inputs, requirement_set_data)
+            print(f"Matched {len(selected)}/{count} requirements from set")
+        else:
+            selected = sample_requirements(all_inputs, args.sample, args.seed)
+            print(f"Sampled {len(selected)} requirements (seed={args.seed})")
+
+        run_batch(
+            selected,
+            Path(args.output_dir),
+            sanitize=args.sanitize,
+            requirement_set_data=requirement_set_data,
+        )
 
     else:
         parser.print_help()

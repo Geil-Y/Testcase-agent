@@ -10,7 +10,7 @@ Phase 2 (一次性)
 
 Phase 3 (迭代循环)
 └── for round in 1..5:
-    ├── ① 采样 20 条需求
+    ├── ① 选取需求：随机采样 (--sample 20) 或固定评估集 (--requirement-set <path>)
     ├── ② 保存本轮 prompts → prompts/
     ├── ③ 运行 CLI → generated_cases.json
     ├── ④ Claude Code 逐项评估 → evaluation_report.html
@@ -24,6 +24,8 @@ Phase 3 (迭代循环)
 optimization_runs/
 ├── checklist_v1.md                         # 初始 checklist（Phase 2 产物）
 ├── README.md                               # 本文件
+├── requirement_sets/                       # 可执行评估集
+│   └── prompt_eval_v1.json                 # Prompt Evaluation Set V1 (30 条)
 └── run_YYYYMMDD_HHMMSS/
     ├── round_01/
     │   ├── prompts/                        # 本轮使用的 prompt 文件
@@ -31,15 +33,45 @@ optimization_runs/
     │   │   ├── analyze_and_plan.user.md
     │   │   ├── generate_case.system.md
     │   │   └── generate_case.user.md
-    │   ├── sampled_requirements.json       # 本轮抽到的 20 条需求
-    │   ├── summary.json                    # 生成汇总
-    │   ├── generated_cases.json            # 所有生成结果
+    │   ├── sampled_requirements.json       # 本轮选取的需求
+    │   ├── summary.json                    # 生成汇总 (+ requirement_set 元数据)
+    │   ├── generated_cases.json            # 所有生成结果 (+ evaluation_bucket 等)
     │   └── evaluation_report.html          # 评估报告（中文 HTML）
     ├── round_02/
     │   └── ...
     ├── ...
     └── final_summary.html                  # 最终汇总报告
 ```
+
+## 需求选取
+
+两种模式：
+
+### 随机采样（默认）
+
+```
+python -m optimization.cli run \
+  --excel requirements.xlsx \
+  --sample 20 --seed 42 \
+  --output-dir optimization_runs/log/...
+```
+
+### 固定评估集
+
+```
+python -m optimization.cli run \
+  --excel requirements.xlsx \
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
+  --output-dir optimization_runs/log/...
+```
+
+使用 `--requirement-set` 时：
+- 按评估集文件的顺序选取需求
+- `--sample` / `--seed` 被忽略
+- 所有 key 必须在 Excel 中找到，否则报错
+- `summary.json` 写入 `requirement_set_name`、`requirement_set_path`、`total_requirement_set_entries`
+- `generated_cases.json` 写入 `evaluation_bucket`、`expected_missing_categories`、`requirement_set_note`
+
 
 ## 评估协议
 
