@@ -14,12 +14,16 @@ Iteratively tune LLM prompts against a quality checklist. Two work modes:
 
 Before any work begins, ask the user these 4 questions with `AskUserQuestion`. Use the defaults if the user doesn't override them:
 
-| Question | Default |
-|----------|---------|
-| 是否为仅评估模式？ | 否（优化模式） |
-| 最多运行几轮？ | 5（仅评估模式固定为 1） |
-| Case 成功率到达多少后自动结束？ | 90% |
-| 每轮随机采样多少条需求生成 case？ | 20 |
+| Question | Default | Options |
+|----------|---------|---------|
+| 是否为仅评估模式？ | 否（优化模式） | 优化模式 / 仅评估模式 |
+| 最多运行几轮？ | 5 | 3 / 5 / 7（仅评估模式固定为 1） |
+| 每轮从 Prompt Evaluation Set 随机采样多少条？ | 10 | 10 / 20 / 30 |
+| 是否运行 Claude Code 自动评分（Manual Review）？ | 是 | 是 / 否 |
+
+The auto-score question applies to both optimization and eval-only modes.
+
+The source pool is the 30-entry Prompt Evaluation Set (defined in `optimization_runs/requirement_sets/prompt_eval_v1.json`). Each round randomly samples from these 30 entries — sampling is always random, not sequential.
 
 ### Eval-only mode — follow-up questions
 
@@ -28,7 +32,7 @@ When the user selects eval-only mode, ask 2 additional questions:
 | Question | Default |
 |----------|---------|
 | 数据来源？ | 生成新的（使用当前 prompts + LLM） |
-| 是否开启 `--sanitize`？ | 否 |
+| 是否开启 `--sanitize`？ | 是 |
 
 If the user chooses **使用已有 JSON**, ask for the path to `generated_cases.json`.  Skip generation entirely — go straight to evaluation.
 
@@ -56,7 +60,7 @@ python -m optimization.cli run \
   --excel <path> \
   --sample <SAMPLE_SIZE> \
   --seed <n> \
-  [--sanitize] \
+  [--no-sanitize] \
   --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>_evalonly/
 ```
 
@@ -76,6 +80,58 @@ generate_report(Path('<output_dir>'), 1, max_rounds=1)
 from optimization.generate_case_html import generate_round_html
 generate_round_html(Path('<output_dir>'), 1)
 ```
+
+## Auto-Scoring (Claude Code as LLM-as-Judge)
+
+When the user opts into auto-scoring, Claude Code acts as a stronger evaluator to produce `manual_review_scores.json`. This is a separate quality signal from the automated checklist evaluation — the two are rendered side-by-side in `evaluation_report.html`.
+
+### Scoring protocol
+
+Claude Code reads `generated_cases.json` **requirement by requirement**, scoring each case on four dimensions (1-5):
+
+| Dimension | Weight | Question |
+|-----------|--------|----------|
+| Executability | 20% | Can a HIL engineer execute this procedure without rewriting? |
+| Observability | 20% | Are expected results concrete and judgeable from BMS outputs? |
+| Coverage Value | 20% | Does the case verify a meaningful requirement behavior or risk? |
+| Missing Information Detection | 40% | Does the case identify requirement semantic gaps ([NEEDS REVIEW]) instead of inventing values? |
+
+### Scoring rules for the agent
+
+- Read the requirement description **first**, then the generated case.
+- Compare what the case uses (signals, thresholds, timing, states, observation points) against what the requirement actually provides.
+- If the case invents a value the requirement didn't give → penalize Missing Information Detection.
+- If the case correctly places `[NEEDS REVIEW]` where semantics are missing → reward Missing Information Detection.
+- If the requirement is semantically complete but the case adds unnecessary `[NEEDS REVIEW]` → minor penalty, but not automatic severe.
+- `[NEEDS REVIEW]` only covers: signal, threshold, timing, state, observation. Ignore HIL channels, tool commands, bench config.
+- Give brief `notes` explaining each dimension score, especially when scoring ≤2 or ≥4.
+
+### Output
+
+After scoring all cases, write `manual_review_scores.json` to the round directory. Format:
+
+```json
+[
+  {
+    "requirement_key": "REQ-BMS-OVP-001",
+    "case_index": 0,
+    "executability": 4,
+    "observability": 3,
+    "coverage_value": 5,
+    "missing_information_detection": 2,
+    "reviewer": "Claude Opus 4.7",
+    "notes": "timing gap correctly flagged, but action order ambiguous"
+  }
+]
+```
+
+`case_index` is 0-based, matching the case's position in `generated_cases.json` for that requirement.
+
+### Integration with report
+
+After the JSON is written, re-run `generate_report()` — it automatically detects `manual_review_scores.json` and renders the Manual Review Scores section alongside the automated checklist pass rate. No code changes needed.
+
+Relevant implementation: `optimization/manual_review.py`.
 
 ## Git workflow (optimization mode only)
 
@@ -139,38 +195,51 @@ These directories are git-ignored (see `.gitignore`), so log contents won't be c
 2. Ask for checklist version + goal, then create the git branch
 3. Read the current checklist at `optimization_runs/checklist_v2.md`
 4. Read the evaluation engine at `optimization/generate_case_html.py` (CHECKLIST dict + evaluate_case())
-5. Run one round of generation + evaluation:
+5. Run one round of generation + evaluation + (optional) auto-scoring:
    ```
-   python -m optimization.cli run --excel <file.xlsx> --sample <SAMPLE_SIZE> --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/round_01
-   python -c "from pathlib import Path; from optimization.generate_report import generate_report; generate_report(Path('<dir>'), 1)"
+   python -m optimization.cli run --excel <file.xlsx> --sample <SAMPLE_SIZE> --seed <n> --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/round_01
    ```
-6. Read the generated `evaluation_report.html` in the round directory
-7. Identify the top-failing checklist items and diagnose root cause
+   Then run evaluation and optionally auto-score:
+   ```python
+   from pathlib import Path; from optimization.generate_report import generate_report
+   generate_report(Path('<round_dir>'), 1)
+   ```
+   If auto-scoring: score cases → write `manual_review_scores.json` → re-run `generate_report()`.
+6. Read the generated `evaluation_report.html` in the round directory (checklist + hard gates + manual review)
+7. Identify the lowest-scoring cases from Manual Review Scores and diagnose root cause
 8. Modify prompt files under `prompts/` to address failures
-9. Commit: `git commit -m "perf(prompts): round 1 — case pass rate X%"`
+9. Commit: `git commit -m "perf(prompts): round 1 — weighted score >3: X%"`
 10. Repeat for next round with updated prompts
 
 ### Eval-only mode
 
-1. Ask the 4 startup questions → select eval-only
+1. Ask the 5 startup questions → select eval-only
 2. Ask the 2 follow-up questions (data source + sanitize)
 3. If generating new → run `cli.py run`; if using existing JSON → skip
 4. Run `generate_report()` and `generate_round_html()` on the output directory
-5. Report the pass rate and item breakdown to the user — done
+5. If auto-scoring enabled → score cases and write `manual_review_scores.json`, then re-run `generate_report()`
+6. Report the pass rate, item breakdown, and manual review scores (if any) to the user — done
 
 ## The optimization round
 
 Each round follows this exact sequence:
 
 ### 1. Sample & Generate
+
+Sample SAMPLE_SIZE requirements randomly from the Prompt Evaluation Set, then generate:
+
 ```
 python -m optimization.cli run \
   --excel <path> \
   --sample <SAMPLE_SIZE> \
   --seed <n> \
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
   --output-dir optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/round_0<N>
 ```
-This samples requirements, saves current prompt files to `<round_dir>/prompts/` (automatic), runs the LLM#1→LLM#2 pipeline, and writes `generated_cases.json`.
+
+The `--sample` and `--seed` are used for random sub-sampling from the 30-entry Prompt Evaluation Set. The CLI saves current prompt files to `<round_dir>/prompts/` (automatic), runs the LLM#1→LLM#2 pipeline, and writes `generated_cases.json`.
+
+Note: For this to work, the CLI needs a `--sample` sub-sample from `--requirement-set`. Currently the CLI treats `--requirement-set` and `--sample` as mutually exclusive. If you encounter this, explain to the user that the CLI needs a small patch to support sub-sampling from a set — or run with `--sample N --seed <n>` without `--requirement-set` (random from full Excel) and flag it as a known gap.
 
 ### 2. Evaluate
 Run the evaluation engine against the generated cases to produce `evaluation_report.html`:
@@ -184,20 +253,27 @@ generate_report(Path('optimization_runs/log/<YYYYMMDD>_v<version>-<goal>/round_0
 The report includes: overall case pass rate, per-category pass rates, per-item pass rates, worst-failing items, and failed case samples.
 
 ### 3. Decide: continue or stop?
-- Pass rate ≥ `<TARGET_PASS_RATE>` → **stop** (target reached)
-- Round `<MAX_ROUNDS>` reached → **stop** (max rounds)
+
+Decision is based on **Manual Review Scores** (not automated checklist pass rate). If auto-scoring is enabled:
+
+- **Score > 3 threshold**: Count cases where `weighted_score > 3.0`. If the count ≥ 90% of all scored cases → **stop** (target reached)
+- **Round `<MAX_ROUNDS>` reached** → **stop** (max rounds)
 - Otherwise → **continue** to step 4
+
+If auto-scoring is not enabled, use the automated checklist pass rate instead: pass rate ≥ 90% → stop.
 
 ### 4. Diagnose & modify prompts
 
-Use the `/diagnose` skill for systematic root-cause analysis before touching any prompt file:
+Use the `/diagnose` skill for systematic root-cause analysis before touching any prompt file.
 
-1. **Reproduce** — Identify the top-failing checklist items from `evaluation_report.html` (worst pass rates, highest failure counts)
-2. **Minimise** — Pick the single worst item. Open `generated_cases.json` and find 2-3 cases that failed only on that item, not on many others
-3. **Hypothesise** — For each failing case, read the case content against the checklist item definition. Ask: did the LLM ignore a rule, misunderstand it, or was the input missing critical info?
+Focus on **low-score cases from Manual Review** (when available), not random failures:
+
+1. **Reproduce** — Open `manual_review_scores.json`. Sort by `weighted_score` ascending. Pick the 2-3 lowest-scoring cases.
+2. **Minimise** — For each low-score case, read the requirement description and the generated case alongside. Compare what the requirement provides against what the case uses.
+3. **Hypothesise** — Did the LLM ignore a rule? Misunderstand the requirement? Was the prompt instruction unclear about using symbolic parameters vs inventing values?
 4. **Instrument** — Check the corresponding prompt file: is the rule present? Is it clear? Is it buried mid-prompt where a 7B model's attention decays?
 5. **Fix** — Modify the prompt to address the root cause. Follow the modification rules in [REFERENCE.md](REFERENCE.md)
-6. **Regression-test** — Before committing, review a few passing cases to ensure the prompt change doesn't break what already worked
+6. **Regression-test** — Before committing, re-run auto-scoring on a few previously passing cases to ensure the prompt change doesn't break what already worked
 
 Repeat for the next worst item, but never fix more than 3 items per round — the signal-to-noise ratio degrades when too many variables change at once.
 
@@ -217,14 +293,17 @@ Then go back to step 1 with the updated prompts.
 
 | File | Role |
 |------|------|
-| `optimization/cli.py` | Batch generation CLI (sample + pipeline) |
-| `optimization/generate_case_html.py` | Checklist evaluation engine + case display report |
-| `optimization/generate_report.py` | HTML evaluation report generator (Chinese) |
-| `optimization_runs/checklist_v2.md` | Current checklist (33 items, 6 categories) |
+| `optimization/cli.py` | Batch generation CLI (--sample + --requirement-set) |
+| `optimization/generate_case_html.py` | Checklist evaluation engine (v2 Section 3 hard gates) + case display report |
+| `optimization/generate_report.py` | HTML evaluation report (checklist + Missing Info Hard Gates + Manual Review) |
+| `optimization/manual_review.py` | Manual review score loading, weighted calc, hard gates, summary |
+| `optimization_runs/checklist_v2.md` | Current checklist (v2 with [HARD] / [WARNING] items) |
+| `optimization_runs/requirement_sets/prompt_eval_v1.json` | Prompt Evaluation Set V1 (30 entries, machine-readable) |
 | `prompts/*.system.html` | Prompt templates to optimize |
 | `optimization_runs/log/` | Run artifacts (git-ignored) |
 | `optimization_runs/README.md` | Full protocol documentation |
+| `docs/prompt-quality-optimization.md` | Optimization plan, rubric, phases, acceptance criteria |
 
 ## Checklist evolution
 
-The checklist itself is iteratively improved. v1 (35 items) was created first. After 5 rounds of optimization, overlapping items were merged, misplaced items corrected, and the coverage methodology was rewritten — producing v2 (28 hard + 5 warning items). If the checklist needs revision, update `checklist_v2.md` and keep `CHECKLIST` dict in `generate_case_html.py` in sync.
+The checklist itself is iteratively improved. v1 (35 items) was created first. After 5 rounds of optimization, overlapping items were merged, misplaced items corrected, and the coverage methodology was rewritten — producing v2 with 6 new/replaced Section 3 items ([HARD] and [WARNING] gates for missing information detection). If the checklist needs revision, update `checklist_v2.md` and keep `CHECKLIST` dict in `generate_case_html.py` in sync.

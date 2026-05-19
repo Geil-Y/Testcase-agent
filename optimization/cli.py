@@ -446,7 +446,7 @@ def main():
     run_parser.add_argument("--desc-col", default="Requirement Description")
     run_parser.add_argument("--type-col", default="Type")
     run_parser.add_argument("--func-col", default="function")
-    run_parser.add_argument("--sanitize", action="store_true", help="Post-process cases to replace invented numeric values with [NEEDS REVIEW]")
+    run_parser.add_argument("--no-sanitize", action="store_true", help="Disable post-processing that replaces invented numeric values with [NEEDS REVIEW] (sanitize is ON by default)")
 
     args = parser.parse_args()
 
@@ -484,7 +484,7 @@ def main():
         run_batch(
             selected,
             Path(args.output_dir),
-            sanitize=args.sanitize,
+            sanitize=not args.no_sanitize,
             requirement_set_data=requirement_set_data,
         )
 

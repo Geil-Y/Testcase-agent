@@ -39,8 +39,19 @@ Non-empty fields (title, objective, precondition, postcondition, steps), traceab
 ### Category 2: Domain Correctness (3 items)
 Signal names match requirement text, no invented identifiers (CAN IDs, etc.), no invented numeric thresholds — use symbolic parameter names.
 
-### Category 3: NEEDS REVIEW Usage (2 items)
-Placeholder only for truly missing info. Must be placed at the exact position where the value belongs (action or expected).
+### Category 3: NEEDS REVIEW Usage (6 items, with [HARD] / [WARNING] gates)
+
+Five canonical missing semantic categories: signal, threshold, timing, state, observation. Does NOT cover HIL channels, tool commands, or bench config.
+
+Hard gates:
+- **3.2.1 [HARD]** — need missing semantics but case lacks `[NEEDS REVIEW]` → case unacceptable
+- **3.2.2 [HARD]** — case invents missing signal/threshold/timing/state/observation → case unacceptable
+- **3.2.3 [WARNING]** — requirement semantically complete but case adds unnecessary `[NEEDS REVIEW]` → penalized, not automatically severe
+
+Position rules:
+- **3.3.1** — `[NEEDS REVIEW]` only in action/expected, not title/objective/precondition/postcondition
+- **3.3.2** — timing missing → `[NEEDS REVIEW]` placed in Wait action
+- **3.3.3** — bare `[NEEDS REVIEW]` only; no `[NEEDS REVIEW: timing]` category suffix
 
 ### Category 4: Step Quality (5 items)
 Timing wait and action in separate steps. No duplicate stimulus/wait steps. At least one concrete observable expected result. No vague expected results. No read/check-only expected without specific values.
@@ -80,25 +91,65 @@ Focus on items that:
 ## How the evaluation engine works
 
 `generate_case_html.py` defines:
-- `CHECKLIST` — dict mapping item IDs to (description, category)
-- `STANDARD_PRECONDITION` / `STANDARD_POSTCONDITION` — expected unified text
-- `evaluate_case(case, req_info, global_data)` — returns list of failed item IDs
+- `CHECKLIST` — dict mapping item IDs to (description, category), synced with `checklist_v2.md`
+- `evaluate_case(case, req_info, global_data)` — returns `(failed, warnings)` tuple
+- `evaluate_missing_info_hard_gates(data)` — compares Prompt Evaluation Set expected vs actual missing categories
+- `_enrich_req_info(req)` — extracts per-requirement context for evaluation
 
 Each checklist item is a heuristic check:
 - **1.1.x**: String emptiness / placeholder checks on case fields
 - **2.1.1**: Signal name substring match in expected results
-- **2.2.1**: Threshold substring match in expected results
-- **2.2.2**: Regex for invented numeric values (e.g. `3.7V`, `50°C`) not in known parameters
-- **3.1.1**: `[NEEDS REVIEW]` presence without missing info
-- **3.2.1**: `[NEEDS REVIEW]` position in action/expected vs other fields
-- **4.1.1**: Wait + non-null expected in same step (merged wait/verify)
-- **4.1.2**: Duplicate action strings
+- **2.2.1**: Regex for invented numeric values (e.g. `3.7V`, `50°C`) not in known parameters
+- **2.2.2**: Symbolic parameter names treated as valid (no deterministic check)
+- **3.2.1 [HARD]**: Expected missing categories non-empty but case lacks `[NEEDS REVIEW]` in action/expected
+- **3.2.2 [HARD]**: Threshold expected missing but case invents numeric values without `[NEEDS REVIEW]`
+- **3.2.3 [WARNING]**: `[NEEDS REVIEW]` present when no expected missing categories → warning, not fail
+- **3.3.1**: `[NEEDS REVIEW]` in title/objective/precondition/postcondition → fail
+- **3.3.2**: Timing expected missing but `[NEEDS REVIEW]` not in Wait action → fail
+- **3.3.3**: `[NEEDS REVIEW: category]` suffix pattern → fail
+- **4.1.1 [WARNING]**: Wait + non-null expected in same step (merged wait/verify)
 - **4.2.1-4.2.3**: Expected result quality heuristics
 - **6.1.1-6.1.2**: Keyword match against standard precondition/postcondition
 - **6.1.3**: BMS-as-actor detection (tester should be the actor)
 - **5.2.x**: NOT automatically checked (require human/Claude judgment)
 
-Note: Items 5.1.x (coverage dimension matching) are WARNING level and not checked automatically. Items 5.2.x (equivalence class / boundary) are hard items but also require judgment — the automated check only applies heuristics.
+Note: Items 5.1.x (coverage dimension matching) are WARNING level and not checked automatically. Items 5.2.x (equivalence class / boundary) are hard items but also require judgment — the automated check only applies heuristics. WARNING items (3.2.3, 4.1.1) are tracked but do not count toward case pass/fail.
+
+## Auto-scoring protocol (Claude Code as LLM-as-Judge)
+
+When the user enables auto-scoring, Claude Code produces `manual_review_scores.json` by reading `generated_cases.json` and scoring each case. The implementation is in `optimization/manual_review.py`.
+
+### Scoring workflow
+
+1. Read `generated_cases.json` and parse requirements + cases.
+2. For each requirement, read the `description` and `analysis` (signals, thresholds, timing, states, observations, missing_info_items).
+3. For each case under that requirement, score on 4 dimensions (1-5).
+4. Write `manual_review_scores.json` using the format defined in SKILL.md.
+5. Re-run `generate_report()` — the Manual Review Scores section is automatically rendered.
+
+### Scoring guidance
+
+| Dimension | Score high when... | Score low when... |
+|-----------|-------------------|-------------------|
+| Executability (20%) | Step sequence is logical, actions are concrete, a HIL engineer could follow it directly | Steps are vague, rely on intent language, or miss necessary setup |
+| Observability (20%) | Expected results name specific signals/states/DTCs with concrete values | Expected results are "system works correctly" or read-only without expected values |
+| Coverage Value (20%) | Case exercises a meaningful threshold, boundary, state transition, or fault path | Case is trivial, redundant, or doesn't test the stated requirement behavior |
+| Missing Info Detection (40%) | Every invented value is replaced with `[NEEDS REVIEW]`; gaps are flagged not filled | Case invents signals/thresholds/timing/states/observations the requirement didn't provide |
+
+### Hard gates (applied before weighted score is accepted)
+
+- `missing_information_detection < 3` → case is unacceptable
+- Case should contain `[NEEDS REVIEW]` but does not → unacceptable
+- Case invents missing signal/threshold/timing/state/observation → unacceptable
+- Semantically complete requirement adds unnecessary `[NEEDS REVIEW]` → warning, not severe
+
+These gates are implemented in `apply_hard_gates()` and rendered in the report.
+
+### Token efficiency
+
+Score **one requirement at a time**, not all cases at once. Read the requirement description, then all its cases, then output scores for those cases. This keeps each scoring turn focused and avoids context overflow.
+
+A single scoring turn processes: requirement description (~200 words) + analysis metadata + N cases (N typically 1-4, ~150 words each). For a 30-entry Prompt Evaluation Set with ~90 cases, this is ~25-30 scoring turns.
 
 ## Keeping checklist and code in sync
 
