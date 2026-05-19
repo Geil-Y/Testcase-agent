@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//f/Python/BMS_HIL_Agent_CodeX/docs/sandbox/**)"
+    ]
+  }
+}

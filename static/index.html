@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Testcase Agent — Sandbox</title>
+<style>
+  :root { --bg: #f5f5f5; --card: #fff; --border: #ddd; --accent: #2563eb; --danger: #dc2626; --ok: #16a34a; --warn: #d97706; --text: #111; --muted: #666; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  h1 { font-size: 1.5rem; margin-bottom: 8px; }
+  h2 { font-size: 1.1rem; margin-bottom: 8px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .col { flex: 1; min-width: 200px; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 2px; }
+  select, input, button, textarea { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px; width: 100%; }
+  button { cursor: pointer; background: var(--accent); color: #fff; border: none; padding: 8px 16px; width: auto; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: var(--danger); }
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+  .badge-pass { background: #dcfce7; color: var(--ok); }
+  .badge-fail { background: #fee2e2; color: var(--danger); }
+  .badge-warn { background: #fef3c7; color: var(--warn); }
+  .hidden { display: none; }
+  pre { background: #fafafa; border: 1px solid var(--border); border-radius: 4px; padding: 12px; overflow-x: auto; font-size: 0.85rem; max-height: 300px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  tr:hover { background: #f9fafb; }
+  tr.selected { background: #eff6ff; }
+  .case-card { border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+  .case-card h3 { font-size: 0.95rem; }
+  .step-row { padding: 4px 0; font-size: 0.85rem; }
+  .step-num { color: var(--muted); margin-right: 6px; }
+  .tab-bar { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 12px; }
+  .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--muted); font-weight: 500; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .status-bar { font-size: 0.8rem; color: var(--muted); padding: 8px 12px; background: var(--card); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 16px; }
+  .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Testcase Agent — Sandbox</h1>
+  <div class="status-bar" id="status">Loading…</div>
+
+  <!-- Import Section -->
+  <div class="card" id="import-card">
+    <h2>1. Import Requirements</h2>
+    <div class="row">
+      <div class="col"><input type="file" id="file-input" accept=".xlsx,.xlsm"></div>
+      <div><button id="upload-btn">Upload & Preview</button></div>
+    </div>
+    <div id="preview-area" class="hidden" style="margin-top:12px">
+      <div class="row">
+        <div class="col"><label>Sheet</label><select id="sheet-select"></select></div>
+      </div>
+      <div style="margin-top:8px"><strong>Column Mapping</strong></div>
+      <div id="mapping-area"></div>
+      <div style="margin-top:12px"><button id="import-btn">Import</button> <span id="import-status" style="font-size:0.85rem;margin-left:12px"></span></div>
+    </div>
+  </div>
+
+  <!-- Requirements List -->
+  <div class="card hidden" id="req-card">
+    <h2>2. Requirements</h2>
+    <table id="req-table"><thead><tr><th>Key</th><th>Description</th><th>Module</th><th>Type</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <!-- Generate -->
+  <div class="card hidden" id="gen-card">
+    <h2>3. Generate Cases</h2>
+    <p id="selected-req" style="font-size:0.85rem;color:var(--muted)">Select a requirement above</p>
+    <button id="generate-btn" disabled>Generate Test Cases</button>
+    <div id="generate-status" style="margin-top:8px;font-size:0.85rem"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="card hidden" id="results-card">
+    <h2>4. Results</h2>
+    <div class="tab-bar">
+      <button class="tab active" data-tab="analysis">Analysis & Plan</button>
+      <button class="tab" data-tab="cases">Generated Cases</button>
+      <button class="tab" data-tab="quality">Quality Report</button>
+    </div>
+    <div id="tab-analysis"></div>
+    <div id="tab-cases" class="hidden"></div>
+    <div id="tab-quality" class="hidden"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/v1';
+let tmpPath = '';
+let requirements = [];
+let selectedReqId = -1;
+
+async function init() {
+  try {
+    const r = await fetch(`${API}/health`); const d = await r.json();
+    document.getElementById('status').textContent = `Provider: ${d.llm_provider} | Model: ${d.llm_model} | ${d.status}`;
+  } catch(e) { document.getElementById('status').textContent = 'Server unreachable'; }
+}
+init();
+
+document.getElementById('upload-btn').onclick = async () => {
+  const file = document.getElementById('file-input').files[0];
+  if (!file) return;
+  const form = new FormData(); form.append('file', file);
+  const r = await fetch(`${API}/import/preview`, { method: 'POST', body: form });
+  const d = await r.json();
+  if (d.error) { alert(d.error); return; }
+  tmpPath = d.tmp_path;
+  document.getElementById('preview-area').classList.remove('hidden');
+  const sheetSel = document.getElementById('sheet-select');
+  sheetSel.innerHTML = d.sheets.map(s => `<option>${s}</option>`).join('');
+
+  const mapDiv = document.getElementById('mapping-area');
+  const fieldOpts = ['', ...d.columns];
+  const fields = [
+    { key: 'requirement_key_col', label: 'Requirement Key *', hint: 'Unique ID column' },
+    { key: 'description_col', label: 'Description *', hint: 'Requirement text column' },
+    { key: 'function_name_col', label: 'Function Module (optional)', hint: '' },
+    { key: 'requirement_type_col', label: 'Requirement Type (optional)', hint: 'requirement / heading / info' },
+    { key: 'supplementary_info_cols', label: 'Supplementary Info (optional, multi)', hint: 'Extra columns with signal names, thresholds, etc.' },
+  ];
+  mapDiv.innerHTML = fields.map(f => {
+    if (f.key === 'supplementary_info_cols') {
+      return `<div style="margin-top:4px"><label>${f.label}</label>
+        <div class="supp-cols"><div class="row"><div class="col"><select class="supp-select">${fieldOpts.map(o => `<option>${o}</option>`).join('')}</select></div></div></div>
+        <button class="secondary" style="font-size:0.75rem;margin-top:2px" data-action="add-supp">+ Add Column</button>
+        <span style="font-size:0.7rem;color:var(--muted)">${f.hint}</span></div>`;
+    }
+    return `<div style="margin-top:4px"><label>${f.label}</label><select id="map-${f.key}">${fieldOpts.map(o => `<option>${o}</option>`).join('')}</select><span style="font-size:0.7rem;color:var(--muted)"> ${f.hint}</span></div>`;
+  }).join('');
+
+  document.querySelector('[data-action="add-supp"]').onclick = () => {
+    const container = document.querySelector('.supp-cols');
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = `<div class="col"><select class="supp-select">${fieldOpts.map(o => `<option>${o}</option>`).join('')}</select></div>`;
+    container.appendChild(row);
+  };
+};
+
+document.getElementById('import-btn').onclick = async () => {
+  const mapping = {
+    requirement_key_col: document.getElementById('map-requirement_key_col')?.value || '',
+    description_col: document.getElementById('map-description_col')?.value || '',
+    function_name_col: document.getElementById('map-function_name_col')?.value || '',
+    requirement_type_col: document.getElementById('map-requirement_type_col')?.value || '',
+    supplementary_info_cols: [...document.querySelectorAll('.supp-select')].map(s => s.value).filter(Boolean),
+  };
+  if (!mapping.requirement_key_col || !mapping.description_col) {
+    document.getElementById('import-status').textContent = 'Requirement Key and Description are required.';
+    return;
+  }
+  document.getElementById('import-status').textContent = 'Importing…';
+  const r = await fetch(`${API}/import/confirm`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tmp_path: tmpPath, sheet: document.getElementById('sheet-select').value, mapping }),
+  });
+  const d = await r.json();
+  if (d.error) { document.getElementById('import-status').textContent = d.error; return; }
+  requirements = d.requirements;
+  document.getElementById('import-status').textContent = `Imported ${d.count} requirements.`;
+  renderReqTable();
+  document.getElementById('req-card').classList.remove('hidden');
+  document.getElementById('gen-card').classList.remove('hidden');
+};
+
+function renderReqTable() {
+  const tbody = document.querySelector('#req-table tbody');
+  tbody.innerHTML = requirements.map((r, i) =>
+    `<tr data-id="${i}" class="${r.is_heading || r.is_info ? '' : 'clickable'}" style="${r.is_heading || r.is_info ? 'opacity:0.5' : 'cursor:pointer'}">
+      <td>${r.requirement_key}</td><td>${r.description}</td><td>${r.function_name||''}</td><td>${r.requirement_type||''}</td>
+    </tr>`
+  ).join('');
+
+  tbody.querySelectorAll('tr.clickable').forEach(tr => {
+    tr.onclick = () => {
+      tbody.querySelectorAll('tr').forEach(r => r.classList.remove('selected'));
+      tr.classList.add('selected');
+      selectedReqId = Number(tr.dataset.id);
+      const req = requirements[selectedReqId];
+      document.getElementById('selected-req').textContent = `Selected: ${req.requirement_key} — ${req.description}`;
+      document.getElementById('generate-btn').disabled = false;
+    };
+  });
+}
+
+document.getElementById('generate-btn').onclick = async () => {
+  if (selectedReqId < 0) return;
+  document.getElementById('generate-status').textContent = 'Generating…';
+  document.getElementById('generate-btn').disabled = true;
+  try {
+    const r = await fetch(`${API}/generate/${selectedReqId}`);
+    const d = await r.json();
+    document.getElementById('generate-btn').disabled = false;
+    if (d.error) { document.getElementById('generate-status').textContent = d.error; return; }
+    window._results = d;
+    document.getElementById('generate-status').textContent = 'Done.';
+    document.getElementById('results-card').classList.remove('hidden');
+    renderTabs(d);
+  } catch(e) {
+    document.getElementById('generate-status').textContent = 'Error: ' + e.message;
+    document.getElementById('generate-btn').disabled = false;
+  }
+};
+
+function renderTabs(d) {
+  // Analysis tab
+  const a = d.analysis;
+  document.getElementById('tab-analysis').innerHTML = `
+    <div class="row">
+      <div class="col"><strong>Signals:</strong> ${a.signals.length ? a.signals.join(', ') : 'none'}</div>
+      <div class="col"><strong>Thresholds:</strong> ${a.thresholds.length ? a.thresholds.join(', ') : 'none'}</div>
+      <div class="col"><strong>Timing:</strong> ${a.timing.length ? a.timing.join(', ') : 'none'}</div>
+    </div>
+    <p style="margin-top:8px"><strong>Direction:</strong> ${a.direction || 'not specified'}</p>
+    <h3 style="margin-top:12px">Coverage Plan</h3>
+    <table><thead><tr><th>Coverage</th><th>Case Intent</th></tr></thead><tbody>
+      ${a.case_intents.map(i => `<tr><td><span class="badge badge-pass">${i.coverage}</span></td><td>${i.description}</td></tr>`).join('')}
+    </tbody></table>
+    <details style="margin-top:12px"><summary>Raw LLM#1 Output</summary><pre>${escapeHtml(a.raw_html)}</pre></details>
+  `;
+
+  // Cases tab
+  document.getElementById('tab-cases').innerHTML = d.cases.map((c, i) => `
+    <div class="case-card">
+      <h3>Case ${i+1}: ${c.title}</h3>
+      <p><strong>Objective:</strong> ${c.objective}</p>
+      <p><strong>Precondition:</strong> ${c.precondition}</p>
+      <p><strong>Postcondition:</strong> ${c.postcondition}</p>
+      <table style="margin-top:8px"><thead><tr><th>#</th><th>Action</th><th>Expected Result</th></tr></thead><tbody>
+        ${c.steps.map(s => `<tr><td>${s.order}</td><td>${s.action}</td><td>${s.expected||'<em>null</em>'}</td></tr>`).join('')}
+      </tbody></table>
+      <details style="margin-top:8px"><summary>Raw HTML</summary><pre>${escapeHtml(c.raw_html)}</pre></details>
+    </div>
+  `).join('');
+
+  // Quality tab
+  document.getElementById('tab-quality').innerHTML = d.cases.map((c, i) => {
+    const q = c.quality;
+    return `<div class="case-card">
+      <h3>Case ${i+1} <span class="badge ${q.passed ? 'badge-pass' : 'badge-fail'}">${q.passed ? 'PASS' : 'FAIL'}</span></h3>
+      ${q.failures.map(f => `<p class="error-msg">FAIL: ${f}</p>`).join('')}
+      ${q.warnings.map(w => `<p style="color:var(--warn);font-size:0.85rem">WARN: ${w}</p>`).join('')}
+      ${q.passed && !q.warnings.length ? '<p style="color:var(--ok)">All checks passed.</p>' : ''}
+    </div>`;
+  }).join('');
+}
+
+document.querySelector('.tab-bar').onclick = (e) => {
+  if (!e.target.classList.contains('tab')) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  const tab = e.target.dataset.tab;
+  document.getElementById('tab-analysis').classList.toggle('hidden', tab !== 'analysis');
+  document.getElementById('tab-cases').classList.toggle('hidden', tab !== 'cases');
+  document.getElementById('tab-quality').classList.toggle('hidden', tab !== 'quality');
+};
+
+function escapeHtml(s) { const el = document.createElement('div'); el.textContent = s; return el.innerHTML; }
+</script>
+</body>
+</html>

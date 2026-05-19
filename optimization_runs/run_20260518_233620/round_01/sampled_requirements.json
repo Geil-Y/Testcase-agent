@@ -1,0 +1,102 @@
+[
+  {
+    "requirement_key": "REQ-BMS-CUR-006",
+    "description": "A current sensor self-test shall be performed during each power-up initialisation. The test shall inject a known reference and verify within 2 % accuracy.",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-ISO-003",
+    "description": "The BMS shall monitor the HV interlock loop continuously.\nIF  HVIL circuit is interrupted\nTHEN  BMS_HVILFault_Flag := 1\n  · All HV contactor closure prohibited",
+    "function_name": "Insulation & HVIL"
+  },
+  {
+    "requirement_key": "REQ-BMS-DEG-002",
+    "description": "IF  any degradation indicator exceeds its threshold\nTHEN\n  · BMS_CellDegrade_Warn := 1\n  · Update SOH prediction model",
+    "function_name": "Degradation Monitoring"
+  },
+  {
+    "requirement_key": "REQ-BMS-PVP-001",
+    "description": "IF  total pack voltage < minimum operating threshold\nTHEN\n  · BMS_PackUV_Flag := 1\n  · Send DTC P0A01 to VCU\n  · Limit discharge power proportionally to undervoltage severity",
+    "function_name": "Pack Voltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-CHG-002",
+    "description": "IF  charge current <= 3 A AND max cell voltage >= 4.18 V\nTHEN\n  · BMS_ChargeComplete_Flag := 1\n  · Terminate charge session",
+    "function_name": "Charge Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-005",
+    "description": "Upon BMS_CellOV_Flag = 1, the BMS shall:\n  · Broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180 at 100 ms periodicity\n  · Reduce charge current target to 50 % of nominal",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-CUR-005",
+    "description": "While BMS_SCD_Flag = 1:\n  · BMS_SCD_Latch := 1 (persistent across power cycles)\n  · BMS_SCD_Latch shall only clear via diagnostic command\n  · HV contactor closure shall be prohibited while latched",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-008",
+    "description": "IF  BMS_ChargeTerm_Req = 1 AND any cell voltage >= r_CellOV_L3_Threshold\nTHEN\n  · BMS_CellOV_L3_Flag := 1",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-BAL-001",
+    "description": "IF  max cell voltage delta >= 50 mV AND SOC > 30 %\nTHEN\n  · Activate passive cell balancing\n  · Select cells with highest voltage for discharge",
+    "function_name": "Cell Balancing"
+  },
+  {
+    "requirement_key": "REQ-BMS-STM-003",
+    "description": "Upon VCU_HVConnect_Req = 1 with all preconditions satisfied:\n  · Close negative main contactor\n  · Enable precharge circuit\n  · BMS_SystemState := PrechargeActive",
+    "function_name": "BMS State Machine"
+  },
+  {
+    "requirement_key": "REQ-BMS-SOC-002",
+    "description": "IF  SOC <= 10 %\nTHEN\n  · BMS_LowSOC_Flag := 1\n  · Limit discharge power to 25 % of MaxDischargePower\n  · Broadcast low SOC warning on CAN",
+    "function_name": "SOC/SOH Estimation"
+  },
+  {
+    "requirement_key": "REQ-BMS-SOC-004",
+    "description": "IF  cumulative charge throughput exceeds design cycle limit\nTHEN\n  · BMS_SOHEstFault_Flag := 1\n  · Trigger SOH re-calibration request",
+    "function_name": "SOC/SOH Estimation"
+  },
+  {
+    "requirement_key": "REQ-BMS-COM-002",
+    "description": "While BMS_CANFault_Flag = 1:\n  · Essential sensor inputs shall continue to be monitored\n  · Basic safety functions shall be maintained\n  · IF CAN communication restored AND fault cleared\n    THEN resume normal operation",
+    "function_name": "Communication & Diagnostics"
+  },
+  {
+    "requirement_key": "REQ-BMS-THM-005",
+    "description": "During charging with BMS_CellUT_Flag = 1 AND cell temperature <= -10 C:\n  · Battery heater shall be activated\n  · Heater shall be de-energized when BMS_HeaterOT_Flag = 1",
+    "function_name": "Thermal Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-CUR-002",
+    "description": "IF  pack discharge current exceeds 200 A\nTHEN\n  · BMS_DischargeOC_Flag := 1\n  · Limit discharge power to 75 % of MaxDischargePower",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-007",
+    "description": "While BMS_ChargeTerm_Req = 1:\n  · Charge contactor closure shall be inhibited\n  · BMS_ChargeReady_Flag := 0\n  · Charge termination status shall be broadcast on CAN",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-FLT-001",
+    "description": "IF  unrecoverable internal fault detected\nTHEN\n  · Transition to SafeState\n  · Open all contactors\n  · BMS_Fault_Latch := 1\n  · Broadcast fault status on CAN",
+    "function_name": "Fault Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-002",
+    "description": "IF  BMS_CellOV_Detect = 1 for a continuous duration >= t_CellOV_Debounce\nTHEN\n  · BMS_CellOV_Flag := 1\n  · Store the maximum cell voltage and affected cell ID in the fault record",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-CHG-004",
+    "description": "A charge session shall be terminated on any of the following conditions:\n  · BMS_ChargeComplete_Flag = 1\n  · BMS_ChargeTerm_Req = 1 (from section 1 overvoltage)\n  · Any active fault requiring contactor open (sections 1-8)\n  · Charger disconnected",
+    "function_name": "Charge Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-SOC-001",
+    "description": "IF  calculated SOC <= 20 %\nTHEN\n  · BMS_LowSOC_Warn := 1\n  · Command instrument cluster low battery lamp ON",
+    "function_name": "SOC/SOH Estimation"
+  }
+]

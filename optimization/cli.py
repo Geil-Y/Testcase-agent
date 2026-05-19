@@ -1,0 +1,290 @@
+"""CLI for batch generation and optimization loop support.
+
+Usage:
+    python -m optimization.cli run \
+        --excel path/to/requirements.xlsx \
+        --sample 20 \
+        --output-dir optimization_runs/run_20260518_140000/round_01
+
+The script:
+1. Reads the Excel, separating heading/info rows (kept as context) from requirement rows.
+2. Randomly samples N requirement rows.
+3. Injects preceding heading/info as supplementary context.
+4. Runs the pipeline for each requirement.
+5. Saves generated_cases.json in the round directory.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import random
+import sys
+from pathlib import Path
+
+# Add project root to path so we can import testcase_agent
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PROJECT_ROOT))
+
+from openpyxl import load_workbook
+
+from testcase_agent.config import get_settings
+from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
+from testcase_agent.provider.factory import create_provider
+from testcase_agent.quality.gate import evaluate_cases
+
+
+def _cell_str(row: tuple, index: int) -> str:
+    if index < 0 or index >= len(row):
+        return ""
+    val = row[index]
+    return str(val).strip() if val is not None else ""
+
+
+def read_excel(
+    file_path: str,
+    requirement_key_col: str,
+    description_col: str,
+    type_col: str,
+    function_name_col: str,
+) -> list[dict]:
+    """Read all rows from Excel, returning list with type preserved."""
+    wb = load_workbook(file_path, read_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(min_row=2, values_only=True))
+    headers = [str(c.value) if c.value is not None else "" for c in ws[1]]
+    wb.close()
+
+    key_idx = headers.index(requirement_key_col) if requirement_key_col in headers else -1
+    desc_idx = headers.index(description_col) if description_col in headers else -1
+    type_idx = headers.index(type_col) if type_col in headers else -1
+    func_idx = headers.index(function_name_col) if function_name_col in headers else -1
+
+    results: list[dict] = []
+    for row_idx, row in enumerate(rows, start=2):
+        req_type = _cell_str(row, type_idx)
+        results.append({
+            "requirement_key": _cell_str(row, key_idx),
+            "description": _cell_str(row, desc_idx),
+            "type": req_type,
+            "function_name": _cell_str(row, func_idx),
+            "source_row": row_idx,
+        })
+    return results
+
+
+def build_requirement_inputs(rows: list[dict]) -> list[RequirementInput]:
+    """Convert rows to RequirementInput list, injecting heading/info context.
+
+    Only rows with type='Requirement' produce a RequirementInput.
+    Each requirement gets its preceding headings (hierarchy stack) and info rows
+    as supplementary context.
+    """
+    heading_stack: list[str] = []
+    pending_info: list[str] = []
+    inputs: list[RequirementInput] = []
+
+    for row in rows:
+        row_type = row["type"].lower()
+
+        if row_type == "heading":
+            # Reset or update heading hierarchy based on heading text
+            heading_text = row["description"]
+            # Simple hierarchy tracking: if it starts with a lower number, it's a new section
+            heading_stack.append(heading_text)
+            pending_info.clear()
+
+        elif row_type == "info":
+            pending_info.append(row["description"])
+
+        elif row_type in ("requirement", ""):
+            # Build context
+            context_parts: list[str] = []
+            if heading_stack:
+                context_parts.append("Section: " + " > ".join(heading_stack))
+            if pending_info:
+                context_parts.append("Context: " + " | ".join(pending_info))
+
+            existing_supp = ""
+            # If the requirement has a function_name, note it
+            if row.get("function_name"):
+                context_parts.insert(0, f"Function: {row['function_name']}")
+
+            inputs.append(RequirementInput(
+                requirement_key=row["requirement_key"],
+                description=row["description"],
+                function_name=row.get("function_name", ""),
+                supplementary_info="\n".join(context_parts) if context_parts else "",
+            ))
+
+            # Don't clear heading_stack on requirement — same section may have more reqs
+            pending_info.clear()
+
+    return inputs
+
+
+def sample_requirements(
+    inputs: list[RequirementInput],
+    sample_size: int,
+    seed: int | None = None,
+) -> list[RequirementInput]:
+    """Randomly sample requirements."""
+    if seed is not None:
+        random.seed(seed)
+    if len(inputs) <= sample_size:
+        return inputs[:]
+    return random.sample(inputs, sample_size)
+
+
+def run_batch(
+    requirements: list[RequirementInput],
+    output_dir: Path,
+) -> dict:
+    """Run pipeline for all requirements and save results."""
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    all_results: list[dict] = []
+    total_cases = 0
+    errors: list[dict] = []
+
+    for i, req in enumerate(requirements):
+        print(f"[{i+1}/{len(requirements)}] Generating: {req.requirement_key} ...")
+        result = run_pipeline(req, provider)
+
+        if result.error:
+            errors.append({
+                "requirement_key": req.requirement_key,
+                "error": result.error,
+            })
+            print(f"  ERROR: {result.error}")
+            continue
+
+        quality_reports = evaluate_cases(result.cases)
+
+        analysis_data = None
+        if result.analysis:
+            analysis_data = {
+                "signals": result.analysis.signals,
+                "thresholds": result.analysis.thresholds,
+                "timing": result.analysis.timing,
+                "direction": result.analysis.direction,
+                "missing_critical_info": result.analysis.missing_critical_info,
+                "case_intents": [
+                    {"coverage": ci.coverage, "description": ci.description}
+                    for ci in result.analysis.case_intents
+                ],
+            }
+
+        cases_data = []
+        for case, report in zip(result.cases, quality_reports):
+            cases_data.append({
+                "title": case.title,
+                "objective": case.objective,
+                "precondition": case.precondition,
+                "postcondition": case.postcondition,
+                "steps": [
+                    {"order": s.order, "action": s.action, "expected": s.expected}
+                    for s in case.steps
+                ],
+                "raw_html": case.raw_html,
+                "quality": {
+                    "passed": report.passed,
+                    "failures": report.failures,
+                    "warnings": report.warnings,
+                },
+            })
+
+        all_results.append({
+            "requirement_key": req.requirement_key,
+            "function_name": req.function_name,
+            "description": req.description,
+            "supplementary_info": req.supplementary_info,
+            "analysis": analysis_data,
+            "cases": cases_data,
+        })
+        total_cases += len(cases_data)
+        print(f"  {len(cases_data)} cases generated, quality passed: {all(report.passed for report in quality_reports)}")
+
+    # Save generated cases
+    cases_path = output_dir / "generated_cases.json"
+    cases_path.write_text(
+        json.dumps(all_results, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    # Save sampled requirements list
+    req_list = [
+        {
+            "requirement_key": r.requirement_key,
+            "description": r.description,
+            "function_name": r.function_name,
+        }
+        for r in requirements
+    ]
+    req_path = output_dir / "sampled_requirements.json"
+    req_path.write_text(
+        json.dumps(req_list, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    summary = {
+        "total_requirements": len(requirements),
+        "total_cases": total_cases,
+        "errors": len(errors),
+        "error_details": errors,
+    }
+    summary_path = output_dir / "summary.json"
+    summary_path.write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    print(f"\nDone. {len(requirements)} requirements → {total_cases} cases, {len(errors)} errors")
+    print(f"Output: {output_dir}")
+
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Testcase Agent optimization CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # run command
+    run_parser = sub.add_parser("run", help="Generate cases for sampled requirements")
+    run_parser.add_argument("--excel", required=True, help="Path to Excel requirements file")
+    run_parser.add_argument("--output-dir", required=True, help="Output directory for this round")
+    run_parser.add_argument("--sample", type=int, default=20, help="Number of requirements to sample (default: 20)")
+    run_parser.add_argument("--seed", type=int, default=None, help="Random seed for sampling (for reproducibility)")
+    run_parser.add_argument("--key-col", default="Requirement ID")
+    run_parser.add_argument("--desc-col", default="Requirement Description")
+    run_parser.add_argument("--type-col", default="Type")
+    run_parser.add_argument("--func-col", default="function")
+
+    args = parser.parse_args()
+
+    if args.command == "run":
+        print(f"Reading: {args.excel}")
+        rows = read_excel(
+            args.excel,
+            requirement_key_col=args.key_col,
+            description_col=args.desc_col,
+            type_col=args.type_col,
+            function_name_col=args.func_col,
+        )
+        all_inputs = build_requirement_inputs(rows)
+        print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
+
+        sampled = sample_requirements(all_inputs, args.sample, args.seed)
+        print(f"Sampled {len(sampled)} requirements (seed={args.seed})")
+
+        run_batch(sampled, Path(args.output_dir))
+
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

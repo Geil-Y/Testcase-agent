@@ -1,0 +1,605 @@
+[
+  {
+    "requirement_key": "REQ-BMS-OVP-001",
+    "function_name": "Overvoltage Protection",
+    "description": "The BMS shall monitor each cell voltage against the overvoltage threshold. BMS_CellOV_Detect shall be set to 1 when any cell voltage >= r_CellOV_Threshold.",
+    "analysis_signals": [
+      "BMS_CellOV_Detect"
+    ],
+    "analysis_thresholds": [
+      "r_CellOV_Threshold"
+    ],
+    "analysis_timing": [],
+    "analysis_plan": [
+      {
+        "coverage": "normal_behavior",
+        "description": "Test the normal operation where BMS_CellOV_Detect is set to 1 when any cell voltage reaches or exceeds r_CellOV_Threshold."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the boundary condition where a cell voltage exactly equals r_CellOV_Threshold, ensuring BMS_CellOV_Detect triggers correctly."
+      },
+      {
+        "coverage": "fault_or_protection",
+        "description": "Simulate a fault scenario where multiple cells exceed r_CellOV_Threshold simultaneously to verify proper handling and response by the BMS."
+      },
+      {
+        "coverage": "state_transition",
+        "description": "Verify that BMS_CellOV_Detect remains 1 after it has been triggered, indicating continuous monitoring of overvoltage conditions."
+      },
+      {
+        "coverage": "observability",
+        "description": "Ensure that the status of BMS_CellOV_Detect can be observed and logged for further analysis or diagnostic purposes."
+      }
+    ],
+    "cases": [
+      {
+        "title": "BMS Cell Overvoltage Detection - Normal Operation",
+        "objective": "To verify that BMS_CellOV_Detect is correctly set to 1 when any cell voltage reaches or exceeds the overvoltage threshold (r_CellOV_Threshold).",
+        "precondition": "The battery pack is fully initialized, and all cells are within normal operating conditions.",
+        "postcondition": "The BMS continues monitoring all cells, and BMS_CellOV_Detect remains at 1 for the cell that exceeded the threshold until it returns below the threshold or a reset occurs.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set one of the cell voltages to a value equal to or greater than r_CellOV_Threshold.",
+            "expected": "BMS_CellOV_Detect shall be set to 1."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "BMS Cell Overvoltage Detection at Threshold Value",
+        "objective": "To verify that BMS_CellOV_Detect is set to 1 when any cell voltage equals the overvoltage threshold r_CellOV_Threshold.",
+        "precondition": "The BMS is initialized and all cells are within normal operating conditions. The cell voltage of one or more cells is exactly equal to r_CellOV_Threshold.",
+        "postcondition": "The BMS continues monitoring all cells, and the state of BMS_CellOV_Detect remains unchanged unless the voltage changes.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set the voltage of a specific cell (e.g., Cell 1) to the threshold value r_CellOV_Threshold.",
+            "expected": "BMS_CellOV_Detect shall be set to 1 for that cell."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify BMS response to simultaneous overvoltage on multiple cells",
+        "objective": "To ensure that BMS_CellOV_Detect is set to 1 when any cell voltage >= r_CellOV_Threshold for multiple cells.",
+        "precondition": "BMS is initialized and all cells are within normal operating range. r_CellOV_Threshold = [NEEDS REVIEW].",
+        "postcondition": "BMS_CellOV_Detect remains at 1, indicating that the overvoltage condition persists until the voltage returns below r_CellOV_Threshold.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Simulate a scenario where the voltages of three cells (Cell1, Cell2, Cell3) exceed r_CellOV_Threshold simultaneously.",
+            "expected": "BMS_CellOV_Detect is set to 1 for all three cells. The BMS should trigger an overvoltage warning or fault response as defined in the system specifications."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify BMS_CellOV_Detect remains 1 after triggering due to cell voltage exceeding the overvoltage threshold",
+        "objective": "To verify that BMS_CellOV_Detect stays at 1 when any cell voltage exceeds r_CellOV_Threshold, indicating continuous monitoring of overvoltage conditions.",
+        "precondition": "The system is powered on and all cells are within normal operating parameters. The initial value of BMS_CellOV_Detect is 0.",
+        "postcondition": "The system state indicates continuous monitoring of the overvoltage condition, with BMS_CellOV_Detect remaining at 1 until the voltage returns to normal levels or a reset command is issued by the BMS.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set the voltage of one or more cells to exceed r_CellOV_Threshold, triggering BMS_CellOV_Detect to become 1.",
+            "expected": "BMS_CellOV_Detect becomes 1. The BMS should log an overvoltage event and continue monitoring cell voltages."
+          },
+          {
+            "order": 2,
+            "action": "Wait for [NEEDS REVIEW] seconds after the initial trigger.",
+            "expected": "None"
+          },
+          {
+            "order": 3,
+            "action": "Increase or maintain the voltage of one or more cells to exceed r_CellOV_Threshold.",
+            "expected": "BMS_CellOV_Detect remains 1. The BMS should continue logging overvoltage events and monitoring cell voltages without resetting BMS_CellOV_Detect."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify BMS response to overvoltage condition on a single cell",
+        "objective": "To ensure that BMS_CellOV_Detect is set to 1 when any cell voltage reaches the overvoltage threshold, verifying observability of the status.",
+        "precondition": "The system is powered up and all cells are within normal operating conditions. The overvoltage threshold (r_CellOV_Threshold) has been defined in the system parameters.",
+        "postcondition": "The system state remains unchanged, but the BMS_CellOV_Detect status is logged with a value of 1 for the affected cell, indicating an overvoltage condition has been detected.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Apply a voltage to one cell that exceeds the predefined r_CellOV_Threshold value.",
+            "expected": "The BMS shall set BMS_CellOV_Detect to 1 for the affected cell and log this status change. The BMS should also trigger any necessary alerts or notifications if configured."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      }
+    ]
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-002",
+    "function_name": "Overvoltage Protection",
+    "description": "IF  BMS_CellOV_Detect = 1 for a continuous duration >= t_CellOV_Debounce\nTHEN\n  · BMS_CellOV_Flag := 1\n  · Store the maximum cell voltage and affected cell ID in the fault record",
+    "analysis_signals": [
+      "BMS_CellOV_DetectBMS_CellOV_Flag"
+    ],
+    "analysis_thresholds": [
+      "t_CellOV_Debounce"
+    ],
+    "analysis_timing": [
+      "t_CellOV_Debounce"
+    ],
+    "analysis_plan": [
+      {
+        "coverage": "normal_behavior",
+        "description": "Test the normal behavior where BMS_CellOV_Detect remains high for a duration equal to t_CellOV_Debounce, resulting in BMS_CellOV_Flag being set to 1 and fault record updates."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the boundary condition where BMS_CellOV_Detect is high exactly for the duration of t_CellOV_Debounce, ensuring BMS_CellOV_Flag is correctly triggered."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the threshold just below t_CellOV_Debounce to ensure BMS_CellOV_Flag does not trigger."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the threshold just above t_CellOV_Debounce to ensure BMS_CellOV_Flag triggers correctly."
+      },
+      {
+        "coverage": "state_transition",
+        "description": "Test the state transition where BMS_CellOV_Detect goes from 0 to 1 and back within a duration less than t_CellOV_Debounce, ensuring no false triggering of BMS_CellOV_Flag."
+      },
+      {
+        "coverage": "observability",
+        "description": "Verify that the maximum cell voltage and affected cell ID are correctly stored in the fault record when BMS_CellOV_Detect is high for at least t_CellOV_Debounce."
+      }
+    ],
+    "cases": [
+      {
+        "title": "Verify BMS_CellOV_Flag is set to 1 and fault record updated when BMS_CellOV_Detect remains high for t_CellOV_Debounce duration",
+        "objective": "To verify the normal behavior where BMS_CellOV_Flag is correctly set to 1 and the maximum cell voltage along with affected cell ID are stored in the fault record, following a continuous BMS_CellOV_Detect signal of [NEEDS REVIEW] seconds.",
+        "precondition": "BMS_CellOV_Detect = 0; BMS_CellOV_Flag = 0; Fault records are cleared",
+        "postcondition": "BMS_CellOV_Flag = 1; Fault records contain the maximum cell voltage and affected cell ID from the test period.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Detect to 1 for a duration of [NEEDS REVIEW] seconds.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for [NEEDS REVIEW] seconds after setting BMS_CellOV_Detect to 1.",
+            "expected": "BMS_CellOV_Flag := 1; Store the maximum cell voltage and affected cell ID in the fault record"
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Test BMS Cell Overvoltage Flag Trigger with Boundary Duration",
+        "objective": "To verify that BMS_CellOV_Flag is set to 1 when BMS_CellOV_Detect remains high for exactly the duration of t_CellOV_Debounce.",
+        "precondition": "BMS is in normal operation, and no overvoltage conditions have been detected previously.",
+        "postcondition": "BMS_CellOV_Flag is set to 1, and the maximum cell voltage along with the affected cell ID are stored in the fault record. BMS_CellOV_Detect returns to 0.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Detect to 1 at time t0.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for a duration of exactly t_CellOV_Debounce from t0 (t0 + t_CellOV_Debounce).",
+            "expected": "BMS_CellOV_Flag := 1; Store the maximum cell voltage and affected cell ID in the fault record."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Test BMS Cell Overvoltage Flag with Duration Just Below Debounce Time",
+        "objective": "To verify that BMS_CellOV_Flag is not triggered when BMS_CellOV_Detect remains active for a duration just below t_CellOV_Debounce.",
+        "precondition": "BMS initialization complete, no cell overvoltage detected currently (BMS_CellOV_Detect = 0).",
+        "postcondition": "BMS_CellOV_Detect returns to 0, no flag set, and no new entries in the fault record related to overvoltage.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Simulate a cell overvoltage condition such that BMS_CellOV_Detect := 1 for a duration of [NEEDS REVIEW] seconds.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for [NEEDS REVIEW - t_CellOV_Debounce + 1] seconds, ensuring the duration is just below t_CellOV_Debounce.",
+            "expected": "BMS_CellOV_Flag := 0; BMS does not store maximum cell voltage or affected cell ID in fault record."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Test BMS Cell Overvoltage Flag Trigger at Boundary Duration",
+        "objective": "To verify that BMS_CellOV_Flag is set when BMS_CellOV_Detect remains high for a duration equal to t_CellOV_Debounce.",
+        "precondition": "BMS_CellOV_Detect = 1 and the system has been running without any other faults.",
+        "postcondition": "BMS_CellOV_Flag is set to 1, and the maximum cell voltage and affected cell ID are stored in the fault record.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Detect to 1 and maintain this state for exactly t_CellOV_Debounce duration.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for the duration of t_CellOV_Debounce after setting BMS_CellOV_Detect to 1.",
+            "expected": "BMS_CellOV_Flag := 1; Store the maximum cell voltage and affected cell ID in the fault record."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Test BMS Cell Overvoltage Flag Transition with Short Duration",
+        "objective": "To verify that the BMS does not trigger BMS_CellOV_Flag when BMS_CellOV_Detect transitions from 0 to 1 and back within t_CellOV_Debounce duration.",
+        "precondition": "BMS is in normal operation, all cell voltages are within safe limits, and no previous overvoltage events have been recorded.",
+        "postcondition": "BMS is back in a normal state with all cells within safe limits and no overvoltage events recorded.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Detect to 0 for all cells.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Increase the voltage of a single cell above the overvoltage threshold (e.g., set it to [NEEDS REVIEW] V) and maintain this condition for t_CellOV_Debounce - 1 seconds.",
+            "expected": "BMS_CellOV_Flag remains at 0, BMS does not store any fault record."
+          },
+          {
+            "order": 3,
+            "action": "Decrease the voltage of the cell back to within the safe limit over a period less than or equal to 1 second.",
+            "expected": "None"
+          },
+          {
+            "order": 4,
+            "action": "Wait for t_CellOV_Debounce seconds after the cell voltage returns to normal.",
+            "expected": "BMS_CellOV_Flag remains at 0, no fault record is stored."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify storage of maximum cell voltage and affected cell ID in fault record during continuous BMS_CellOV_Detect",
+        "objective": "To verify that the BMS correctly stores the maximum cell voltage and affected cell ID in the fault record when BMS_CellOV_Detect is high for a duration >= t_CellOV_Debounce.",
+        "precondition": "BMS is initialized, all cells are within normal operating range, and no previous OVP faults have been recorded.",
+        "postcondition": "BMS is in a state where it has recorded an OVP fault with the correct maximum cell voltage and affected cell ID stored in the fault record.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Simulate an overvoltage condition on one or more cells such that BMS_CellOV_Detect = 1 for a duration of at least t_CellOV_Debounce [NEEDS REVIEW].",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Observe the BMS_CellOV_Flag to ensure it is set to 1.",
+            "expected": "BMS_CellOV_Flag := 1"
+          },
+          {
+            "order": 3,
+            "action": "Check the fault record for the maximum cell voltage and affected cell ID.",
+            "expected": "The fault record should contain the maximum cell voltage of the affected cells and their respective IDs."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      }
+    ]
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-003",
+    "function_name": "Overvoltage Protection",
+    "description": "IF  BMS_CellOV_Detect de-asserts before t_CellOV_Debounce expires\nTHEN\n  · The debounce timer shall reset\n  · BMS_CellOV_Flag shall remain 0\n  · No fault record shall be stored",
+    "analysis_signals": [
+      "BMS_CellOV_DetectBMS_CellOV_Flag"
+    ],
+    "analysis_thresholds": [],
+    "analysis_timing": [
+      "t_CellOV_Debounce"
+    ],
+    "analysis_plan": [
+      {
+        "coverage": "state_transition",
+        "description": "Test that the debounce timer resets and BMS_CellOV_Flag remains 0 when BMS_CellOV_Detect de-asserts before t_CellOV_Debounce expires."
+      },
+      {
+        "coverage": "normal_behavior",
+        "description": "Verify normal behavior where BMS_CellOV_Detect does not de-assert before t_CellOV_Debounce expires, ensuring the flag and timer behave as expected."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the boundary condition where BMS_CellOV_Detect de-asserts exactly at t_CellOV_Debounce to ensure proper handling of this threshold."
+      }
+    ],
+    "cases": [
+      {
+        "title": "Verify debounce timer reset and BMS_CellOV_Flag remains 0 when BMS_CellOV_Detect de-asserts before t_CellOV_Debounce",
+        "objective": "To verify that the debounce timer resets, BMS_CellOV_Flag remains 0, and no fault record is stored when BMS_CellOV_Detect de-asserts before t_CellOV_Debounce expires.",
+        "precondition": "BMS_CellOV_Detect is asserted, BMS_CellOV_Flag is set to 1, and the debounce timer has started but not yet expired (t < t_CellOV_Debounce).",
+        "postcondition": "BMS_CellOV_Flag is reset to 0, the debounce timer has been reset, and there are no fault records stored.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Assert BMS_CellOV_Detect.",
+            "expected": "BMS_CellOV_Flag is set to 1; no fault record is stored."
+          },
+          {
+            "order": 2,
+            "action": "De-assert BMS_CellOV_Detect before t_CellOV_Debounce expires (t < t_CellOV_Debounce).",
+            "expected": "The debounce timer resets, and BMS_CellOV_Flag remains 0; no fault record is stored."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify debounce timer reset and flag state when BMS_CellOV_Detect does not de-assert before t_CellOV_Debounce expires",
+        "objective": "To verify that the debounce timer resets and BMS_CellOV_Flag remains 0 if BMS_CellOV_Detect does not de-assert within the debounce period, ensuring no fault record is stored.",
+        "precondition": "BMS_CellOV_Detect is asserted, t_CellOV_Debounce = [NEEDS REVIEW] ms",
+        "postcondition": "BMS_CellOV_Detect is de-asserted, debounce timer is reset, BMS_CellOV_Flag remains 0, no fault record is stored.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Assert BMS_CellOV_Detect and wait for [NEEDS REVIEW] ms (t_CellOV_Debounce).",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "De-assert BMS_CellOV_Detect before the end of t_CellOV_Debounce.",
+            "expected": "The debounce timer shall reset, and BMS_CellOV_Flag shall remain 0. No fault record shall be stored."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Test for boundary condition where BMS_CellOV_Detect de-asserts exactly at t_CellOV_Debounce",
+        "objective": "To verify that the debounce timer resets and no fault is recorded when BMS_CellOV_Detect de-asserts exactly at t_CellOV_Debounce, as per REQ-BMS-OVP-003.",
+        "precondition": "BMS_CellOV_Flag = 1 (indicating a cell overvoltage condition)",
+        "postcondition": "BMS_CellOV_Flag = 0, debounce timer is reset, no fault recorded in the system.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Assert BMS_CellOV_Detect and wait for t_CellOV_Debounce [NEEDS REVIEW] seconds",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "De-assert BMS_CellOV_Detect at exactly t_CellOV_Debounce [NEEDS REVIEW] seconds",
+            "expected": "The debounce timer shall reset, and BMS_CellOV_Flag shall remain 0. No fault record shall be stored."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      }
+    ]
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-004",
+    "function_name": "Overvoltage Protection",
+    "description": "The following data shall be stored in the fault record upon BMS_CellOV_Flag = 1:\n  · Peak cell voltage and affected cell ID\n  · Pack temperature at time of fault\n  · Event timestamp",
+    "analysis_signals": [
+      "BMS_CellOV_Flag",
+      "BMS_PackTemperature",
+      "BMS_EventTimestamp"
+    ],
+    "analysis_thresholds": [],
+    "analysis_timing": [],
+    "analysis_plan": [
+      {
+        "coverage": "normal_behavior",
+        "description": "Verify that the system correctly stores peak cell voltage, affected cell ID, and pack temperature in the fault record when BMS_CellOV_Flag = 1."
+      }
+    ],
+    "cases": [
+      {
+        "title": "Verify storage of peak cell voltage, affected cell ID, and pack temperature in fault record upon BMS_CellOV_Flag activation",
+        "objective": "To verify that the system correctly stores peak cell voltage, affected cell ID, and pack temperature in the fault record when BMS_CellOV_Flag = 1.",
+        "precondition": "BMS is initialized and operational. BMS_CellOV_Flag is set to 0 initially.",
+        "postcondition": "BMS continues to operate normally, with the fault record containing the recorded data points from step 2 and step 3.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Flag to 1 manually or through a simulation tool, indicating an overvoltage condition in one of the cells.",
+            "expected": ""
+          },
+          {
+            "order": 2,
+            "action": "Observe the system and confirm that the peak cell voltage and affected cell ID are stored in the fault record.",
+            "expected": "The BMS should store the peak cell voltage and the affected cell ID in the fault record."
+          },
+          {
+            "order": 3,
+            "action": "Check the pack temperature at the time of the fault occurrence and confirm that it is also stored in the fault record.",
+            "expected": "The BMS should store the pack temperature at the time of the fault in the fault record."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      }
+    ]
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-005",
+    "function_name": "Overvoltage Protection",
+    "description": "Upon BMS_CellOV_Flag = 1, the BMS shall:\n  · Broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180 at 100 ms periodicity\n  · Reduce charge current target to 50 % of nominal",
+    "analysis_signals": [
+      "BMS_CellOV_Flag",
+      "BMS_CellOV_Warn"
+    ],
+    "analysis_thresholds": [],
+    "analysis_timing": [
+      "100 ms"
+    ],
+    "analysis_plan": [
+      {
+        "coverage": "normal_behavior",
+        "description": "Verify that BMS_CellOV_Warn is broadcasted on CAN ID 0x180 with a periodicity of 100ms when BMS_CellOV_Flag transitions to 1."
+      },
+      {
+        "coverage": "boundary_or_threshold",
+        "description": "Test the behavior at the threshold where BMS_CellOV_Flag changes from 0 to 1, ensuring that BMS_CellOV_Warn is correctly broadcasted and charge current target is reduced to 50% of nominal."
+      },
+      {
+        "coverage": "fault_or_protection",
+        "description": "Simulate a fault scenario where BMS_CellOV_Flag remains at 1 for an extended period (e.g., 2 seconds) to ensure the system handles prolonged overvoltage conditions correctly, including continued broadcasting and charge current reduction."
+      },
+      {
+        "coverage": "state_transition",
+        "description": "Verify that when BMS_CellOV_Flag transitions back from 1 to 0, BMS_CellOV_Warn stops being broadcasted and charge current target returns to nominal value."
+      }
+    ],
+    "cases": [
+      {
+        "title": "Verify BMS_CellOV_Warn broadcasting and charge current reduction upon BMS_CellOV_Flag transition",
+        "objective": "To verify that the BMS broadcasts BMS_CellOV_Warn = 1 on CAN ID 0x180 at a periodicity of 100ms when BMS_CellOV_Flag transitions to 1, and reduces the charge current target to 50% of nominal.",
+        "precondition": "BMS_CellOV_Flag is currently 0. The system is in normal operation with no cell overvoltage detected.",
+        "postcondition": "BMS_CellOV_Flag remains 1, and the charge current target is reduced to 50% of nominal. BMS_CellOV_Warn continues to be broadcasted at a periodicity of 100ms on CAN ID 0x180.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Flag to 1 manually or through the simulation environment.",
+            "expected": ""
+          },
+          {
+            "order": 2,
+            "action": "Wait for 100ms.",
+            "expected": "The BMS shall broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180."
+          },
+          {
+            "order": 3,
+            "action": "Wait for an additional 100ms (total of 200ms from step 1).",
+            "expected": "The BMS shall continue to broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180."
+          },
+          {
+            "order": 4,
+            "action": "Wait for an additional 100ms (total of 300ms from step 1).",
+            "expected": "The BMS shall continue to broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "BMS responds correctly when BMS_CellOV_Flag transitions from 0 to 1",
+        "objective": "To verify the BMS broadcasts BMS_CellOV_Warn = 1 on CAN ID 0x180 at 100 ms periodicity and reduces charge current target to 50% of nominal upon BMS_CellOV_Flag transitioning from 0 to 1.",
+        "precondition": "BMS_CellOV_Flag is currently set to 0, BMS_CellOV_Warn = 0, and the charge current target is at its nominal value.",
+        "postcondition": "BMS_CellOV_Flag is set to 1, BMS_CellOV_Warn = 1 on CAN ID 0x180 with a periodicity of 100 ms, and the charge current target is at 50% of its nominal value.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Flag to 1.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for 100 ms.",
+            "expected": "Broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180."
+          },
+          {
+            "order": 3,
+            "action": "Wait for another 100 ms (total of 200 ms).",
+            "expected": "Broadcast BMS_CellOV_Warn = 1 on CAN ID 0x180 again."
+          },
+          {
+            "order": 4,
+            "action": "Check the charge current target value after a sufficient duration to ensure it has been reduced to 50% of nominal.",
+            "expected": "The charge current target should be at 50% of its nominal value."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify BMS response to prolonged BMS_CellOV_Flag = 1 condition",
+        "objective": "To verify that the BMS broadcasts BMS_CellOV_Warn = 1 on CAN ID 0x180 at 100 ms periodicity and reduces charge current target to 50% of nominal when BMS_CellOV_Flag remains at 1 for an extended period (e.g., 2 seconds).",
+        "precondition": "BMS is powered up, BMS_CellOV_Flag = 0, and the system is in a normal operating state.",
+        "postcondition": "BMS is in a state where BMS_CellOV_Flag = 1, BMS_CellOV_Warn is being broadcasted on CAN ID 0x180 at 100 ms periodicity, and charge current target is set to 50% of nominal.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Simulate BMS_CellOV_Flag = 1 by applying an overvoltage condition to one or more cells.",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for 2 seconds with BMS_CellOV_Flag = 1.",
+            "expected": "None"
+          },
+          {
+            "order": 3,
+            "action": "Verify that BMS_CellOV_Warn is broadcasted on CAN ID 0x180 at 100 ms periodicity during the 2-second period.",
+            "expected": "The BMS shall broadcast BMS_CellOV_Warn = 1 every 100 ms on CAN ID 0x180."
+          },
+          {
+            "order": 4,
+            "action": "Verify that charge current target is reduced to 50% of nominal during the 2-second period with BMS_CellOV_Flag = 1.",
+            "expected": "The BMS shall reduce the charge current target to 50% of its nominal value while BMS_CellOV_Flag remains at 1."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      },
+      {
+        "title": "Verify BMS behavior upon transition of BMS_CellOV_Flag from 1 to 0",
+        "objective": "To verify that when BMS_CellOV_Flag transitions back from 1 to 0, BMS_CellOV_Warn stops being broadcasted and charge current target returns to nominal value.",
+        "precondition": "BMS_CellOV_Flag = 1, BMS_CellOV_Warn is broadcasting on CAN ID 0x180 at 100 ms periodicity, and the charge current target has been reduced to 50% of nominal.",
+        "postcondition": "BMS_CellOV_Flag = 0, BMS_CellOV_Warn is not broadcasting on CAN ID 0x180, and the charge current target has returned to its nominal value.",
+        "steps": [
+          {
+            "order": 1,
+            "action": "Set BMS_CellOV_Flag = 0",
+            "expected": "None"
+          },
+          {
+            "order": 2,
+            "action": "Wait for 1 second (to ensure any ongoing broadcasts complete)",
+            "expected": "None"
+          },
+          {
+            "order": 3,
+            "action": "Check CAN bus for BMS_CellOV_Warn messages on ID 0x180",
+            "expected": "No BMS_CellOV_Warn messages should be received."
+          },
+          {
+            "order": 4,
+            "action": "Check the charge current target value in the BMS software or simulation environment",
+            "expected": "The charge current target should return to its nominal value."
+          }
+        ],
+        "quality_passed": true,
+        "quality_failures": [],
+        "quality_warnings": []
+      }
+    ]
+  }
+]

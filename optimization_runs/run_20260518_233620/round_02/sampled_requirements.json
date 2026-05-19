@@ -1,0 +1,102 @@
+[
+  {
+    "requirement_key": "REQ-BMS-OVP-008",
+    "description": "IF  BMS_ChargeTerm_Req = 1 AND any cell voltage >= r_CellOV_L3_Threshold\nTHEN\n  · BMS_CellOV_L3_Flag := 1",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-006",
+    "description": "IF  BMS_CellOV_Flag = 1 AND charge current already derated to 50 % for >= 1 s\n    AND any cell voltage >= r_CellOV_Threshold\nTHEN\n  · BMS_ChargeTerm_Req := 1",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-STM-006",
+    "description": "Upon VCU_HVDisconnect_Req or critical fault:\n  · Open both main contactors\n  · Discharge DC link capacitance\n  · BMS_SystemState := HV_Deactivating\n  · THEN Standby or SafeState as appropriate",
+    "function_name": "BMS State Machine"
+  },
+  {
+    "requirement_key": "REQ-BMS-THM-004",
+    "description": "IF  any cell temperature <= low temperature limit\nTHEN\n  · BMS_CellUT_Flag := 1\n  · BMS_ChargeReady_Flag := 0 (charging prohibited)",
+    "function_name": "Thermal Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-DEG-001",
+    "description": "The BMS shall continuously track:\n  · Capacity fade (current vs. rated capacity)\n  · DC internal resistance trend\n  · Cell voltage deviation under load",
+    "function_name": "Degradation Monitoring"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-011",
+    "description": "Recovery from overvoltage safe state:\nIF  BMS_SystemState = SafeState AND all cell voltages < 4.00 V for >= 5 s\nTHEN\n  · BMS_OV_RecoverAllow := 1",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-CHG-001",
+    "description": "Upon charger connection detection (CP/PP or CC signal):\n  · Verify all safety preconditions\n  · IF all preconditions satisfied\n    THEN BMS_ChargeReady_Flag := 1\n  · ELSE BMS_ChargeReady_Flag := 0, report reason on CAN",
+    "function_name": "Charge Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-PVP-001",
+    "description": "IF  total pack voltage < minimum operating threshold\nTHEN\n  · BMS_PackUV_Flag := 1\n  · Send DTC P0A01 to VCU\n  · Limit discharge power proportionally to undervoltage severity",
+    "function_name": "Pack Voltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-COM-003",
+    "description": "IF  VCU heartbeat signal lost > 500 ms\nTHEN\n  · BMS_VCULost_Flag := 1\n  · Revert to default safe-state assumptions",
+    "function_name": "Communication & Diagnostics"
+  },
+  {
+    "requirement_key": "REQ-BMS-DEG-002",
+    "description": "IF  any degradation indicator exceeds its threshold\nTHEN\n  · BMS_CellDegrade_Warn := 1\n  · Update SOH prediction model",
+    "function_name": "Degradation Monitoring"
+  },
+  {
+    "requirement_key": "REQ-BMS-CUR-008",
+    "description": "While BMS_CurrSenseFault_Flag = 1:\n  · Discharge power limited to 30 % (voltage-based estimation)\n  · Charging shall be inhibited\n  · IF fault persists for > 5 s\n    THEN BMS_SafeState_Entry := 1",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-CUR-005",
+    "description": "While BMS_SCD_Flag = 1:\n  · BMS_SCD_Latch := 1 (persistent across power cycles)\n  · BMS_SCD_Latch shall only clear via diagnostic command\n  · HV contactor closure shall be prohibited while latched",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-ISO-005",
+    "description": "IF  HV leakage current > safety threshold\nTHEN\n  · BMS_HVLeakage_Flag := 1\n  · Trigger audible warning via HMI",
+    "function_name": "Insulation & HVIL"
+  },
+  {
+    "requirement_key": "REQ-BMS-CUR-002",
+    "description": "IF  pack discharge current exceeds 200 A\nTHEN\n  · BMS_DischargeOC_Flag := 1\n  · Limit discharge power to 75 % of MaxDischargePower",
+    "function_name": "Current Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-FLT-002",
+    "description": "While BMS_Fault_Latch = 1:\n  · All contactor closure prohibited\n  · Normal operation blocked until power cycle\n  · Fault code readable via diagnostic interface",
+    "function_name": "Fault Management"
+  },
+  {
+    "requirement_key": "REQ-BMS-OVP-003",
+    "description": "IF  BMS_CellOV_Detect de-asserts before t_CellOV_Debounce expires\nTHEN\n  · The debounce timer shall reset\n  · BMS_CellOV_Flag shall remain 0\n  · No fault record shall be stored",
+    "function_name": "Overvoltage Protection"
+  },
+  {
+    "requirement_key": "REQ-BMS-ISO-004",
+    "description": "IF  BMS_HVILFault_Flag = 1\nTHEN\n  · Open all main contactors within 100 ms\n  · BMS_SystemState := SafeState",
+    "function_name": "Insulation & HVIL"
+  },
+  {
+    "requirement_key": "REQ-BMS-COM-004",
+    "description": "IF  BMS_VCULost_Flag = 1 for >= 1 s\nTHEN\n  · Open main contactors\n  · BMS_SystemState := SafeState",
+    "function_name": "Communication & Diagnostics"
+  },
+  {
+    "requirement_key": "REQ-BMS-STM-002",
+    "description": "Wake-up sources:\n  · CAN bus activity\n  · Dedicated wake-up pin\nWake-up shall complete initialisation within 500 ms and report BMS_SystemState on CAN.",
+    "function_name": "BMS State Machine"
+  },
+  {
+    "requirement_key": "REQ-BMS-SOC-001",
+    "description": "IF  calculated SOC <= 20 %\nTHEN\n  · BMS_LowSOC_Warn := 1\n  · Command instrument cluster low battery lamp ON",
+    "function_name": "SOC/SOH Estimation"
+  }
+]
