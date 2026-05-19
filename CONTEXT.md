@@ -18,13 +18,38 @@ from structured requirements.
   values: `normal_behavior`, `boundary_or_threshold`, `fault_or_protection`,
   `state_transition`, `observability`.
 
+- **BMS State** — a named operating, fault, latch, request, or recovery state
+  that a generated test case may need to set, transition to, or verify.
+
+- **Observation Point** — a requirement-level output that makes BMS behavior
+  judgeable in a test case, such as a signal, flag, DTC, warning, limit request,
+  or logged value.
+
 - **Case Intent** — a one-sentence description of what a specific test case
   aims to verify, within its coverage dimension. Used as the per-case prompt
   input to LLM#2.
 
 - **`[NEEDS REVIEW]`** — a marker inserted into test case content when the
-  requirement text lacks concrete values (signal names, thresholds, timing).
-  Signals to the human reviewer that the case needs supplemental information.
+  requirement semantics lack signal names, thresholds, timing, states, or
+  observation points needed to avoid inventing test behavior; it does not cover
+  HIL channel names, tool commands, or bench configuration details.
+
+- **Missing Information Detection** — the ability to identify requirement
+  semantic gaps that would otherwise force the model to invent test values or
+  behavior.
+
+- **Missing Information Category** — one of the canonical semantic gap types:
+  signal, threshold, timing, state, or observation.
+
+- **Review Marker Text** — the literal marker shown in generated cases for all
+  missing information categories; currently always `[NEEDS REVIEW]`.
+
+- **Missing Information Detection Failure** — a critical quality failure where
+  a test case should require `[NEEDS REVIEW]` but instead invents or assumes
+  missing requirement information.
+
+- **Missing Information Fallback** — a secondary safeguard where case writing
+  marks requirement semantic gaps that were missed during earlier analysis.
 
 - **Review Comment** — human-supplied clarification attached to a
   reject/regenerate action. Takes priority over the original requirement text
@@ -40,6 +65,27 @@ from structured requirements.
   quality. Items sourced from CodeX are annotated `[CodeX]`. Current version:
   `optimization_runs/checklist_v2.md`.
 
+- **Prompt Evaluation Set** — a stable representative set of source
+  requirements used to compare prompt changes with the same inputs and review
+  criteria. It is not a set of generated test cases or reference answers.
+
+- **Prompt Evaluation Set Entry** — one requirement's membership in a Prompt
+  Evaluation Set, including why that requirement is useful for evaluating
+  prompt quality and which missing information categories it is expected to
+  exercise.
+
+- **Evaluation Bucket** — a named reason for including a requirement in a
+  Prompt Evaluation Set, such as complete-information baseline, threshold and
+  timing boundary, missing-information trap, multi-branch behavior, or
+  state/observation/diagnostic behavior.
+
+- **Manual Review Score** — a human-assigned score for a generated test case's
+  executability, observability, coverage value, and missing information
+  detection.
+
+- **Hard Gate** — a quality rule that makes a generated test case unacceptable
+  regardless of its other scores.
+
 - **Optimization Run** — a timestamped execution of the prompt tuning loop.
   Contains multiple rounds. Each round saves its prompts, sampled requirements,
   generated cases, and an evaluation report.
@@ -52,6 +98,17 @@ from structured requirements.
 - **Evaluation Report** — Chinese HTML report produced each round by Claude Code.
   Contains per-category and per-item pass rates, failed case details, prompt
   diffs, and recommendations for the next round.
+
+## Relationships
+
+- A **Prompt Evaluation Set** contains multiple **Requirements**.
+- A **Prompt Evaluation Set Entry** refers to exactly one **Requirement**.
+- A **Requirement** can produce multiple **Test Cases** through the generation
+  pipeline.
+- A **Test Case** is evaluated by the **Quality Checklist** and may also receive
+  a **Manual Review Score**.
+- A **Hard Gate** can make a **Test Case** unacceptable even when other review
+  scores are high.
 
 ## Architecture principles
 

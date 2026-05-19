@@ -32,7 +32,7 @@ from openpyxl import load_workbook
 
 from testcase_agent.config import get_settings
 from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
-from testcase_agent.pipeline.post_process import sanitize_numeric_values, strip_needless_markers
+from testcase_agent.pipeline.post_process import sanitize_numeric_values
 from testcase_agent.provider.factory import create_provider
 from testcase_agent.quality.gate import evaluate_cases
 
@@ -203,18 +203,6 @@ def run_batch(
             if total_replacements:
                 print(f"  sanitize: {total_replacements} value(s) replaced with [NEEDS REVIEW]")
 
-        # 3.1.1 fix: when LLM#1 says nothing is missing, strip [NEEDS REVIEW]
-        # markers that LLM#2 or the sanitizer added — they're inconsistent.
-        if result.analysis:
-            mi = result.analysis.missing_critical_info
-            has_missing = mi and "none" not in " ".join(mi).lower()
-            if not has_missing:
-                stripped_cases = []
-                for case in result.cases:
-                    stripped_cases.append(strip_needless_markers(
-                        case, has_missing=False))
-                result.cases = stripped_cases
-
         quality_reports = evaluate_cases(result.cases)
 
         analysis_data = None
@@ -223,8 +211,14 @@ def run_batch(
                 "signals": result.analysis.signals,
                 "thresholds": result.analysis.thresholds,
                 "timing": result.analysis.timing,
+                "states": result.analysis.states,
+                "observations": result.analysis.observations,
                 "direction": result.analysis.direction,
                 "missing_critical_info": result.analysis.missing_critical_info,
+                "missing_info_items": [
+                    {"category": mi.category, "description": mi.description}
+                    for mi in result.analysis.missing_info_items
+                ],
                 "case_intents": [
                     {"coverage": ci.coverage, "description": ci.description}
                     for ci in result.analysis.case_intents

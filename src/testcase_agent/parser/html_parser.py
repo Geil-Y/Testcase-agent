@@ -31,12 +31,21 @@ class CaseIntent:
 
 
 @dataclass
+class MissingInfo:
+    category: str = ""
+    description: str = ""
+
+
+@dataclass
 class AnalysisResult:
     signals: list[str] = field(default_factory=list)
     thresholds: list[str] = field(default_factory=list)
     timing: list[str] = field(default_factory=list)
+    states: list[str] = field(default_factory=list)
+    observations: list[str] = field(default_factory=list)
     direction: str = ""
     missing_critical_info: list[str] = field(default_factory=list)
+    missing_info_items: list[MissingInfo] = field(default_factory=list)
     case_intents: list[CaseIntent] = field(default_factory=list)
     raw_html: str = ""
 
@@ -60,8 +69,13 @@ def parse_analysis(html: str) -> AnalysisResult:
                     result.thresholds = value
                 elif name == "extracted_timing":
                     result.timing = value
+                elif name == "extracted_states":
+                    result.states = value
+                elif name == "extracted_observations":
+                    result.observations = value
                 elif name == "missing_critical_info":
-                    result.missing_critical_info = value
+                    result.missing_info_items = _parse_missing_items(section)
+                    result.missing_critical_info = [m.description for m in result.missing_info_items]
 
     plan = soup.find("coverage_plan")
     if plan:
@@ -129,3 +143,19 @@ def parse_generated_case(html: str) -> GeneratedCase:
 
 def _lines(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip() and line.strip().lower() != "none found"]
+
+
+def _parse_missing_items(section) -> list[MissingInfo]:
+    """Extract MissingInfo from a <section name='missing_critical_info'> element.
+
+    Supports both old and new formats:
+      - <item>description</item>                → category=""
+      - <item category="timing">description</item>  → category="timing"
+    """
+    result: list[MissingInfo] = []
+    for item_el in section.find_all("item"):
+        desc = item_el.get_text(strip=True)
+        if desc and desc.lower() not in ("none", "none found"):
+            category = item_el.get("category", "")
+            result.append(MissingInfo(category=category, description=desc))
+    return result

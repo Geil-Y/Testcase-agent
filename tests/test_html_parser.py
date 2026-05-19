@@ -1,5 +1,7 @@
 from testcase_agent.parser.html_parser import (
+    AnalysisResult,
     GeneratedCase,
+    MissingInfo,
     parse_analysis,
     parse_generated_case,
 )
@@ -39,6 +41,9 @@ class TestParseAnalysis:
         assert result.direction == ""
         assert result.missing_critical_info == []
         assert result.case_intents == []
+        assert result.states == []
+        assert result.observations == []
+        assert result.missing_info_items == []
 
     def test_filters_none_found_line_items(self):
         html = """<analysis>
@@ -53,6 +58,165 @@ class TestParseAnalysis:
         result = parse_analysis("<html></html>")
         assert result.signals == []
         assert result.case_intents == []
+
+    def test_parse_extracted_states(self):
+        html = """<analysis>
+        <section name="extracted_states">
+        <item>NormalMode</item>
+        <item>OvervoltageProtection</item>
+        </section>
+        </analysis>"""
+
+        result = parse_analysis(html)
+
+        assert result.states == ["NormalMode", "OvervoltageProtection"]
+
+    def test_parse_extracted_observations(self):
+        html = """<analysis>
+        <section name="extracted_observations">
+        <item>CAN_OV_Flag status</item>
+        <item>Contactor state change</item>
+        </section>
+        </analysis>"""
+
+        result = parse_analysis(html)
+
+        assert result.observations == ["CAN_OV_Flag status", "Contactor state change"]
+
+    def test_missing_critical_info_old_format(self):
+        html = """<analysis>
+        <section name="missing_critical_info">
+        <item>response timing not specified</item>
+        <item>threshold value not provided</item>
+        </section>
+        </analysis>"""
+
+        result = parse_analysis(html)
+
+        assert result.missing_critical_info == [
+            "response timing not specified",
+            "threshold value not provided",
+        ]
+        assert len(result.missing_info_items) == 2
+        assert result.missing_info_items[0].category == ""
+        assert result.missing_info_items[0].description == "response timing not specified"
+        assert result.missing_info_items[1].category == ""
+        assert result.missing_info_items[1].description == "threshold value not provided"
+
+    def test_missing_critical_info_new_format_with_category(self):
+        html = """<analysis>
+        <section name="missing_critical_info">
+        <item category="timing">response timing not specified</item>
+        <item category="threshold">overvoltage threshold not provided</item>
+        </section>
+        </analysis>"""
+
+        result = parse_analysis(html)
+
+        assert result.missing_critical_info == [
+            "response timing not specified",
+            "overvoltage threshold not provided",
+        ]
+        assert len(result.missing_info_items) == 2
+        assert result.missing_info_items[0].category == "timing"
+        assert result.missing_info_items[0].description == "response timing not specified"
+        assert result.missing_info_items[1].category == "threshold"
+        assert result.missing_info_items[1].description == "overvoltage threshold not provided"
+
+    def test_missing_critical_info_mixed_format(self):
+        html = """<analysis>
+        <section name="missing_critical_info">
+        <item category="timing">response timing not specified</item>
+        <item>BMS model not given</item>
+        <item category="signal">fault signal name not provided</item>
+        </section>
+        </analysis>"""
+
+        result = parse_analysis(html)
+
+        assert result.missing_critical_info == [
+            "response timing not specified",
+            "BMS model not given",
+            "fault signal name not provided",
+        ]
+        assert len(result.missing_info_items) == 3
+        assert result.missing_info_items[0].category == "timing"
+        assert result.missing_info_items[1].category == ""
+        assert result.missing_info_items[2].category == "signal"
+
+
+class TestAnalysisDataSerialization:
+    """Verify AnalysisResult → dict serialization matches cli.py format."""
+
+    def _serialize(self, analysis: AnalysisResult) -> dict:
+        return {
+            "signals": analysis.signals,
+            "thresholds": analysis.thresholds,
+            "timing": analysis.timing,
+            "states": analysis.states,
+            "observations": analysis.observations,
+            "direction": analysis.direction,
+            "missing_critical_info": analysis.missing_critical_info,
+            "missing_info_items": [
+                {"category": mi.category, "description": mi.description}
+                for mi in analysis.missing_info_items
+            ],
+            "case_intents": [
+                {"coverage": ci.coverage, "description": ci.description}
+                for ci in analysis.case_intents
+            ],
+        }
+
+    def test_serializes_new_fields(self):
+        analysis = AnalysisResult(
+            states=["NormalMode", "FaultMode"],
+            observations=["DTC_OV set", "Contactor opened"],
+            missing_info_items=[
+                MissingInfo(category="timing", description="response time not specified"),
+                MissingInfo(category="threshold", description="OV threshold missing"),
+            ],
+            missing_critical_info=["response time not specified", "OV threshold missing"],
+        )
+        data = self._serialize(analysis)
+        assert data["states"] == ["NormalMode", "FaultMode"]
+        assert data["observations"] == ["DTC_OV set", "Contactor opened"]
+        assert data["missing_info_items"] == [
+            {"category": "timing", "description": "response time not specified"},
+            {"category": "threshold", "description": "OV threshold missing"},
+        ]
+        assert data["missing_critical_info"] == [
+            "response time not specified", "OV threshold missing",
+        ]
+
+    def test_empty_new_fields_default_to_empty_lists(self):
+        analysis = AnalysisResult()
+        data = self._serialize(analysis)
+        assert data["states"] == []
+        assert data["observations"] == []
+        assert data["missing_info_items"] == []
+
+    def test_mixed_category_missing_info(self):
+        analysis = AnalysisResult(
+            missing_info_items=[
+                MissingInfo(category="timing", description="timing missing"),
+                MissingInfo(category="", description="old-format item"),
+                MissingInfo(category="signal", description="signal name missing"),
+            ],
+            missing_critical_info=[
+                "timing missing", "old-format item", "signal name missing",
+            ],
+        )
+        data = self._serialize(analysis)
+        assert len(data["missing_info_items"]) == 3
+        assert data["missing_info_items"][0] == {
+            "category": "timing", "description": "timing missing",
+        }
+        assert data["missing_info_items"][1] == {
+            "category": "", "description": "old-format item",
+        }
+        assert data["missing_info_items"][2] == {
+            "category": "signal", "description": "signal name missing",
+        }
 
 
 class TestParseGeneratedCase:

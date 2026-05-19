@@ -41,13 +41,29 @@ created: 2026-05-19
 
 ---
 
-## 3. [NEEDS REVIEW] 使用规范
+## 3. [NEEDS REVIEW] 使用规范 [HARD GATE]
 
-### 3.1 使用场景
-- [ ] 3.1.1 [NEEDS REVIEW] 仅用于需求原文未提供的值（LLM#1 标记为缺失的信息）；需求已提供具体值时不得添加。action 和 expected 中不确认的参数值统一使用 [NEEDS REVIEW] 占位，禁止凭空编造数值。
+漏标 [NEEDS REVIEW] 或凭空编造缺失语义直接判定为 **不可接受（hard fail）**。
 
-### 3.2 位置精确
-- [ ] 3.2.1 [NEEDS REVIEW] 放在实际需要该值的位置（action 或 expected），不放在无关字段 [CodeX]。时序参数缺失时，占位符放在 action 的 Wait 步骤（不假设瞬时响应）。
+### 3.1 五类缺失语义
+[NEEDS REVIEW] 仅覆盖以下五类需求语义缺口：
+- **signal** — BMS 信号名缺失
+- **threshold** — 阈值参数缺失
+- **timing** — 时序/去抖参数缺失
+- **state** — BMS 状态/模式名缺失
+- **observation** — 可观测检查点（DTC、CAN 帧、故障记录等）缺失
+
+不用于 HIL 通道名、工具命令、bench 配置或其他执行环境细节。
+
+### 3.2 Hard fail 条件
+- [ ] 3.2.1 [HARD] 若 action 或 expected 需使用 signal/threshold/timing/state/observation 但需求未提供且 case 未标注 [NEEDS REVIEW] → **hard fail**
+- [ ] 3.2.2 [HARD] 若 action 或 expected 凭空编造了需求未提供的 signal/threshold/timing/state/observation → **hard fail**
+- [ ] 3.2.3 [WARNING] 若需求语义完整但 case 添加了不必要的 [NEEDS REVIEW] → 扣分但不自动 severe，除非阻塞可执行性
+
+### 3.3 位置精确
+- [ ] 3.3.1 [NEEDS REVIEW] 放在实际需要该值的位置（action 或 expected），不放在 title/objective/precondition/postcondition 等无关字段 [CodeX]
+- [ ] 3.3.2 时序参数缺失时，占位符放在 action 的 Wait 步骤（不假设瞬时响应）
+- [ ] 3.3.3 [NEEDS REVIEW] 使用裸格式，禁止带 category 后缀（禁止 `[NEEDS REVIEW: timing]`）
 
 ---
 
@@ -99,13 +115,13 @@ created: 2026-05-19
 
 ---
 
-**总计：** 33 个检查项（含 5 个 [WARNING]），分为 6 大类。
+**总计：** 40 个检查项（含 2 个 [HARD] gate、6 个 [WARNING]），分为 6 大类。
 **CodeX 来源项数：** 标注 [CodeX] 的项
 
 **v2 相对 v1 变更：**
-- 新增：1.1.6（traceability）
+- 新增：1.1.6（traceability）、3.2.1~3.2.3（hard fail 条件）、3.3.3（裸格式要求）
 - 删除：2.2.1（阈值引用错位）、2.3.1（时序引用错位）、4.1.1（action/expected 分离过于绝对）
-- 合并：2.1.1+2.1.3、2.1.2+2.4.1+2.4.2、3.1.1+3.1.2、3.2.1+3.2.2
-- 重写：5.2 整节（等价类+边界值方法论替代原参数/时序分离规则）
+- 合并：2.1.1+2.1.3、2.1.2+2.4.1+2.4.2、原 3.1.1+3.1.2 → 现在的 3.3.1
+- 重写：5.2 整节（等价类+边界值方法论替代原参数/时序分离规则）、3 整节（五类缺失语义 + hard gate）
 - 降级：5.1.1~5.1.5 → [WARNING]
 - 修正：NEEDS REVIEW 位置从 "仅 expected" 扩展到 "action 或 expected"

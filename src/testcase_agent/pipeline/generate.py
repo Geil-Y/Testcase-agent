@@ -45,7 +45,14 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
     signals_str = ", ".join(analysis.signals) if analysis.signals else ""
     thresholds_str = ", ".join(analysis.thresholds) if analysis.thresholds else ""
     timing_str = ", ".join(analysis.timing) if analysis.timing else ""
+    states_str = ", ".join(analysis.states) if analysis.states else ""
+    observations_str = ", ".join(analysis.observations) if analysis.observations else ""
+
+    # Legacy flat string for backward-compatible prompt rendering
     missing_str = ", ".join(analysis.missing_critical_info) if analysis.missing_critical_info else ""
+
+    # Categorized missing info for the new prompt format
+    missing_items_str = _format_missing_items(analysis)
 
     for intent in analysis.case_intents:
         sys2, usr2 = render_prompt(
@@ -59,7 +66,10 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
             extracted_signals=signals_str,
             extracted_thresholds=thresholds_str,
             extracted_timing=timing_str,
+            extracted_states=states_str,
+            extracted_observations=observations_str,
             missing_info=missing_str,
+            missing_info_items=missing_items_str,
         )
         html2 = provider.complete(sys2, usr2)
         case = parse_generated_case(html2)
@@ -80,7 +90,10 @@ def regenerate_case(
     signals_str = ", ".join(analysis.signals) if analysis and analysis.signals else ""
     thresholds_str = ", ".join(analysis.thresholds) if analysis and analysis.thresholds else ""
     timing_str = ", ".join(analysis.timing) if analysis and analysis.timing else ""
+    states_str = ", ".join(analysis.states) if analysis and analysis.states else ""
+    observations_str = ", ".join(analysis.observations) if analysis and analysis.observations else ""
     missing_str = ", ".join(analysis.missing_critical_info) if analysis and analysis.missing_critical_info else ""
+    missing_items_str = _format_missing_items(analysis) if analysis else ""
 
     sys2, usr2 = render_prompt(
         "generate_case",
@@ -93,7 +106,27 @@ def regenerate_case(
         extracted_signals=signals_str,
         extracted_thresholds=thresholds_str,
         extracted_timing=timing_str,
+        extracted_states=states_str,
+        extracted_observations=observations_str,
         missing_info=missing_str,
+        missing_info_items=missing_items_str,
     )
     html2 = provider.complete(sys2, usr2)
     return parse_generated_case(html2)
+
+
+def _format_missing_items(analysis: AnalysisResult) -> str:
+    """Format categorized missing info items for prompt rendering.
+
+    Categorized items: [timing] response timing not specified
+    Uncategorized items render as plain description without empty brackets.
+    """
+    if not analysis.missing_info_items:
+        return ""
+    lines: list[str] = []
+    for item in analysis.missing_info_items:
+        if item.category:
+            lines.append(f"[{item.category}] {item.description}")
+        else:
+            lines.append(item.description)
+    return "\n".join(lines)

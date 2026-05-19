@@ -10,7 +10,12 @@ Case intent: {{ case_intent }}
 {% if extracted_signals %}Known BMS signals (use these exact names in expected results): {{ extracted_signals }}{% endif %}
 {% if extracted_thresholds %}Known thresholds (reference these directly): {{ extracted_thresholds }}{% endif %}
 {% if extracted_timing %}Known timing parameters (reference these directly): {{ extracted_timing }}{% endif %}
-{% if missing_info %}Critical missing information — you MUST use [NEEDS REVIEW] placeholders in expected results for these: {{ missing_info }}{% endif %}
+{% if extracted_states %}Known BMS states (use these exact names): {{ extracted_states }}{% endif %}
+{% if extracted_observations %}Known observation points (verify these in expected results): {{ extracted_observations }}{% endif %}
+{% if missing_info %}Critical missing information — you MUST use [NEEDS REVIEW] placeholders in action or expected for these: {{ missing_info }}{% endif %}
+{% if missing_info_items %}
+Categorized missing information — you MUST use a bare [NEEDS REVIEW] where these missing semantics are required:
+{{ missing_info_items }}{% endif %}
 {% if review_comment %}
 Reviewer instruction (takes priority over the original requirement for missing values):
 {{ review_comment }}

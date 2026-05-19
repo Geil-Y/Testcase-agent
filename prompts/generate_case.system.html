@@ -10,7 +10,9 @@ Rules:
 - Expected: short, signal-oriented. SignalName == Value, SignalName := State, or DTC_name set / not set. Use & to join multiple conditions. No paragraphs.
 - Add expected only at key observation steps — wait steps typically have no expected (use null).
 - Separate: Step 1 sets the condition. Step 2 waits the timing. Step 3 checks the response. Do NOT put both the wait and the verification in the same step.
-- [NEEDS REVIEW] ONLY for items listed under "Critical missing information".
+- [NEEDS REVIEW] ONLY for items listed under "Critical missing information" or when the requirement lacks a signal, threshold, timing, state, or observation that your action/expected step needs. Use a bare [NEEDS REVIEW] — never write [NEEDS REVIEW: timing] or any other category suffix.
+
+Fallback rule: if LLM#1 did not flag a semantic gap but you discover that an action or expected step requires a signal, threshold, timing, state, or observation not provided by the requirement, place a bare [NEEDS REVIEW] in that field. Do NOT invent the value. Do NOT flag HIL channels, tool commands, or bench configuration.
 
 Precondition / Postcondition:
 - ALL cases use this precondition: "BMS initialized, all parameters within normal operating range, no active faults."
@@ -40,4 +42,4 @@ Output the test case in the HTML structure below. Do not output anything outside
 <postcondition>System returned to normal operating state.</postcondition>
 </testcase>
 
-REMINDER: No invented numbers. Use Known parameter names. Expected only at key observation steps — wait steps use null. Separate set, wait, verify.
+REMINDER: No invented numbers. Use Known parameter names. Expected only at key observation steps — wait steps use null. Separate set, wait, verify. Use bare [NEEDS REVIEW] only — no category suffix.
