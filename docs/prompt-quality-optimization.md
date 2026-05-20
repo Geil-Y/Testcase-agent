@@ -36,19 +36,31 @@ Current workflow details are documented in `docs/optimization-workflow.md`.
 
 ## Manual Review Rubric
 
-Each generated case in the Prompt Evaluation Set receives four human scores
-from 1 to 5:
+Each requirement group in the Prompt Evaluation Set receives an 8-dimension
+review score from 1 to 5.
 
-| Criterion | Weight | Meaning |
-| --- | ---: | --- |
-| Executability | 20% | A HIL engineer can execute the procedure without rewriting the case. |
-| Observability | 20% | Expected results are concrete and judgeable from BMS outputs. |
-| Coverage Value | 20% | The case verifies a meaningful requirement behavior or risk. |
-| Missing Information Detection | 40% | The case identifies requirement semantic gaps instead of inventing values or behavior. |
+`coverage_value` is requirement-level: it evaluates the full set of generated
+cases for one requirement. The other seven dimensions are case-level and are
+averaged within the requirement before computing the weighted score.
 
-Hard gates:
+| Criterion | Level | Weight | Meaning |
+| --- | --- | ---: | --- |
+| Requirement Alignment | Case | 20% | The case tests the intended requirement without drifting to unrelated BMS behavior. |
+| Information Integrity | Case | 20% | Concrete signals, thresholds, timings, states, observations, diagnostics, bus messages, HIL channels, and tool commands are supported by the test basis or marked `[NEEDS REVIEW]` when missing. |
+| Executability | Case | 15% | A HIL engineer or automation script can execute the procedure without rewriting the case. |
+| Observability | Case | 15% | Expected results point to observable evidence from BMS outputs, diagnostics, logs, traces, or measurements. |
+| Pass/Fail Clarity | Case | 10% | Recorded evidence can be judged objectively as pass or fail. |
+| Coverage Value | Requirement | 10% | The full case set provides meaningful, complementary requirement coverage. |
+| State & Environment Control | Case | 5% | Initial state, environment assumptions, transitions, restore/reset behavior, and postconditions are controlled. |
+| Automation Readiness | Case | 5% | The case is structured, atomic, and consistent enough for downstream script or test-asset conversion. |
 
-- If Missing Information Detection is lower than 3, the case is unacceptable.
+Weighted scores are computed per requirement, then averaged across requirements.
+This prevents a requirement with many generated cases from dominating the
+run-level score.
+
+Hard gates remain separate from weighted scoring:
+
+- If Information Integrity is lower than 3, the case is unacceptable.
 - If a case should contain `[NEEDS REVIEW]` but does not, the case is
   unacceptable.
 - If a case invents a missing signal, threshold, timing, state, or observation
@@ -68,9 +80,10 @@ Hard gates:
 It does not cover HIL channel names, tool commands, bench configuration, or
 other execution-environment details.
 
-Current status: Phase 4 is complete. Manual review scores are loaded from
-`manual_review_scores.json`, weighted, hard-gated, and rendered in the report
-alongside (but separate from) the automated checklist pass rate.
+Current status: Phase 4 is complete and the rubric has been upgraded to 8
+dimensions. Manual review scores are loaded from `manual_review_scores.json`,
+weighted, hard-gated, and rendered in the report alongside (but separate from)
+the automated checklist pass rate.
 
 See `optimization/manual_review.py` for the implementation.
 
@@ -296,27 +309,33 @@ Completed work:
 ### Phase 4: Manual Review Score ✅
 
 Completed 2026-05-19.
+Updated to the 8-dimension rubric on 2026-05-20.
 
 Goal: capture the human review rubric as structured data.
 
 Completed work:
 
-- Defined `manual_review_scores.json` as the review input format. Each entry has
-  `requirement_key`, `case_index` (0-based), four 1-5 scores, optional
-  `reviewer` and `notes`. See `optimization/manual_review.py`.
-- Weighted score formula: 20% executability + 20% observability + 20%
-  coverage_value + 40% missing_information_detection, rounded to 1 decimal.
+- Defined `manual_review_scores.json` as the review input format. Each
+  requirement entry has `requirement_key`, requirement-level `coverage_value`,
+  and a `cases` array with 0-based `case_index` plus the seven case-level
+  scores. Optional `reviewer` and `notes` are supported at requirement and case
+  level. See `optimization/manual_review.py`.
+- Weighted score formula: 20% requirement_alignment + 20%
+  information_integrity + 15% executability + 15% observability + 10%
+  pass_fail_clarity + 10% coverage_value + 5%
+  state_and_environment_control + 5% automation_readiness. Per-requirement
+  scores are rounded to 1 decimal for reporting.
 - Hard gates applied before accepting any weighted score:
-  `missing_information_detection < 3` → unacceptable; expected missing
+  `information_integrity < 3` → unacceptable; expected missing
   categories but no `[NEEDS REVIEW]` in case → unacceptable; invented
   numeric values for missing semantics → unacceptable; unnecessary
   `[NEEDS REVIEW]` → warning (not automatically severe).
 - Manual Review hard gates reuse the shared evaluator logic.
-- Manual Review Scores section rendered in `evaluation_report.html` alongside
+- Manual Review Scores section rendered in `evaluation_report.html` and `cases_report.html` alongside
   but separate from automated checklist pass rate. Shows average weighted score,
-  dimension averages, score distribution, unacceptable cases, and scored
-  case detail table. When `manual_review_scores.json` is absent, the section
-  is omitted (no error).
+  dimension averages/minimums, requirement-level score distribution,
+  unacceptable cases, and scored case detail table. When
+  `manual_review_scores.json` is absent, the section is omitted (no error).
 - 29 tests covering weighted score computation, hard gates, file validation,
   review summary aggregation, and report HTML rendering.
 

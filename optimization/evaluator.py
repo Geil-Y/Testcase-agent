@@ -134,10 +134,11 @@ def evaluate_manual_review_hard_gates(
         "warnings": [],
     }
 
-    if entry.missing_information_detection < 3:
+    information_integrity = getattr(entry, "information_integrity", 0)
+    if information_integrity < 3:
         result["unacceptable"] = True
         result["reasons"].append(
-            f"missing_information_detection={entry.missing_information_detection} (< 3)"
+            f"information_integrity={information_integrity} (< 3)"
         )
 
     if generated_case is None:

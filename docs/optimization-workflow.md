@@ -15,10 +15,12 @@ instead.
 | Current checklist | `optimization_runs/checklist_v2.md` |
 | Prompt Evaluation Set | `optimization_runs/requirement_sets/prompt_eval_v1.json` |
 | Prompt Evaluation Set size | 35 entries |
-| Evaluation engine | `optimization/evaluator.py` |
+| Evaluation engine (hard-rule) | `optimization/evaluator.py` |
+| AI evaluation engine (DeepSeek 8-dimension scoring + checklist context) | `optimization/claude_evaluator.py` |
 | Case display renderer | `optimization/generate_case_html.py` |
 | Evaluation report renderer | `optimization/generate_report.py` |
-| Manual Review Score loader/summary | `optimization/manual_review.py` |
+| AI evaluation data (per evaluator) | `hardrule_evaluation.json`, `deepseek_evaluation.json`, `chatgpt_evaluation.json` |
+| Manual Review Score loader/summary (8 dimensions) | `optimization/manual_review.py` |
 
 ## CLI Selection Modes
 
@@ -85,12 +87,51 @@ Sanitization is ON by default for `optimization.cli run`.
 
 Renderers consume evaluator results:
 
-- `optimization/generate_report.py` renders `evaluation_report.html`.
-- `optimization/generate_case_html.py` renders `cases_report.html`.
+- `optimization/generate_report.py` renders `evaluation_report.html` (checklist/hard-gate summary).
+- `optimization/generate_case_html.py` renders `cases_report.html` (unified main report combining hard-rule, DeepSeek, and ChatGPT evaluations).
+
+DeepSeek AI review uses the 8-dimension scoring rubric in
+`optimization_runs/scoring_rubrics.md`. It evaluates requirement groups, not
+isolated flattened cases:
+
+- `coverage_value` is scored once per requirement over the full generated case
+  set.
+- `requirement_alignment`, `executability`, `observability`,
+  `pass_fail_clarity`, `information_integrity`,
+  `state_and_environment_control`, and `automation_readiness` are scored per
+  case.
+- `deepseek_evaluation.json` stores both nested `requirements` and flattened
+  `cases` for report rendering. `overall_weighted` is computed by averaging
+  per-requirement weighted scores.
 
 Manual Review Scores are optional. If `<round_dir>/manual_review_scores.json`
 exists, `generate_report()` loads it, applies evaluator-backed hard gates, and
 renders the Manual Review Scores section.
+
+`manual_review_scores.json` uses the same 8-dimension structure:
+
+```json
+{
+  "requirements": [
+    {
+      "requirement_key": "REQ-001",
+      "coverage_value": 4,
+      "cases": [
+        {
+          "case_index": 0,
+          "requirement_alignment": 5,
+          "executability": 4,
+          "observability": 4,
+          "pass_fail_clarity": 3,
+          "information_integrity": 5,
+          "state_and_environment_control": 4,
+          "automation_readiness": 4
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## Recommended Workflows
 

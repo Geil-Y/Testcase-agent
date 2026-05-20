@@ -352,7 +352,8 @@ def _render_manual_review_section(review_summary: dict) -> str:
 
     avg = review_summary["average_weighted_score"]
     dim_avg = review_summary["dimension_averages"]
-    total = review_summary["total_entries"]
+    total_requirements = review_summary.get("total_requirements", review_summary.get("total_entries", 0))
+    total_cases = review_summary.get("total_cases", review_summary.get("total_entries", 0))
     unacceptable_count = review_summary["total_unacceptable"]
     dist = review_summary["score_distribution"]
 
@@ -367,17 +368,23 @@ def _render_manual_review_section(review_summary: dict) -> str:
     # Dimension averages
     dim_rows = []
     dim_labels = {
-        "executability": "Executability (20%)",
-        "observability": "Observability (20%)",
-        "coverage_value": "Coverage Value (20%)",
-        "missing_information_detection": "Missing Info Detection (40%)",
+        "requirement_alignment": "Requirement Alignment (20%)",
+        "information_integrity": "Information Integrity (20%)",
+        "executability": "Executability (15%)",
+        "observability": "Observability (15%)",
+        "pass_fail_clarity": "Pass/Fail Clarity (10%)",
+        "coverage_value": "Coverage Value (10%, requirement-level)",
+        "state_and_environment_control": "State & Environment (5%)",
+        "automation_readiness": "Automation Readiness (5%)",
     }
     for dim, label in dim_labels.items():
         val = dim_avg.get(dim, 0)
+        min_val = review_summary.get("dimension_mins", {}).get(dim, 0)
         color = "var(--pass)" if val >= 4 else "var(--warn)" if val >= 3 else "var(--fail)"
         dim_rows.append(
             f"<tr><td>{label}</td>"
-            f"<td style='font-weight:700;color:{color}'>{val}</td></tr>"
+            f"<td style='font-weight:700;color:{color}'>{val}</td>"
+            f"<td>{min_val}</td></tr>"
         )
 
     # Unacceptable list
@@ -401,19 +408,19 @@ def _render_manual_review_section(review_summary: dict) -> str:
     # Score distribution
     dist_bars = ""
     for bucket, count in dist.items():
-        pct = round(count / total * 100) if total else 0
+        pct = round(count / total_requirements * 100) if total_requirements else 0
         bar_color = "var(--pass)" if bucket in ("4-5", "3-4") else "var(--warn)"
         dist_bars += (
             f'<div style="display:flex;align-items:center;gap:8px;margin:2px 0">'
             f'<span style="width:40px;font-size:0.82rem">{bucket}</span>'
             f'<div class="progress-bar" style="flex:1;max-width:200px;margin:0">'
             f'<div class="progress-fill" style="width:{max(pct, 2)}%;background:{bar_color}"></div>'
-            f'</div><span style="font-size:0.82rem;color:var(--muted)">{count} case(s)</span></div>'
+            f'</div><span style="font-size:0.82rem;color:var(--muted)">{count} requirement(s)</span></div>'
         )
 
-    # Detail table (top 10 by weighted score ascending)
+    # Detail table (top 10 cases by parent requirement weighted score ascending)
     details = review_summary.get("entry_details", [])
-    details_sorted = sorted(details, key=lambda d: d["weighted_score"])[:10]
+    details_sorted = sorted(details, key=lambda d: d.get("requirement_weighted_score", d.get("weighted_score", 0)))[:10]
     detail_rows = ""
     for d in details_sorted:
         status = "❌" if d["unacceptable"] else "✅"
@@ -424,9 +431,11 @@ def _render_manual_review_section(review_summary: dict) -> str:
             f"<tr>"
             f"<td>{d['requirement_key']}</td>"
             f"<td style='font-size:0.85rem'>{d['case_title']}</td>"
+            f"<td>{d['requirement_alignment']}</td><td>{d['information_integrity']}</td>"
             f"<td>{d['executability']}</td><td>{d['observability']}</td>"
-            f"<td>{d['coverage_value']}</td><td>{d['missing_information_detection']}</td>"
-            f"<td style='font-weight:700'>{d['weighted_score']}</td>"
+            f"<td>{d['pass_fail_clarity']}</td><td>{d['coverage_value']}</td>"
+            f"<td>{d['state_and_environment_control']}</td><td>{d['automation_readiness']}</td>"
+            f"<td style='font-weight:700'>{d.get('requirement_weighted_score', '')}</td>"
             f"<td>{status}{warn_note}</td>"
             f"</tr>"
         )
@@ -434,7 +443,7 @@ def _render_manual_review_section(review_summary: dict) -> str:
     return f"""
     <h2>Manual Review Scores</h2>
     <p style="color:var(--muted);font-size:0.88rem;margin-bottom:8px">
-      ⚠️ 人工评分，独立于自动化 checklist pass rate。权重: Exec 20% + Obs 20% + Cov 20% + MissingInfo 40%。
+      ⚠️ 人工评分，独立于自动化 checklist pass rate。8 维评分：Coverage Value 按 requirement case set 评分，其他维度按 case 评分。
     </p>
 
     <div class="summary-grid" style="margin-bottom:16px">
@@ -443,7 +452,11 @@ def _render_manual_review_section(review_summary: dict) -> str:
         <div class="label">Average Weighted Score (0-5)</div>
       </div>
       <div class="summary-card">
-        <div class="value">{total}</div>
+        <div class="value">{total_requirements}</div>
+        <div class="label">Reviewed Requirements</div>
+      </div>
+      <div class="summary-card">
+        <div class="value">{total_cases}</div>
         <div class="label">Reviewed Cases</div>
       </div>
       <div class="summary-card">
@@ -454,6 +467,7 @@ def _render_manual_review_section(review_summary: dict) -> str:
 
     <h3 style="margin-top:12px">Dimension Averages</h3>
     <table style="max-width:500px">
+      <tr><th>Dimension</th><th>Avg</th><th>Min</th></tr>
       {"".join(dim_rows)}
     </table>
 
@@ -464,8 +478,8 @@ def _render_manual_review_section(review_summary: dict) -> str:
 
     <h3 style="margin-top:16px">Scored Cases (lowest first)</h3>
     <table>
-      <tr><th>Req</th><th>Case</th><th>Exec</th><th>Obs</th><th>Cov</th><th>MissInfo</th><th>Weighted</th><th>Status</th></tr>
-      {detail_rows if detail_rows else '<tr><td colspan="8" style="color:var(--muted)">No scored cases</td></tr>'}
+      <tr><th>Req</th><th>Case</th><th>Align</th><th>Info</th><th>Exec</th><th>Obs</th><th>P/F</th><th>Cov</th><th>State</th><th>Auto</th><th>Req Weighted</th><th>Status</th></tr>
+      {detail_rows if detail_rows else '<tr><td colspan="12" style="color:var(--muted)">No scored cases</td></tr>'}
     </table>"""
 
 

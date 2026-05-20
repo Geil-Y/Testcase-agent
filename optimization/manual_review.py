@@ -1,22 +1,15 @@
-"""Manual Review Score — human-scored rubric for generated test cases.
+"""Manual Review Score — human-scored 8-dimension rubric.
 
-Weighted score formula (from docs/prompt-quality-optimization.md):
+Manual review follows the same scoring model as the DeepSeek evaluator:
 
-    weighted = 0.20 * executability
-             + 0.20 * observability
-             + 0.20 * coverage_value
-             + 0.40 * missing_information_detection
+- coverage_value is scored once per requirement over the full generated case set.
+- the other seven dimensions are scored per case.
+- weighted scores are computed per requirement, then averaged across
+  requirements so requirements with more generated cases do not dominate the
+  run-level score.
 
-Hard gates (applied before accepting any weighted score):
-
-- missing_information_detection < 3 → unacceptable
-- Case should contain [NEEDS REVIEW] but does not → unacceptable
-- Case invents missing signal/threshold/timing/state/observation → unacceptable
-- Semantically complete requirement adds unnecessary [NEEDS REVIEW] →
-  penalty/warning, not automatic severe unless blocks executability
-
-[NEEDS REVIEW] only covers: signal, threshold, timing, state, observation.
-It does NOT cover HIL channel names, tool commands, or bench configuration.
+Hard gates remain separate from weighted scoring and reuse the shared evaluator
+logic for deterministic [NEEDS REVIEW] checks.
 """
 
 from __future__ import annotations
@@ -27,24 +20,60 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 _VALID_SCORES = {1, 2, 3, 4, 5}
+CASE_LEVEL_DIMS = [
+    "requirement_alignment",
+    "executability",
+    "observability",
+    "pass_fail_clarity",
+    "information_integrity",
+    "state_and_environment_control",
+    "automation_readiness",
+]
+ALL_DIMS = [
+    "requirement_alignment",
+    "coverage_value",
+    "executability",
+    "observability",
+    "pass_fail_clarity",
+    "information_integrity",
+    "state_and_environment_control",
+    "automation_readiness",
+]
 _WEIGHTS = {
-    "executability": 0.20,
-    "observability": 0.20,
-    "coverage_value": 0.20,
-    "missing_information_detection": 0.40,
+    "requirement_alignment": 0.20,
+    "information_integrity": 0.20,
+    "executability": 0.15,
+    "observability": 0.15,
+    "pass_fail_clarity": 0.10,
+    "coverage_value": 0.10,
+    "state_and_environment_control": 0.05,
+    "automation_readiness": 0.05,
 }
 
 
 @dataclass
-class ReviewEntry:
+class ReviewCaseEntry:
     requirement_key: str
-    case_index: int  # 0-based index into generated_cases.json case list
+    case_index: int
+    requirement_alignment: int
     executability: int
     observability: int
-    coverage_value: int
-    missing_information_detection: int
+    pass_fail_clarity: int
+    information_integrity: int
+    state_and_environment_control: int
+    automation_readiness: int
     reviewer: str = ""
     notes: str = ""
+
+
+@dataclass
+class ReviewRequirementEntry:
+    requirement_key: str
+    coverage_value: int
+    cases: list[ReviewCaseEntry] = field(default_factory=list)
+    reviewer: str = ""
+    notes: str = ""
+    coverage_value_note: str = ""
 
 
 @dataclass
@@ -54,8 +83,39 @@ class HardGateResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def load_review_scores(path: str | Path) -> list[ReviewEntry]:
+def _validate_score(item: dict, field: str, context: str) -> int:
+    val = item.get(field)
+    if val not in _VALID_SCORES:
+        raise ValueError(f"{context}: '{field}' must be 1-5, got {val!r}")
+    return int(val)
+
+
+def load_review_scores(path: str | Path) -> list[ReviewRequirementEntry]:
     """Load and validate a manual_review_scores.json file.
+
+    The preferred schema is a JSON object with a `requirements` array, or a
+    direct array of requirement entries:
+
+    {
+      "requirements": [
+        {
+          "requirement_key": "R1",
+          "coverage_value": 4,
+          "cases": [
+            {
+              "case_index": 0,
+              "requirement_alignment": 5,
+              "executability": 4,
+              "observability": 4,
+              "pass_fail_clarity": 3,
+              "information_integrity": 5,
+              "state_and_environment_control": 4,
+              "automation_readiness": 4
+            }
+          ]
+        }
+      ]
+    }
 
     Raises ValueError on schema or score-range errors.
     """
@@ -68,67 +128,94 @@ def load_review_scores(path: str | Path) -> list[ReviewEntry]:
     except json.JSONDecodeError as exc:
         raise ValueError(f"Review file is not valid JSON: {exc}") from exc
 
-    if not isinstance(data, list):
-        raise ValueError("Review file must contain a JSON array of review entries")
+    if isinstance(data, dict):
+        req_items = data.get("requirements")
+    else:
+        req_items = data
 
-    entries: list[ReviewEntry] = []
-    for i, item in enumerate(data):
+    if not isinstance(req_items, list):
+        raise ValueError("Review file must contain a 'requirements' array or a JSON array")
+
+    entries: list[ReviewRequirementEntry] = []
+    for i, item in enumerate(req_items):
         if not isinstance(item, dict):
-            raise ValueError(f"Entry {i} is not a JSON object")
+            raise ValueError(f"Requirement entry {i} is not a JSON object")
+        if "cases" not in item:
+            raise ValueError(
+                f"Requirement entry {i}: expected 8-dimension requirement-level "
+                "schema with 'coverage_value' and 'cases'"
+            )
 
         key = item.get("requirement_key")
         if not isinstance(key, str) or not key.strip():
-            raise ValueError(f"Entry {i}: missing or empty 'requirement_key'")
+            raise ValueError(f"Requirement entry {i}: missing or empty 'requirement_key'")
+        context = f"Requirement entry {i} ('{key}')"
+        coverage_value = _validate_score(item, "coverage_value", context)
 
-        ci = item.get("case_index")
-        if not isinstance(ci, int) or ci < 0:
-            raise ValueError(f"Entry {i} ('{key}'): 'case_index' must be a non-negative integer")
+        cases_raw = item.get("cases")
+        if not isinstance(cases_raw, list) or not cases_raw:
+            raise ValueError(f"{context}: 'cases' must be a non-empty array")
 
-        fields = ["executability", "observability", "coverage_value", "missing_information_detection"]
-        for fname in fields:
-            val = item.get(fname)
-            if val not in _VALID_SCORES:
-                raise ValueError(
-                    f"Entry {i} ('{key}'): '{fname}' must be 1-5, got {val!r}"
-                )
+        cases: list[ReviewCaseEntry] = []
+        for j, case_item in enumerate(cases_raw):
+            if not isinstance(case_item, dict):
+                raise ValueError(f"{context}: case entry {j} is not a JSON object")
+            ci = case_item.get("case_index")
+            if not isinstance(ci, int) or ci < 0:
+                raise ValueError(f"{context}: case entry {j} 'case_index' must be a non-negative integer")
+            case_context = f"{context} case_index={ci}"
+            scores = {
+                dim: _validate_score(case_item, dim, case_context)
+                for dim in CASE_LEVEL_DIMS
+            }
+            cases.append(ReviewCaseEntry(
+                requirement_key=key.strip(),
+                case_index=ci,
+                reviewer=case_item.get("reviewer", item.get("reviewer", "")),
+                notes=case_item.get("notes", ""),
+                **scores,
+            ))
 
-        entries.append(ReviewEntry(
+        entries.append(ReviewRequirementEntry(
             requirement_key=key.strip(),
-            case_index=ci,
-            executability=item["executability"],
-            observability=item["observability"],
-            coverage_value=item["coverage_value"],
-            missing_information_detection=item["missing_information_detection"],
+            coverage_value=coverage_value,
+            coverage_value_note=item.get("coverage_value_note", ""),
             reviewer=item.get("reviewer", ""),
             notes=item.get("notes", ""),
+            cases=cases,
         ))
 
     return entries
 
 
-def compute_weighted_score(entry: ReviewEntry) -> float:
-    """Compute the 0-5 weighted score for a review entry.
+def _avg_case_dim(entry: ReviewRequirementEntry, dim: str) -> float:
+    vals = [getattr(c, dim) for c in entry.cases]
+    return sum(vals) / len(vals) if vals else 0.0
 
-    20% executability + 20% observability + 20% coverage_value
-    + 40% missing_information_detection.
 
-    Rounded to 1 decimal place.
+def _min_case_dim(entry: ReviewRequirementEntry, dim: str) -> int:
+    vals = [getattr(c, dim) for c in entry.cases]
+    return min(vals) if vals else 0
+
+
+def compute_weighted_score(entry: ReviewRequirementEntry) -> float:
+    """Compute the 0-5 per-requirement weighted score.
+
+    coverage_value is requirement-level. The other seven dimensions are first
+    averaged across cases under the same requirement.
     """
-    w = (
-        _WEIGHTS["executability"] * entry.executability
-        + _WEIGHTS["observability"] * entry.observability
-        + _WEIGHTS["coverage_value"] * entry.coverage_value
-        + _WEIGHTS["missing_information_detection"] * entry.missing_information_detection
-    )
+    w = _WEIGHTS["coverage_value"] * entry.coverage_value
+    for dim in CASE_LEVEL_DIMS:
+        w += _WEIGHTS[dim] * _avg_case_dim(entry, dim)
     return round(w, 1)
 
 
 def apply_hard_gates(
-    entry: ReviewEntry,
+    entry: ReviewCaseEntry,
     generated_case: dict | None = None,
     expected_missing_categories: list[str] | None = None,
 ) -> HardGateResult:
-    """Apply hard gates before accepting a weighted score."""
+    """Apply hard gates before accepting any weighted score."""
     from optimization.evaluator import evaluate_manual_review_hard_gates
 
     gate = evaluate_manual_review_hard_gates(
@@ -143,26 +230,16 @@ def apply_hard_gates(
     )
 
 
-# ── Summary helpers for report rendering ─────────────────────────────────
-
+# -- Summary helpers for report rendering --------------------------------
 
 def get_review_summary(
-    entries: list[ReviewEntry],
+    entries: list[ReviewRequirementEntry],
     generated_data: list[dict],
 ) -> dict:
-    """Compute aggregate stats for the report.
-
-    Returns a dict with:
-    - average_weighted_score
-    - dimension_averages (dict)
-    - unacceptable (list of dicts with reason)
-    - score_distribution (0-1, 1-2, 2-3, 3-4, 4-5 buckets)
-    - entry_details (list of per-entry dicts for the report)
-    """
+    """Compute aggregate manual review stats for the report."""
     if not entries:
         return {}
 
-    # Build lookup: (requirement_key, case_index) → case dict
     case_lookup: dict[tuple[str, int], dict] = {}
     req_meta: dict[str, list[str]] = {}
     req_case_counts: dict[str, int] = {}
@@ -174,63 +251,100 @@ def get_review_summary(
         for ci, case in enumerate(cases):
             case_lookup[(key, ci)] = case
 
-    # Validate every review entry matches generated data
     for entry in entries:
         if entry.requirement_key not in req_meta:
             raise ValueError(
-                f"Manual review entry '{entry.requirement_key}' "
-                f"(case_index={entry.case_index}) not found in generated_cases.json"
+                f"Manual review entry '{entry.requirement_key}' not found in generated_cases.json"
             )
         max_ci = req_case_counts[entry.requirement_key]
-        if entry.case_index < 0 or entry.case_index >= max_ci:
-            raise ValueError(
-                f"Manual review entry '{entry.requirement_key}' "
-                f"case_index={entry.case_index} out of range "
-                f"(0-{max_ci - 1}, {max_ci} case(s) total)"
-            )
+        for case_entry in entry.cases:
+            if case_entry.case_index < 0 or case_entry.case_index >= max_ci:
+                raise ValueError(
+                    f"Manual review entry '{entry.requirement_key}' "
+                    f"case_index={case_entry.case_index} out of range "
+                    f"(0-{max_ci - 1}, {max_ci} case(s) total)"
+                )
 
     weighted_scores: list[float] = []
-    dim_scores: dict[str, list[int]] = defaultdict(list)
+    dim_scores: dict[str, list[float]] = defaultdict(list)
+    dim_mins: dict[str, list[int]] = defaultdict(list)
     unacceptable: list[dict] = []
+    requirement_details: list[dict] = []
     entry_details: list[dict] = []
 
     for entry in entries:
         ws = compute_weighted_score(entry)
         weighted_scores.append(ws)
+        dim_scores["coverage_value"].append(entry.coverage_value)
+        dim_mins["coverage_value"].append(entry.coverage_value)
+        for dim in CASE_LEVEL_DIMS:
+            dim_scores[dim].append(_avg_case_dim(entry, dim))
+            dim_mins[dim].append(_min_case_dim(entry, dim))
 
-        for dim in ["executability", "observability", "coverage_value", "missing_information_detection"]:
-            dim_scores[dim].append(getattr(entry, dim))
-
-        case = case_lookup.get((entry.requirement_key, entry.case_index))
         expected = req_meta.get(entry.requirement_key)
-        gate = apply_hard_gates(entry, case, expected)
+        req_unacceptable = False
+        req_reasons: list[str] = []
+        req_warnings: list[str] = []
 
-        detail = {
+        for case_entry in entry.cases:
+            case = case_lookup.get((entry.requirement_key, case_entry.case_index))
+            gate = apply_hard_gates(case_entry, case, expected)
+            case_title = case.get("title", "")[:80] if case else "(not found)"
+
+            detail = {
+                "requirement_key": entry.requirement_key,
+                "case_index": case_entry.case_index,
+                "case_title": case_title,
+                "requirement_alignment": case_entry.requirement_alignment,
+                "executability": case_entry.executability,
+                "observability": case_entry.observability,
+                "pass_fail_clarity": case_entry.pass_fail_clarity,
+                "information_integrity": case_entry.information_integrity,
+                "state_and_environment_control": case_entry.state_and_environment_control,
+                "automation_readiness": case_entry.automation_readiness,
+                "coverage_value": entry.coverage_value,
+                "requirement_weighted_score": ws,
+                "unacceptable": gate.unacceptable,
+                "unacceptable_reasons": gate.reasons,
+                "warnings": gate.warnings,
+                "reviewer": case_entry.reviewer or entry.reviewer,
+                "notes": case_entry.notes,
+            }
+            if gate.unacceptable:
+                req_unacceptable = True
+                req_reasons.extend(gate.reasons)
+                unacceptable.append(detail)
+            req_warnings.extend(gate.warnings)
+            entry_details.append(detail)
+
+        requirement_details.append({
             "requirement_key": entry.requirement_key,
-            "case_index": entry.case_index,
-            "case_title": case.get("title", "")[:80] if case else "(not found)",
-            "executability": entry.executability,
-            "observability": entry.observability,
             "coverage_value": entry.coverage_value,
-            "missing_information_detection": entry.missing_information_detection,
+            "case_count": len(entry.cases),
             "weighted_score": ws,
-            "unacceptable": gate.unacceptable,
-            "unacceptable_reasons": gate.reasons,
-            "warnings": gate.warnings,
+            "case_dimension_averages": {
+                dim: round(_avg_case_dim(entry, dim), 1) for dim in CASE_LEVEL_DIMS
+            },
+            "case_dimension_mins": {
+                dim: _min_case_dim(entry, dim) for dim in CASE_LEVEL_DIMS
+            },
+            "unacceptable": req_unacceptable,
+            "unacceptable_reasons": sorted(set(req_reasons)),
+            "warnings": sorted(set(req_warnings)),
             "reviewer": entry.reviewer,
             "notes": entry.notes,
-        }
-        if gate.unacceptable:
-            unacceptable.append(detail)
-        entry_details.append(detail)
+        })
 
     avg_weighted = round(sum(weighted_scores) / len(weighted_scores), 1) if weighted_scores else 0
     dim_avg = {
         dim: round(sum(vals) / len(vals), 1) if vals else 0
         for dim, vals in dim_scores.items()
     }
+    dim_min = {
+        dim: min(vals) if vals else 0
+        for dim, vals in dim_mins.items()
+    }
 
-    # Score distribution buckets
     buckets = {"0-1": 0, "1-2": 0, "2-3": 0, "3-4": 0, "4-5": 0}
     for ws in weighted_scores:
         if ws < 1:
@@ -247,9 +361,14 @@ def get_review_summary(
     return {
         "average_weighted_score": avg_weighted,
         "dimension_averages": dim_avg,
+        "dimension_mins": dim_min,
         "unacceptable": unacceptable,
         "score_distribution": buckets,
+        "requirement_details": requirement_details,
         "entry_details": entry_details,
-        "total_entries": len(entries),
+        "total_requirements": len(entries),
+        "total_cases": sum(len(e.cases) for e in entries),
+        "total_entries": sum(len(e.cases) for e in entries),
         "total_unacceptable": len(unacceptable),
+        "weights": _WEIGHTS,
     }

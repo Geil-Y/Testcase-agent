@@ -1,8 +1,12 @@
-"""DeepSeek 4-dimension scorer for generated test cases.
+"""DeepSeek 8-dimension scorer for generated BMS HIL test cases.
 
-Calls DeepSeek API to score each case on executability, observability,
-coverage_value, and missing_information_detection (1-5 scale). Results are
-saved to deepseek_evaluation.json alongside hard-rule and human-review scores.
+The evaluator scores each requirement group, not isolated flattened cases:
+
+- coverage_value is scored once per requirement over the full case set.
+- the other seven dimensions are scored per generated case.
+
+Results are saved to deepseek_evaluation.json alongside hard-rule and manual
+review scores.
 """
 
 from __future__ import annotations
@@ -20,30 +24,61 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-flash[1m]")
-MAX_CASES_PER_CALL = 100
+MAX_REQUIREMENTS_PER_CALL = 20
 _RUBRICS_PATH = _PROJECT_ROOT / "optimization_runs" / "scoring_rubrics.md"
+
+CASE_LEVEL_DIMS = [
+    "requirement_alignment",
+    "executability",
+    "observability",
+    "pass_fail_clarity",
+    "information_integrity",
+    "state_and_environment_control",
+    "automation_readiness",
+]
+REQUIREMENT_LEVEL_DIMS = ["coverage_value"]
+ALL_DIMS = [
+    "requirement_alignment",
+    "coverage_value",
+    "executability",
+    "observability",
+    "pass_fail_clarity",
+    "information_integrity",
+    "state_and_environment_control",
+    "automation_readiness",
+]
+WEIGHTS = {
+    "requirement_alignment": 0.20,
+    "information_integrity": 0.20,
+    "executability": 0.15,
+    "observability": 0.15,
+    "pass_fail_clarity": 0.10,
+    "coverage_value": 0.10,
+    "state_and_environment_control": 0.05,
+    "automation_readiness": 0.05,
+}
 
 
 def _load_rubrics() -> str:
-    """Load 4-dimension scoring rubrics from markdown file."""
+    """Load 8-dimension scoring rubrics from markdown file."""
     if not _RUBRICS_PATH.exists():
         raise FileNotFoundError(f"Rubrics file not found: {_RUBRICS_PATH}")
     return _RUBRICS_PATH.read_text(encoding="utf-8")
 
 
-# ── Checklist reference (appendix) ──────────────────────────────────────
+# -- Checklist reference (appendix) --------------------------------------
 
 CHECKLIST_APPENDIX_HEADER = """
 ## Appendix — Checklist v2 Reference
 
-The checklist below provides domain-specific rules. Use it to inform your
-scoring judgments, NOT as a mechanical tick-list. A single checklist item
-may affect multiple dimensions.
+The checklist below provides domain-specific hard-rule guidance. Use it to
+inform your scoring judgments, NOT as a mechanical tick-list. Deterministic
+hard gates are owned by code, not by the LLM score output.
 
 """
 
 
-# ── Output schema ───────────────────────────────────────────────────────
+# -- Output schema --------------------------------------------------------
 
 OUTPUT_SCHEMA = """
 ## Output Format
@@ -52,42 +87,58 @@ Return ONLY a JSON object — no other text. The JSON must follow this structure
 
 ```json
 {
-  "cases": [
+  "requirements": [
     {
       "requirement_key": "REQ-BMS-OVP-002",
-      "case_index": 0,
-      "case_title": "Overvoltage detection at threshold → BMS_CellOV_Flag set",
-      "executability": 3,
-      "executability_note": "Step 1 'for a duration of' conflates action and timing",
-      "observability": 3,
-      "observability_note": "Expected uses '!= null' instead of concrete field comparison",
-      "coverage_value": 3,
-      "coverage_value_note": "Covers trigger path but no non-trigger counterpart case found in set",
-      "missing_information_detection": 4,
-      "missing_information_detection_note": "No semantic gaps missed; [NEEDS REVIEW] usage correct"
+      "coverage_value": 4,
+      "coverage_value_note": "The case set covers trigger and no-trigger paths, but boundary timing is not split.",
+      "cases": [
+        {
+          "case_index": 0,
+          "case_title": "Overvoltage detection at threshold",
+          "requirement_alignment": 5,
+          "requirement_alignment_note": "The case is aligned with the overvoltage requirement.",
+          "executability": 4,
+          "executability_note": "The set-wait-check flow is executable.",
+          "observability": 3,
+          "observability_note": "The expected result lacks a concrete observable signal.",
+          "pass_fail_clarity": 3,
+          "pass_fail_clarity_note": "Activation is clear, but timing remains unspecified.",
+          "information_integrity": 5,
+          "information_integrity_note": "Missing signal and timing are marked, not invented.",
+          "state_and_environment_control": 4,
+          "state_and_environment_control_note": "Initial state is clear; reset could be stronger.",
+          "automation_readiness": 4,
+          "automation_readiness_note": "Steps are mostly atomic and structured."
+        }
+      ]
     }
   ]
 }
 ```
 
 Rules:
-- Output every case from the input. Do not skip any.
+- Output every requirement from the input. Do not skip any.
+- Output every case under its requirement. Do not skip any case.
 - `case_index` is the 0-based index of the case within its requirement's case list.
-- Every dimension must have a score (integer 1–5).
-- Every dimension must have a `_note` field explaining the score. Keep notes under 100 characters. Write in English.
-- If a dimension scores 5, the note can be brief ("All steps directly executable, no issues").
+- Every score must be an integer 1-5.
+- Every score must have a matching `_note` field explaining the score.
+- Keep notes concise and write in English.
 - If a dimension scores below 3, the note MUST clearly state the main flaw.
+- Do not output `overall_score`, `overall_weighted`, or `decision`.
 """
 
 
-# ── Prompt builders ─────────────────────────────────────────────────────
+# -- Prompt builders ------------------------------------------------------
 
 def _build_system_prompt(checklist: str) -> str:
     rubrics = _load_rubrics()
     return (
-        "You are a BMS HIL test case quality reviewer. Evaluate each test case "
-        "on four dimensions using the 1–5 rubrics below. Judge holistically — "
-        "do NOT do mechanical string matching or item counting.\n\n"
+        "You are a BMS HIL test case quality reviewer. Evaluate each "
+        "requirement group using the 8-dimension 1-5 rubric below. "
+        "coverage_value is scored once per requirement case set; the other "
+        "seven dimensions are scored per case. Judge holistically and do NOT "
+        "do mechanical string matching or item counting.\n\n"
         + rubrics
         + "\n\n---\n\n"
         + CHECKLIST_APPENDIX_HEADER
@@ -97,50 +148,79 @@ def _build_system_prompt(checklist: str) -> str:
     )
 
 
-def _build_user_prompt(cases: list[dict], start_idx: int, total: int) -> str:
-    """Build user prompt for a batch of cases (up to MAX_CASES_PER_CALL)."""
+def _fmt_list(values: list[Any]) -> str:
+    clean = [str(v).strip() for v in values if str(v).strip()]
+    return ", ".join(clean) if clean else "none"
+
+
+def _fmt_missing_items(items: list[dict[str, Any]]) -> str:
+    if not items:
+        return "none"
+    lines: list[str] = []
+    for item in items:
+        cat = str(item.get("category", "")).strip()
+        desc = str(item.get("description", "")).strip()
+        if cat:
+            lines.append(f"- [{cat}] {desc}")
+        elif desc:
+            lines.append(f"- {desc}")
+    return "\n".join(lines) if lines else "none"
+
+
+def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> str:
+    """Build user prompt for a batch of requirement groups."""
     parts = [
-        f"Evaluate the following {len(cases)} test case(s) "
-        f"(batch {start_idx + 1}–{start_idx + len(cases)} of {total} total).\n",
+        f"Evaluate the following {len(requirements)} requirement group(s) "
+        f"(batch {start_idx + 1}-{start_idx + len(requirements)} of {total} total).\n",
     ]
 
-    for i, case in enumerate(cases):
-        steps_text = "\n".join(
-            f"  {s.get('order', j + 1)}. Action: {s.get('action', '')} | "
-            f"Expected: {s.get('expected', 'none')}"
-            for j, s in enumerate(case.get("steps", []))
-        )
+    for offset, req in enumerate(requirements):
+        analysis = req.get("analysis", {})
+        intents = analysis.get("case_intents", [])
+        intent_lines = []
+        for i, intent in enumerate(intents):
+            intent_lines.append(
+                f"  {i}. coverage={intent.get('coverage', '')}; "
+                f"intent={intent.get('description', '')}"
+            )
+
         parts.append(
-            f"### Case {start_idx + i} — {case['title']}\n"
-            f"Requirement: {case['requirement_key']}\n"
-            f"Objective: {case['objective']}\n"
-            f"Precondition: {case['precondition']}\n"
-            f"Postcondition: {case['postcondition']}\n"
-            f"Steps:\n{steps_text}\n"
+            f"## Requirement Group {start_idx + offset}: {req.get('requirement_key', '')}\n"
+            f"Function: {req.get('function_name', '')}\n"
+            f"Description: {req.get('description', '')}\n"
+            f"Supplementary info: {req.get('supplementary_info', '')}\n"
+            f"Evaluation bucket: {req.get('evaluation_bucket', '')}\n"
+            f"Expected missing categories: {_fmt_list(req.get('expected_missing_categories', []))}\n"
+            f"Known signals: {_fmt_list(analysis.get('signals', []))}\n"
+            f"Known thresholds: {_fmt_list(analysis.get('thresholds', []))}\n"
+            f"Known timing: {_fmt_list(analysis.get('timing', []))}\n"
+            f"Known states: {_fmt_list(analysis.get('states', []))}\n"
+            f"Known observations: {_fmt_list(analysis.get('observations', []))}\n"
+            f"Missing information items:\n{_fmt_missing_items(analysis.get('missing_info_items', []))}\n"
+            f"Coverage plan:\n{chr(10).join(intent_lines) if intent_lines else '  none'}\n"
         )
+
+        for ci, case in enumerate(req.get("cases", [])):
+            intent = intents[ci] if ci < len(intents) else {}
+            steps_text = "\n".join(
+                f"    {s.get('order', j + 1)}. Action: {s.get('action', '')} | "
+                f"Expected: {s.get('expected', 'none')}"
+                for j, s in enumerate(case.get("steps", []))
+            )
+            parts.append(
+                f"### Case {ci} — {case.get('title', '')}\n"
+                f"Case coverage: {intent.get('coverage', '')}\n"
+                f"Case intent: {intent.get('description', '')}\n"
+                f"Objective: {case.get('objective', '')}\n"
+                f"Precondition: {case.get('precondition', '')}\n"
+                f"Postcondition: {case.get('postcondition', '')}\n"
+                f"Steps:\n{steps_text}\n"
+            )
 
     return "\n".join(parts)
 
 
-def _flatten_cases(data: list[dict]) -> list[dict]:
-    """Flatten generated_cases.json into a single list of per-case dicts."""
-    flat: list[dict] = []
-    for req in data:
-        req_key = req["requirement_key"]
-        for ci, case in enumerate(req.get("cases", [])):
-            flat.append({
-                "requirement_key": req_key,
-                "case_index": ci,
-                "title": case.get("title", ""),
-                "objective": case.get("objective", ""),
-                "precondition": case.get("precondition", ""),
-                "postcondition": case.get("postcondition", ""),
-                "steps": case.get("steps", []),
-            })
-    return flat
-
-
-# ── API client ──────────────────────────────────────────────────────────
+# -- API client -----------------------------------------------------------
 
 def _get_client():
     """Create Anthropic client for DeepSeek endpoint."""
@@ -150,6 +230,7 @@ def _get_client():
     if not api_key:
         try:
             from testcase_agent.config import get_settings
+
             settings = get_settings()
             api_key = settings.llm.api_key
         except Exception:
@@ -161,6 +242,7 @@ def _get_client():
         )
 
     from anthropic import Anthropic
+
     return Anthropic(api_key=api_key, base_url=base_url)
 
 
@@ -197,89 +279,167 @@ def _call_llm(system_prompt: str, user_prompt: str, model: str) -> str:
     return ""
 
 
-# ── Result types ────────────────────────────────────────────────────────
+# -- Result types ---------------------------------------------------------
+
+def _valid_score(value: Any) -> int:
+    try:
+        score = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return score if 1 <= score <= 5 else 0
+
 
 @dataclass
 class CaseScore:
     requirement_key: str
     case_index: int
     case_title: str
+    requirement_alignment: int = 0
+    requirement_alignment_note: str = ""
     executability: int = 0
     executability_note: str = ""
     observability: int = 0
     observability_note: str = ""
+    pass_fail_clarity: int = 0
+    pass_fail_clarity_note: str = ""
+    information_integrity: int = 0
+    information_integrity_note: str = ""
+    state_and_environment_control: int = 0
+    state_and_environment_control_note: str = ""
+    automation_readiness: int = 0
+    automation_readiness_note: str = ""
+
+    def to_dict(self, *, coverage_value: int | None = None, coverage_value_note: str = "") -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "requirement_key": self.requirement_key,
+            "case_index": self.case_index,
+            "case_title": self.case_title,
+        }
+        if coverage_value is not None:
+            data["coverage_value"] = coverage_value
+            data["coverage_value_note"] = coverage_value_note
+        for dim in CASE_LEVEL_DIMS:
+            data[dim] = getattr(self, dim)
+            data[f"{dim}_note"] = getattr(self, f"{dim}_note")
+        return data
+
+
+@dataclass
+class RequirementScore:
+    requirement_key: str
     coverage_value: int = 0
     coverage_value_note: str = ""
-    missing_information_detection: int = 0
-    missing_information_detection_note: str = ""
+    cases: list[CaseScore] = field(default_factory=list)
+
+    def avg_case_dim(self, dim: str) -> float:
+        scores = [getattr(c, dim) for c in self.cases if getattr(c, dim) > 0]
+        return round(sum(scores) / len(scores), 2) if scores else 0.0
+
+    def min_case_dim(self, dim: str) -> int:
+        scores = [getattr(c, dim) for c in self.cases if getattr(c, dim) > 0]
+        return min(scores) if scores else 0
+
+    @property
+    def weighted_score(self) -> float:
+        total = self.coverage_value * WEIGHTS["coverage_value"]
+        for dim in CASE_LEVEL_DIMS:
+            total += self.avg_case_dim(dim) * WEIGHTS[dim]
+        return round(total, 2)
+
+    @property
+    def case_dimension_averages(self) -> dict[str, float]:
+        return {dim: self.avg_case_dim(dim) for dim in CASE_LEVEL_DIMS}
+
+    @property
+    def case_dimension_mins(self) -> dict[str, int]:
+        return {dim: self.min_case_dim(dim) for dim in CASE_LEVEL_DIMS}
 
 
 @dataclass
 class EvalResult:
-    cases: list[CaseScore] = field(default_factory=list)
+    requirements: list[RequirementScore] = field(default_factory=list)
     errors: int = 0
     model_used: str = ""
 
     @property
+    def total_requirements(self) -> int:
+        return len(self.requirements)
+
+    @property
     def total_cases(self) -> int:
-        return len(self.cases)
+        return sum(len(r.cases) for r in self.requirements)
 
     @property
-    def avg_executability(self) -> float:
-        scores = [c.executability for c in self.cases if c.executability > 0]
-        return round(sum(scores) / len(scores), 1) if scores else 0.0
+    def dimension_averages(self) -> dict[str, float]:
+        values: dict[str, list[float]] = {dim: [] for dim in ALL_DIMS}
+        for req in self.requirements:
+            if req.coverage_value > 0:
+                values["coverage_value"].append(float(req.coverage_value))
+            for dim in CASE_LEVEL_DIMS:
+                avg = req.avg_case_dim(dim)
+                if avg > 0:
+                    values[dim].append(avg)
+        return {
+            dim: round(sum(scores) / len(scores), 1) if scores else 0.0
+            for dim, scores in values.items()
+        }
 
     @property
-    def avg_observability(self) -> float:
-        scores = [c.observability for c in self.cases if c.observability > 0]
-        return round(sum(scores) / len(scores), 1) if scores else 0.0
-
-    @property
-    def avg_coverage_value(self) -> float:
-        scores = [c.coverage_value for c in self.cases if c.coverage_value > 0]
-        return round(sum(scores) / len(scores), 1) if scores else 0.0
-
-    @property
-    def avg_missing_information_detection(self) -> float:
-        scores = [c.missing_information_detection for c in self.cases if c.missing_information_detection > 0]
-        return round(sum(scores) / len(scores), 1) if scores else 0.0
+    def dimension_mins(self) -> dict[str, int]:
+        mins: dict[str, int] = {}
+        for dim in ALL_DIMS:
+            scores: list[int] = []
+            for req in self.requirements:
+                if dim == "coverage_value":
+                    if req.coverage_value > 0:
+                        scores.append(req.coverage_value)
+                else:
+                    val = req.min_case_dim(dim)
+                    if val > 0:
+                        scores.append(val)
+            mins[dim] = min(scores) if scores else 0
+        return mins
 
     @property
     def overall_weighted(self) -> float:
-        return round(
-            0.20 * self.avg_executability
-            + 0.20 * self.avg_observability
-            + 0.20 * self.avg_coverage_value
-            + 0.40 * self.avg_missing_information_detection,
-            1,
+        scores = [r.weighted_score for r in self.requirements if r.weighted_score > 0]
+        return round(sum(scores) / len(scores), 1) if scores else 0.0
+
+
+# -- Core evaluation ------------------------------------------------------
+
+def _parse_requirement_scores(parsed: dict) -> list[RequirementScore]:
+    """Extract validated RequirementScore list from parsed LLM JSON."""
+    scores: list[RequirementScore] = []
+    for r in parsed.get("requirements", []):
+        req_key = str(r.get("requirement_key", ""))
+        req_score = RequirementScore(
+            requirement_key=req_key,
+            coverage_value=_valid_score(r.get("coverage_value", 0)),
+            coverage_value_note=str(r.get("coverage_value_note", "")),
         )
-
-
-# ── Core evaluation ─────────────────────────────────────────────────────
-
-def _parse_case_scores(parsed: dict) -> list[CaseScore]:
-    """Extract validated CaseScore list from parsed LLM JSON."""
-    scores: list[CaseScore] = []
-    for c in parsed.get("cases", []):
-        cs = CaseScore(
-            requirement_key=str(c.get("requirement_key", "")),
-            case_index=int(c.get("case_index", -1)),
-            case_title=str(c.get("case_title", "")),
-            executability=int(c.get("executability", 0)),
-            executability_note=str(c.get("executability_note", "")),
-            observability=int(c.get("observability", 0)),
-            observability_note=str(c.get("observability_note", "")),
-            coverage_value=int(c.get("coverage_value", 0)),
-            coverage_value_note=str(c.get("coverage_value_note", "")),
-            missing_information_detection=int(c.get("missing_information_detection", 0)),
-            missing_information_detection_note=str(c.get("missing_information_detection_note", "")),
-        )
-        # Validate score ranges
-        for dim in ["executability", "observability", "coverage_value", "missing_information_detection"]:
-            val = getattr(cs, dim)
-            if not (1 <= val <= 5):
-                setattr(cs, dim, 0)
-        scores.append(cs)
+        for c in r.get("cases", []):
+            case_score = CaseScore(
+                requirement_key=req_key,
+                case_index=int(c.get("case_index", -1)),
+                case_title=str(c.get("case_title", "")),
+                requirement_alignment=_valid_score(c.get("requirement_alignment", 0)),
+                requirement_alignment_note=str(c.get("requirement_alignment_note", "")),
+                executability=_valid_score(c.get("executability", 0)),
+                executability_note=str(c.get("executability_note", "")),
+                observability=_valid_score(c.get("observability", 0)),
+                observability_note=str(c.get("observability_note", "")),
+                pass_fail_clarity=_valid_score(c.get("pass_fail_clarity", 0)),
+                pass_fail_clarity_note=str(c.get("pass_fail_clarity_note", "")),
+                information_integrity=_valid_score(c.get("information_integrity", 0)),
+                information_integrity_note=str(c.get("information_integrity_note", "")),
+                state_and_environment_control=_valid_score(c.get("state_and_environment_control", 0)),
+                state_and_environment_control_note=str(c.get("state_and_environment_control_note", "")),
+                automation_readiness=_valid_score(c.get("automation_readiness", 0)),
+                automation_readiness_note=str(c.get("automation_readiness_note", "")),
+            )
+            req_score.cases.append(case_score)
+        scores.append(req_score)
     return scores
 
 
@@ -288,10 +448,7 @@ def evaluate_round(
     model: str = DEFAULT_MODEL,
     delay: float = 0.5,
 ) -> EvalResult:
-    """Score all cases in a round using DeepSeek API.
-
-    Processes the entire generated_cases.json in batches of up to 100 cases.
-    """
+    """Score all requirement groups in a round using DeepSeek API."""
     cases_path = round_dir / "generated_cases.json"
     if not cases_path.exists():
         raise FileNotFoundError(f"generated_cases.json not found in {round_dir}")
@@ -304,19 +461,19 @@ def evaluate_round(
         data = json.load(f)
     checklist = checklist_path.read_text(encoding="utf-8")
 
-    all_cases = _flatten_cases(data)
-    total = len(all_cases)
+    total = len(data)
     system_prompt = _build_system_prompt(checklist)
-
     result = EvalResult(model_used=model)
 
-    for batch_start in range(0, total, MAX_CASES_PER_CALL):
-        batch = all_cases[batch_start:batch_start + MAX_CASES_PER_CALL]
-        batch_num = batch_start // MAX_CASES_PER_CALL + 1
-        total_batches = (total + MAX_CASES_PER_CALL - 1) // MAX_CASES_PER_CALL
+    for batch_start in range(0, total, MAX_REQUIREMENTS_PER_CALL):
+        batch = data[batch_start:batch_start + MAX_REQUIREMENTS_PER_CALL]
+        batch_num = batch_start // MAX_REQUIREMENTS_PER_CALL + 1
+        total_batches = (total + MAX_REQUIREMENTS_PER_CALL - 1) // MAX_REQUIREMENTS_PER_CALL
 
-        print(f"[Batch {batch_num}/{total_batches}] Evaluating {len(batch)} case(s) "
-              f"({batch_start + 1}–{batch_start + len(batch)} of {total}) ...")
+        print(
+            f"[Batch {batch_num}/{total_batches}] Evaluating {len(batch)} requirement group(s) "
+            f"({batch_start + 1}-{batch_start + len(batch)} of {total}) ..."
+        )
 
         user_prompt = _build_user_prompt(batch, batch_start, total)
 
@@ -325,88 +482,100 @@ def evaluate_round(
             parsed = _extract_json(raw)
 
             if parsed is None:
-                print(f"  ERROR: Failed to parse JSON from response")
+                print("  ERROR: Failed to parse JSON from response")
                 print(f"  Raw (first 500 chars): {raw[:500]}")
                 result.errors += 1
                 continue
 
-            batch_scores = _parse_case_scores(parsed)
+            batch_scores = _parse_requirement_scores(parsed)
+            missing_scores = [
+                rs for rs in batch_scores
+                if rs.coverage_value == 0 or any(
+                    getattr(cs, dim) == 0 for cs in rs.cases for dim in CASE_LEVEL_DIMS
+                )
+            ]
+            if missing_scores:
+                print(f"  WARNING: {len(missing_scores)} requirement group(s) have missing/invalid scores")
 
-            # Fill in requirement_key and case_index from input if LLM omitted them
-            for i, cs in enumerate(batch_scores):
-                if not cs.requirement_key and i < len(batch):
-                    cs.requirement_key = batch[i]["requirement_key"]
-                if cs.case_index < 0 and i < len(batch):
-                    cs.case_index = batch[i]["case_index"]
-
-            missing = [cs for cs in batch_scores if cs.executability == 0]
-            if missing:
-                print(f"  WARNING: {len(missing)} case(s) have missing/invalid scores")
-
-            result.cases.extend(batch_scores)
-            print(f"  Got {len(batch_scores)} case score(s)")
+            result.requirements.extend(batch_scores)
+            print(f"  Got {len(batch_scores)} requirement score(s)")
             sys.stdout.flush()
 
         except Exception as exc:
             print(f"  ERROR: {exc}")
             result.errors += 1
 
-        # Delay between batches
-        if batch_start + MAX_CASES_PER_CALL < total:
+        if batch_start + MAX_REQUIREMENTS_PER_CALL < total:
             time.sleep(delay)
 
     return result
 
 
-# ── Persistence ─────────────────────────────────────────────────────────
+# -- Persistence ----------------------------------------------------------
 
 def _validate_scores(result: EvalResult) -> None:
-    """Raise ValueError if any case has invalid scores."""
-    for cs in result.cases:
-        if cs.requirement_key == "":
-            raise ValueError(f"Case index {cs.case_index}: missing requirement_key")
-        for dim in ["executability", "observability", "coverage_value", "missing_information_detection"]:
-            val = getattr(cs, dim)
-            if not (1 <= val <= 5):
-                raise ValueError(
-                    f"Case '{cs.requirement_key}'[{cs.case_index}]: "
-                    f"{dim}={val} (must be 1–5)"
-                )
+    """Raise ValueError if any requirement or case has invalid scores."""
+    for req in result.requirements:
+        if req.requirement_key == "":
+            raise ValueError("Requirement score missing requirement_key")
+        if not (1 <= req.coverage_value <= 5):
+            raise ValueError(
+                f"Requirement '{req.requirement_key}': coverage_value={req.coverage_value} (must be 1-5)"
+            )
+        for cs in req.cases:
+            if cs.case_index < 0:
+                raise ValueError(f"Requirement '{req.requirement_key}': case missing case_index")
+            for dim in CASE_LEVEL_DIMS:
+                val = getattr(cs, dim)
+                if not (1 <= val <= 5):
+                    raise ValueError(
+                        f"Case '{req.requirement_key}'[{cs.case_index}]: "
+                        f"{dim}={val} (must be 1-5)"
+                    )
 
 
 def save_evaluation(result: EvalResult, round_dir: Path, evaluator_name: str = "deepseek") -> Path:
-    """Save 4-dimension scores to {evaluator_name}_evaluation.json."""
+    """Save 8-dimension scores to {evaluator_name}_evaluation.json."""
     _validate_scores(result)
 
+    requirements_payload = []
+    flat_cases = []
+    for req in result.requirements:
+        case_payload = [
+            cs.to_dict()
+            for cs in req.cases
+        ]
+        requirements_payload.append({
+            "requirement_key": req.requirement_key,
+            "coverage_value": req.coverage_value,
+            "coverage_value_note": req.coverage_value_note,
+            "case_dimension_averages": req.case_dimension_averages,
+            "case_dimension_mins": req.case_dimension_mins,
+            "weighted_score": req.weighted_score,
+            "cases": case_payload,
+        })
+        flat_cases.extend(
+            cs.to_dict(
+                coverage_value=req.coverage_value,
+                coverage_value_note=req.coverage_value_note,
+            )
+            for cs in req.cases
+        )
+
     output = {
+        "schema_version": "score-v2-8d",
         "checklist_version": "checklist_v2.md",
         "evaluated_by": evaluator_name,
         "model": result.model_used,
+        "weights": WEIGHTS,
+        "total_requirements": result.total_requirements,
         "total_cases": result.total_cases,
         "errors": result.errors,
-        "dimension_averages": {
-            "executability": result.avg_executability,
-            "observability": result.avg_observability,
-            "coverage_value": result.avg_coverage_value,
-            "missing_information_detection": result.avg_missing_information_detection,
-        },
+        "dimension_averages": result.dimension_averages,
+        "dimension_mins": result.dimension_mins,
         "overall_weighted": result.overall_weighted,
-        "cases": [
-            {
-                "requirement_key": cs.requirement_key,
-                "case_index": cs.case_index,
-                "case_title": cs.case_title,
-                "executability": cs.executability,
-                "executability_note": cs.executability_note,
-                "observability": cs.observability,
-                "observability_note": cs.observability_note,
-                "coverage_value": cs.coverage_value,
-                "coverage_value_note": cs.coverage_value_note,
-                "missing_information_detection": cs.missing_information_detection,
-                "missing_information_detection_note": cs.missing_information_detection_note,
-            }
-            for cs in result.cases
-        ],
+        "requirements": requirements_payload,
+        "cases": flat_cases,
     }
 
     out_path = round_dir / f"{evaluator_name}_evaluation.json"
@@ -420,16 +589,19 @@ def run_full_evaluation(
     model: str = DEFAULT_MODEL,
     delay: float = 0.5,
 ) -> float:
-    """Run DeepSeek 4-dimension scoring and save to deepseek_evaluation.json.
+    """Run DeepSeek 8-dimension scoring and save to deepseek_evaluation.json.
 
-    Returns the overall weighted score (0.0–5.0).
+    Returns the overall weighted score (0.0-5.0).
     """
     result = evaluate_round(round_dir, model=model, delay=delay)
     save_evaluation(result, round_dir, evaluator_name="deepseek")
 
+    avgs = result.dimension_averages
     print(
         f"\nDone. DeepSeek weighted={result.overall_weighted} "
-        f"(exec={result.avg_executability}, obs={result.avg_observability}, "
-        f"cov={result.avg_coverage_value}, missing_info={result.avg_missing_information_detection})"
+        f"(align={avgs.get('requirement_alignment', 0)}, "
+        f"info={avgs.get('information_integrity', 0)}, "
+        f"exec={avgs.get('executability', 0)}, obs={avgs.get('observability', 0)}, "
+        f"cov={avgs.get('coverage_value', 0)})"
     )
     return result.overall_weighted

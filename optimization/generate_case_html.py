@@ -28,17 +28,30 @@ EVAL_COLORS = {
 
 
 DIM_LABELS = {
+    "requirement_alignment": "Requirement Alignment",
+    "information_integrity": "Information Integrity",
     "executability": "Executability",
     "observability": "Observability",
+    "pass_fail_clarity": "Pass/Fail Clarity",
     "coverage_value": "Coverage Value",
-    "missing_information_detection": "Missing Info Detection",
+    "state_and_environment_control": "State & Environment",
+    "automation_readiness": "Automation Readiness",
 }
 
-DIM_ORDER = ["executability", "observability", "coverage_value", "missing_information_detection"]
+DIM_ORDER = [
+    "requirement_alignment",
+    "information_integrity",
+    "executability",
+    "observability",
+    "pass_fail_clarity",
+    "coverage_value",
+    "state_and_environment_control",
+    "automation_readiness",
+]
 
 
 def _is_new_format(ev: dict | None) -> bool:
-    """Detect 4-dimension scoring format (has dimension_averages, no case_pass_rate)."""
+    """Detect dimension scoring format (has dimension_averages, no case_pass_rate)."""
     if ev is None:
         return False
     return "dimension_averages" in ev and "case_pass_rate" not in ev
@@ -65,6 +78,16 @@ def _get_case_result(eval_data: dict | None, req_key: str, case_idx: int) -> dic
     for c in eval_data.get("cases", []):
         if c.get("requirement_key") == req_key and c.get("case_index") == case_idx:
             return c
+    for req in eval_data.get("requirements", []):
+        if req.get("requirement_key") != req_key:
+            continue
+        for c in req.get("cases", []):
+            if c.get("case_index") == case_idx:
+                merged = dict(c)
+                merged["requirement_key"] = req_key
+                merged["coverage_value"] = req.get("coverage_value")
+                merged["coverage_value_note"] = req.get("coverage_value_note", "")
+                return merged
     return None
 
 
@@ -133,7 +156,7 @@ def _build_eval_panel(evaluation, ext_evals: dict, req_key: str, ci_idx: int) ->
 
 
 def _render_dimension_scores(name: str, label: str, cr: dict | None) -> str:
-    """Render 4-dimension score panel (new format)."""
+    """Render dimension score panel."""
     parts: list[str] = []
     parts.append(f"""
       <div class="eval-section">
@@ -250,12 +273,12 @@ def generate_round_html(round_dir: Path, round_num: int) -> float | None:
         ev = ext_evals.get(name)
         if ev and _is_new_format(ev):
             score = ev.get("overall_weighted", 0)
-            total = ev.get("total_cases", 0)
+            total = ev.get("total_requirements", ev.get("total_cases", 0))
             color = EVAL_COLORS[name]
             cards += (
                 f'<div class="summary-card">'
                 f'<div class="value" style="color:{color}">{score}</div>'
-                f'<div class="label">{label} weighted / 5 ({total} cases)</div>'
+                f'<div class="label">{label} weighted / 5 ({total} requirements)</div>'
                 f'</div>'
             )
         elif ev:

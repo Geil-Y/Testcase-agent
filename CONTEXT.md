@@ -38,6 +38,11 @@ from structured requirements.
   semantic gaps that would otherwise force the model to invent test values or
   behavior.
 
+- **Information Integrity** — the broader review dimension that checks whether
+  concrete values, signals, timings, states, observations, diagnostics, bus
+  messages, HIL channels, and tool commands are supported by the requirement or
+  test basis, or honestly marked as `[NEEDS REVIEW]` when missing.
+
 - **Missing Information Category** — one of the canonical semantic gap types:
   signal, threshold, timing, state, or observation.
 
@@ -79,9 +84,11 @@ from structured requirements.
   timing boundary, missing-information trap, multi-branch behavior, or
   state/observation/diagnostic behavior.
 
-- **Manual Review Score** — a human-assigned score for a generated test case's
-  executability, observability, coverage value, and missing information
-  detection.
+- **Manual Review Score** — a human-assigned 8-dimension quality score for
+  generated test cases. Coverage value is assigned at the requirement case-set
+  level; requirement alignment, executability, observability, pass/fail
+  clarity, information integrity, state/environment control, and automation
+  readiness are assigned at the case level.
 
 - **Hard Gate** — a quality rule that makes a generated test case unacceptable
   regardless of its other scores.
@@ -106,7 +113,7 @@ from structured requirements.
 - A **Requirement** can produce multiple **Test Cases** through the generation
   pipeline.
 - A **Test Case** is evaluated by the **Quality Checklist** and may also receive
-  a **Manual Review Score**.
+  the case-level dimensions of a **Manual Review Score**.
 - A **Hard Gate** can make a **Test Case** unacceptable even when other review
   scores are high.
 
