@@ -77,6 +77,28 @@ semantics.
 - Keep each round focused; do not change more than a few prompt concerns in one
   round.
 
+### Git Workflow
+
+- When optimization mode starts, immediately create a branch named
+  `optimize/<goal-name>` from the current branch.
+- After each round, commit prompt file changes with a message that includes:
+  - Round number and goal name
+  - Case pass rate (from hard-rule checklist)
+  - Overall average score across all 8 dimensions (from AI or Manual Review)
+  - The single dimension with the lowest average score (from
+    `optimization_runs/scoring_rubrics.md` 8-dimension model)
+
+  Example commit message:
+  ```
+  optimize(round-2): improve observability and pass/fail clarity
+
+  Pass rate: 82% | Avg score: 3.4 | Lowest dim: observability (2.6)
+
+  Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+  ```
+- Do NOT commit generated reports, evaluation JSON files, or round directories.
+  Only commit prompt file changes.
+
 ## Prompt Modification Rules
 
 Use `REFERENCE.md` for prompt-editing constraints and evaluation guidance.
