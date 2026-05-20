@@ -1,8 +1,8 @@
 # Reference: Checklist Optimization
 
-For workflow facts, read `docs/optimization-workflow.md`. This file contains
-only prompt-editing and review guidance that should not depend on current set
-size or CLI selection behavior.
+For workflow facts, read `skill.md`. This file contains only prompt-editing
+and review guidance that should not depend on current set size or CLI selection
+behavior.
 
 ## Prompt Modification Rules
 
@@ -20,8 +20,7 @@ When modifying prompts to address checklist failures:
 
 ## Evaluation Guidance
 
-The current evaluator and workflow are documented in
-`docs/optimization-workflow.md`.
+The current evaluator and workflow are documented in `skill.md`.
 
 When reading a report, separate:
 
@@ -87,7 +86,7 @@ For each round:
 
 When workflow behavior changes:
 
-1. Update `docs/optimization-workflow.md`.
+1. Update `skill.md`.
 2. Update this reference only if prompt-editing or scoring guidance changes.
 3. Avoid restating current set size, checklist version, or CLI selection
    semantics here.

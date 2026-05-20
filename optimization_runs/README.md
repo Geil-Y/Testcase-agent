@@ -3,10 +3,10 @@
 This directory stores prompt optimization artifacts: checklists, executable
 requirement sets, and generated run outputs.
 
-The source of truth for workflow facts is
-[`docs/optimization-workflow.md`](../docs/optimization-workflow.md). Use that
-document for the current checklist version, Prompt Evaluation Set size, CLI
-selection semantics, sanitization behavior, and evaluator ownership.
+The source of truth for workflow facts is the skill file at
+[`.claude/skills/optimize-prompt-by-checklist/skill.md`](../.claude/skills/optimize-prompt-by-checklist/skill.md).
+Use that document for the current checklist version, Prompt Evaluation Set size,
+CLI selection semantics, sanitization behavior, and evaluator ownership.
 
 ## Directory Layout
 
@@ -52,4 +52,4 @@ Each round directory may contain:
 ## Notes
 
 - Generated run logs under `optimization_runs/log/` are git-ignored.
-- Update `docs/optimization-workflow.md` first when workflow behavior changes.
+- Update the skill file first when workflow behavior changes.

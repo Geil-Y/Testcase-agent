@@ -3,7 +3,7 @@
 **Status:** draft
 **Date:** 2026-05-19
 
-Workflow source of truth: `docs/optimization-workflow.md`. This document owns
+Workflow source of truth: `.claude/skills/optimize-prompt-by-checklist/skill.md`. This document owns
 the quality strategy, rubric, and Prompt Evaluation Set rationale. Use the
 workflow document for current commands, CLI selection semantics, checklist
 version, evaluator ownership, and run procedure.
@@ -32,7 +32,7 @@ The Prompt Evaluation Set is not a set of reference test cases. It is a fixed
 set of source requirements used to generate and compare test cases across
 prompt versions.
 
-Current workflow details are documented in `docs/optimization-workflow.md`.
+Current workflow details are documented in `.claude/skills/optimize-prompt-by-checklist/skill.md`.
 
 ## Manual Review Rubric
 
@@ -97,7 +97,7 @@ The machine-readable source of truth is
 below are human-readable documentation and should stay in sync with the JSON.
 
 Run commands and CLI selection semantics are documented in
-`docs/optimization-workflow.md`.
+`.claude/skills/optimize-prompt-by-checklist/skill.md`.
 
 ### Complete Information Baseline
 
@@ -280,7 +280,7 @@ Completed work:
   `expected_missing_categories`, and `requirement_set_note`.
 - Preserve random exploration as a separate CLI mode.
 - Current CLI selection semantics are documented in
-  `docs/optimization-workflow.md`.
+  `.claude/skills/optimize-prompt-by-checklist/skill.md`.
 
 ### Phase 3: Hard-Gate Evaluation ✅
 
