@@ -6,6 +6,7 @@ renderers should consume its output rather than re-implementing rule logic.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -442,3 +443,90 @@ def evaluate_missing_info_hard_gates(data: list[dict]) -> list[dict]:
             "item_ids": item_ids,
         })
     return records
+
+
+# ── Shared evaluation persistence ──────────────────────────────────────
+
+
+def save_evaluation_result(
+    result: EvaluationResult,
+    evaluator_name: str,
+    round_dir: "Path",
+) -> "Path":
+    """Save an EvaluationResult to {evaluator_name}_evaluation.json.
+
+    Args:
+        result: Aggregated EvaluationResult from evaluate_generated_cases().
+        evaluator_name: e.g. 'hardrule', 'deepseek'.
+        round_dir: Round directory to save into.
+    """
+    from pathlib import Path as _Path  # noqa: F811
+
+    # Build per-case items from result.case_results
+    cases: list[dict[str, object]] = []
+    for (req_key, ci), ce in result.case_results.items():
+        items: list[dict[str, str]] = []
+        for item_id in ce.failed_items:
+            items.append({"item_id": item_id, "result": "fail", "note": ""})
+        for item_id in ce.warning_items:
+            items.append({"item_id": item_id, "result": "warning", "note": ""})
+        # Mark passed items: all CHECKLIST items not in failed or warning
+        passed_ids = [
+            iid for iid in CHECKLIST
+            if iid not in ce.failed_items and iid not in ce.warning_items
+        ]
+        for item_id in passed_ids:
+            items.append({"item_id": item_id, "result": "pass", "note": ""})
+
+        cases.append({
+            "requirement_key": req_key,
+            "case_index": ci,
+            "case_title": ce.case_title,
+            "items": items,
+        })
+
+    output: dict[str, object] = {
+        "checklist_version": "checklist_v2.md",
+        "evaluated_by": evaluator_name,
+        "total_cases": result.total_cases,
+        "total_passed": result.total_passed,
+        "case_pass_rate": result.case_pass_rate,
+        "errors": 0,
+        "item_pass_counts": {
+            iid: result.total_cases - result.item_fail_counts.get(iid, 0)
+            - result.item_warning_counts.get(iid, 0)
+            for iid in CHECKLIST
+        },
+        "item_fail_counts": dict(result.item_fail_counts),
+        "item_warning_counts": dict(result.item_warning_counts),
+        "item_skip_counts": {},
+        "cases": cases,
+        "cross_case": [],
+    }
+
+    save_path = _Path(round_dir) / f"{evaluator_name}_evaluation.json"
+    save_path.write_text(
+        json.dumps(output, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return save_path
+
+
+def load_evaluation(round_dir: "Path", evaluator_name: str) -> dict[str, object] | None:
+    """Load evaluation results from {evaluator_name}_evaluation.json if it exists."""
+    from pathlib import Path as _Path  # noqa: F811
+
+    path = _Path(round_dir) / f"{evaluator_name}_evaluation.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
+
+
+def load_all_evaluations(round_dir: "Path") -> dict[str, dict[str, object]]:
+    """Load all available evaluation results from a round directory."""
+    results: dict[str, dict[str, object]] = {}
+    for name in ["hardrule", "deepseek"]:
+        data = load_evaluation(round_dir, name)
+        if data is not None:
+            results[name] = data
+    return results
