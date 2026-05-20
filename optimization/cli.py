@@ -325,6 +325,7 @@ def run_batch(
     output_dir: Path,
     sanitize: bool = False,
     requirement_set_data: dict | None = None,
+    run_eval: bool = False,
 ) -> dict:
     """Run pipeline for all requirements and save results.
 
@@ -492,6 +493,24 @@ def run_batch(
     except Exception as exc:
         print(f"Hard-rule evaluation save failed: {exc}")
 
+    # Run DeepSeek evaluation if requested
+    if run_eval:
+        try:
+            from optimization.claude_evaluator import run_full_evaluation
+            ws = run_full_evaluation(output_dir)
+            print(f"DeepSeek evaluation completed (weighted={ws})")
+        except Exception as exc:
+            print(f"DeepSeek evaluation failed: {exc}")
+
+    # Generate unified cases_report.html
+    try:
+        from optimization.generate_case_html import generate_round_html
+        generate_round_html(output_dir, 1)
+        report_path = output_dir / "cases_report.html"
+        print(f"Report: {report_path}")
+    except Exception as exc:
+        print(f"Report generation failed: {exc}")
+
     print(f"\nDone. {len(requirements)} requirements → {total_cases} cases, {len(errors)} errors")
     print(f"Output: {output_dir}")
 
@@ -515,6 +534,7 @@ def main():
     run_parser.add_argument("--func-col", default="function")
     run_parser.add_argument("--limit", type=int, default=None, help="Limit to first N requirements (for quick testing, works with --requirement-set)")
     run_parser.add_argument("--no-sanitize", action="store_true", help="Disable post-processing that replaces invented numeric values with [NEEDS REVIEW] (sanitize is ON by default)")
+    run_parser.add_argument("--eval", action="store_true", help="Run DeepSeek 8-dimension evaluation after generation and generate complete report")
 
     # evaluate command
     eval_parser = sub.add_parser("evaluate", help="Run AI evaluation against checklist_v2.md")
@@ -584,6 +604,7 @@ def main():
             Path(args.output_dir),
             sanitize=not args.no_sanitize,
             requirement_set_data=requirement_set_data,
+            run_eval=args.eval,
         )
 
     elif args.command == "evaluate":

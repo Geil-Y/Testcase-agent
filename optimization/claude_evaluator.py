@@ -123,7 +123,7 @@ Rules:
 - `case_index` is the 0-based index of the case within its requirement's case list.
 - Every score must be an integer 1-5.
 - Every score must have a matching `_note` field explaining the score.
-- Keep notes concise and write in English.
+- Keep notes concise and write in Chinese (中文).
 - If a dimension scores below 3, the note MUST clearly state the main flaw.
 - Do not output `overall_score`, `overall_weighted`, or `decision`.
 """

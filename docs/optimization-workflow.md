@@ -45,18 +45,28 @@ attach Prompt Evaluation Set metadata such as `evaluation_bucket` or
 ### Fixed Prompt Evaluation Set
 
 Use `--requirement-set` to run the full Prompt Evaluation Set V1 in file order.
+The set is self-contained — entries have inline `description`,
+`function_name`, and `supplementary_info`, so `--excel` is NOT required.
 
 ```powershell
+# Full 35-entry set (no Excel needed)
 python -m optimization.cli run `
-  --excel requirements.xlsx `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --output-dir optimization_runs/log/<run-name>/round_01
+
+# Quick test: first 5 entries only
+python -m optimization.cli run `
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --limit 5 `
   --output-dir optimization_runs/log/<run-name>/round_01
 ```
 
 When `--requirement-set` is provided:
 
 - `--sample` and `--seed` are ignored.
-- All keys in the set must exist in the Excel file.
+- `--limit N` runs only the first N entries (for quick testing).
+- `--excel` is only needed as a fallback when set entries lack inline
+  `description` (legacy sets).
 - `generated_cases.json` is enriched with `evaluation_bucket`,
   `expected_missing_categories`, and `requirement_set_note`.
 - `summary.json` records `requirement_set_name`, `requirement_set_path`, and
@@ -141,12 +151,13 @@ Use this for one-shot measurement without modifying prompts.
 
 1. Generate cases with either random exploration or the full Prompt Evaluation
    Set.
-2. Run `generate_report()` on the round directory.
-3. Run `generate_round_html()` on the round directory if individual case
-   browsing is needed.
+2. Run `generate_round_html()` to produce `cases_report.html` (the unified main
+   report combining all evaluators).
+3. Optionally generate `evaluation_report.html` for checklist/hard-gate summary.
 4. Optionally run AI evaluation (produces `deepseek_evaluation.json`, `chatgpt_evaluation.json`):
    `python -m optimization.cli evaluate --round-dir <round_dir>`
-5. Optionally write `manual_review_scores.json` and rerun `generate_report()`.
+5. Optionally write `manual_review_scores.json` and rerun `generate_round_html()`
+   to include manual review scores.
 6. `hardrule_evaluation.json` is auto-saved after hard-rule evaluation completes.
 
 ```powershell
@@ -166,7 +177,7 @@ Use this for prompt changes.
    `python -m optimization.cli evaluate --round-dir <round_dir>`
    `hardrule_evaluation.json` is auto-saved after hard-rule evaluation completes.
 5. If using Manual Review Scores, write `manual_review_scores.json` and rerun
-   `generate_report()`.
+   `generate_round_html()`.
 6. Diagnose the lowest-quality cases before editing prompts.
 7. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output
    format.

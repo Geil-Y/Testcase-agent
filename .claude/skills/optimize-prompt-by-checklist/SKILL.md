@@ -20,14 +20,34 @@ generation flow. Do not duplicate or override those facts here.
 
 ## Startup Questions
 
-Ask only the questions needed for the selected mode:
+Ask these in order. Every question MUST use `AskUserQuestion` with options —
+never open-ended text. Ask only the questions relevant to the path taken.
 
-1. Eval-only or optimization mode?
-2. Which Excel file should be used?
-3. Random exploration or fixed Prompt Evaluation Set?
-4. Should AI Review Scores be produced? (DeepSeek evaluates each requirement group against checklist_v2.md)
-5. Should Manual Review Scores be produced?
-6. For optimization mode: checklist version and short goal name.
+### Phase 1 — Mode & Source
+
+1. **Mode:** Eval-only or optimization?
+2. **Selection source:** Fixed Prompt Evaluation Set or random exploration?
+
+### Phase 2 — Scope (depends on Phase 1 answer)
+
+**If Fixed Prompt Evaluation Set:**
+- How many requirements? Options: "All 35" or "First N" (specify N).
+- The set is self-contained (inline descriptions). No Excel file needed.
+
+**If random exploration:**
+- Which Excel file?
+- How many to sample?
+- Random seed? (optional, for reproducibility)
+
+### Phase 3 — Evaluation Signals
+
+3. **AI Review Scores:** Produce DeepSeek 8-dimension scores? (Yes / No)
+4. **Manual Review Scores:** Produce manual 8-dimension scores? (Yes / No)
+
+### Phase 4 — Optimization Only
+
+5. Which checklist version?
+6. Short goal name for this run.
 
 Use `docs/optimization-workflow.md` for the exact commands and selection
 semantics.
@@ -40,7 +60,7 @@ semantics.
 - Optionally generate `evaluation_report.html` for checklist/hard-gate summary.
 - If AI Review Scores are requested, run `python -m optimization.cli evaluate --round-dir <round_dir>`.
 - If Manual Review Scores are requested, write `manual_review_scores.json` and
-  rerun `generate_report()`.
+  rerun `generate_round_html()`.
 
 ## Optimization Rules
 
