@@ -246,6 +246,37 @@ def _render_legacy_items(name: str, label: str, cr: dict | None) -> str:
     return "".join(parts)
 
 
+def _build_bottom_dims_section(ev: dict, label: str) -> str:
+    """Build HTML section showing the 3 dimensions with the lowest average scores."""
+    dim_avgs = ev.get("dimension_averages", {})
+    if not dim_avgs:
+        return ""
+
+    sorted_dims = sorted(dim_avgs.items(), key=lambda x: x[1])
+    bottom_3 = sorted_dims[:3]
+
+    rows = ""
+    for rank, (dim, score) in enumerate(bottom_3, 1):
+        dim_label = DIM_LABELS.get(dim, dim)
+        color = _score_color(score) if isinstance(score, int) and 1 <= score <= 5 else "#888"
+        rows += (
+            f'<tr>'
+            f'<td style="text-align:center;font-weight:700">{rank}</td>'
+            f'<td>{dim_label}</td>'
+            f'<td style="font-weight:700;color:{color}">{score}</td>'
+            f'</tr>'
+        )
+
+    return f"""
+    <div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:24px;max-width:480px">
+      <b style="color:#ef4444">Lowest 3 Dimensions — {label}</b>
+      <table style="margin-top:8px">
+        <tr><th style="width:30px;text-align:center">#</th><th>Dimension</th><th style="width:60px;text-align:center">Avg</th></tr>
+        {rows}
+      </table>
+    </div>"""
+
+
 def generate_round_html(round_dir: Path, round_num: int) -> float | None:
     """Generate cases_report.html combining all evaluators.
 
@@ -303,6 +334,14 @@ def generate_round_html(round_dir: Path, round_num: int) -> float | None:
                 f'<div class="label">{label} ({passed}/{total})</div>'
                 f'</div>'
             )
+
+    # ── Bottom 3 dimensions (from first available AI evaluator) ─────────
+    bottom_dims_html = ""
+    for name in ("deepseek", "chatgpt"):
+        ev = ext_evals.get(name)
+        if ev and _is_new_format(ev) and ev.get("dimension_averages"):
+            bottom_dims_html = _build_bottom_dims_section(ev, EVAL_LABELS[name])
+            break
 
     # ── Top failed items (from hard-rule as baseline) ──────────────────
     top_fail_rows = ""
@@ -491,6 +530,8 @@ def generate_round_html(round_dir: Path, round_num: int) -> float | None:
 <div class="summary-grid">
   {cards}
 </div>
+
+{bottom_dims_html}
 
 {top_fail_html_section}
 
