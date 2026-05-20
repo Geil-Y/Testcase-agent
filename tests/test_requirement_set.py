@@ -1,14 +1,8 @@
 """Tests for requirement set loading, validation, and selection."""
 
-import json
-import sys
 from pathlib import Path
 
 import pytest
-
-# Ensure the optimization package is importable
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_PROJECT_ROOT))
 
 from optimization.cli import (
     load_requirement_set,
@@ -16,6 +10,8 @@ from optimization.cli import (
     validate_requirement_set,
 )
 from testcase_agent.pipeline.generate import RequirementInput
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 # ── Shared fixtures ─────────────────────────────────────────────────────

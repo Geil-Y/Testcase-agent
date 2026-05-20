@@ -1,18 +1,10 @@
 """Tests for v2 Section 3 hard gates and missing information evaluation."""
 
-import sys
-from pathlib import Path
-
-import pytest
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_PROJECT_ROOT))
-
-from optimization.generate_case_html import (
+from optimization.evaluator import (
     CHECKLIST,
     evaluate_case,
+    evaluate_generated_cases,
     evaluate_missing_info_hard_gates,
-    _enrich_req_info,
 )
 
 
@@ -48,6 +40,46 @@ def _req_info(**overrides):
     }
     info.update(overrides)
     return info
+
+
+# ── Evaluation Engine interface ─────────────────────────────────────────
+
+
+class TestEvaluateGeneratedCases:
+    def test_returns_case_results_counts_and_hard_gate_records(self):
+        data = [{
+            "requirement_key": "REQ-001",
+            "evaluation_bucket": "missing-info-trap",
+            "expected_missing_categories": ["threshold"],
+            "description": "Timing is not specified.",
+            "supplementary_info": "",
+            "analysis": {
+                "signals": [],
+                "thresholds": [],
+                "timing": [],
+                "missing_info_items": [],
+                "case_intents": [{"coverage": "normal_behavior"}],
+            },
+            "cases": [
+                _case(
+                    title="TC missing marker",
+                    precondition="BMS initialized, all parameters within normal operating range, no active faults.",
+                    postcondition="System returned to normal operating state.",
+                    steps=[_step(action="Set voltage to 100V", expected="Protection flag becomes active")],
+                )
+            ],
+        }]
+
+        result = evaluate_generated_cases(data)
+
+        assert result.total_cases == 1
+        assert result.total_passed == 0
+        assert result.case_pass_rate == 0.0
+        assert result.case_results[("REQ-001", 0)].failed_items == ["2.2.1", "3.2.1", "3.2.2"]
+        assert result.item_fail_counts["2.2.1"] == 1
+        assert result.item_fail_counts["3.2.1"] == 1
+        assert result.item_fail_counts["3.2.2"] == 1
+        assert result.hard_gate_records[0]["item_ids"] == ["3.2.1"]
 
 
 # ── Section 3 item IDs in CHECKLIST ─────────────────────────────────────

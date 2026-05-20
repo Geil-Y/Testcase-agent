@@ -3,6 +3,11 @@
 **Status:** draft
 **Date:** 2026-05-19
 
+Workflow source of truth: `docs/optimization-workflow.md`. This document owns
+the quality strategy, rubric, and Prompt Evaluation Set rationale. Use the
+workflow document for current commands, CLI selection semantics, checklist
+version, evaluator ownership, and run procedure.
+
 ## Goal
 
 Improve BMS HIL test case quality from a local 7B-8B model, with special
@@ -17,8 +22,8 @@ provided by the source requirement.
 
 Prompt changes are evaluated with one stable requirement set:
 
-- **Prompt Evaluation Set**: 35 fixed requirements used as the primary quality
-  benchmark for prompt changes.
+- **Prompt Evaluation Set**: a fixed requirement set used as the primary
+  quality benchmark for prompt changes.
 
 Random sampling may still be used for exploration, but it is not the primary
 acceptance signal for prompt quality.
@@ -27,9 +32,7 @@ The Prompt Evaluation Set is not a set of reference test cases. It is a fixed
 set of source requirements used to generate and compare test cases across
 prompt versions.
 
-Current status: Prompt Evaluation Set V1 is machine-readable and can be run by
-`optimization/cli.py` with `--requirement-set`. Random sampling remains
-available for exploration, but it is no longer the only CLI path.
+Current workflow details are documented in `docs/optimization-workflow.md`.
 
 ## Manual Review Rubric
 
@@ -73,20 +76,15 @@ See `optimization/manual_review.py` for the implementation.
 
 ## Prompt Evaluation Set V1
 
-These 35 requirements are selected from the existing 64-requirement evaluation
-pool in `optimization_runs/log/20260519_v2-full64_evalonly/`.
+Prompt Evaluation Set V1 is selected from the existing 64-requirement
+evaluation pool in `optimization_runs/log/20260519_v2-full64_evalonly/`.
 
 The machine-readable source of truth is
 `optimization_runs/requirement_sets/prompt_eval_v1.json`. The Markdown tables
 below are human-readable documentation and should stay in sync with the JSON.
 
-The set is executable via:
-```
-python -m optimization.cli run \
-  --excel requirements.xlsx \
-  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
-  --output-dir ...
-```
+Run commands and CLI selection semantics are documented in
+`docs/optimization-workflow.md`.
 
 ### Complete Information Baseline
 
@@ -260,16 +258,16 @@ sampling.
 Completed work:
 
 - Store Prompt Evaluation Set V1 in a machine-readable artifact
-  (`optimization_runs/requirement_sets/prompt_eval_v1.json`, 35 entries).
-- Add `--requirement-set <path>` to `optimization.cli run`.
+  (`optimization_runs/requirement_sets/prompt_eval_v1.json`).
+- Add an executable fixed-set path to `optimization.cli run`.
 - Validate that all listed Requirement IDs exist in the source Excel.
 - Validate no duplicate keys, valid expected_missing_categories.
 - Save the set name, path, and entry count in `summary.json`.
 - Enrich `generated_cases.json` entries with `evaluation_bucket`,
   `expected_missing_categories`, and `requirement_set_note`.
-- Preserve original `--sample` / `--seed` behavior when `--requirement-set`
-  is not given.
-- Requirements are selected in set order when using `--requirement-set`.
+- Preserve random exploration as a separate CLI mode.
+- Current CLI selection semantics are documented in
+  `docs/optimization-workflow.md`.
 
 ### Phase 3: Hard-Gate Evaluation ✅
 
@@ -280,8 +278,9 @@ quality policy.
 
 Completed work:
 
-- Synchronized `CHECKLIST` with `checklist_v2.md` Section 3 (6 new/replaced
-  items: 3.2.1 [HARD], 3.2.2 [HARD], 3.2.3 [WARNING], 3.3.1, 3.3.2, 3.3.3).
+- Synchronized evaluator `CHECKLIST` with `checklist_v2.md` Section 3
+  (6 new/replaced items: 3.2.1 [HARD], 3.2.2 [HARD], 3.2.3 [WARNING],
+  3.3.1, 3.3.2, 3.3.3).
 - `evaluate_case()` now accepts `expected_missing_categories` from Prompt
   Evaluation Set metadata and returns `(failed, warnings)` tuple.
 - `evaluate_missing_info_hard_gates()` compares expected vs actual missing
@@ -312,6 +311,7 @@ Completed work:
   categories but no `[NEEDS REVIEW]` in case → unacceptable; invented
   numeric values for missing semantics → unacceptable; unnecessary
   `[NEEDS REVIEW]` → warning (not automatically severe).
+- Manual Review hard gates reuse the shared evaluator logic.
 - Manual Review Scores section rendered in `evaluation_report.html` alongside
   but separate from automated checklist pass rate. Shows average weighted score,
   dimension averages, score distribution, unacceptable cases, and scored

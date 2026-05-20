@@ -8,14 +8,11 @@ from pathlib import Path
 from datetime import datetime
 
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_case_html import (
+from evaluator import (
     CHECKLIST,
-    _enrich_req_info,
-    evaluate_case,
-    evaluate_missing_info_hard_gates,
+    evaluate_generated_cases,
 )
 from manual_review import (
-    get_review_summary,
     load_review_scores,
 )
 
@@ -25,45 +22,35 @@ def generate_report(round_dir: Path, round_num: int, max_rounds: int = 5, prev_r
     with open(cases_path, encoding="utf-8") as f:
         data = json.load(f)
 
-    total_cases = 0
-    case_failures = []  # list of (case_key, failed_items)
-    item_fail_counts = Counter()
-    item_warning_counts = Counter()
-
-    for req in data:
-        base_info = _enrich_req_info(req)
-
-        for ci_idx, case in enumerate(req["cases"]):
-            total_cases += 1
-            coverage = ""
-            if ci_idx < len(req["analysis"]["case_intents"]):
-                coverage = req["analysis"]["case_intents"][ci_idx]["coverage"]
-
-            req_info = dict(base_info)
-            req_info["case_coverage"] = coverage
-            failed, warnings = evaluate_case(case, req_info, {})
-            if failed:
-                case_failures.append((f"{req['requirement_key']} :: {case['title'][:60]}", failed))
-                for item in failed:
-                    item_fail_counts[item] += 1
-            for w in warnings:
-                item_warning_counts[w] += 1
-
-    # Missing information hard gates
-    hard_gate_records = evaluate_missing_info_hard_gates(data)
-
-    # Manual Review Scores (optional — only when manual_review_scores.json exists)
-    review_summary: dict = {}
+    review_entries = None
     review_path = round_dir / "manual_review_scores.json"
     if review_path.exists():
         try:
             review_entries = load_review_scores(str(review_path))
-            review_summary = get_review_summary(review_entries, data)
         except ValueError as exc:
-            review_summary = {"_error": str(exc)}
+            review_entries = None
+            review_error = str(exc)
+        else:
+            review_error = ""
+    else:
+        review_error = ""
 
-    total_passed = total_cases - len(case_failures)
-    case_pass_rate = round(total_passed / total_cases * 100, 1) if total_cases else 0
+    evaluation = evaluate_generated_cases(data, review_entries)
+    total_cases = evaluation.total_cases
+    total_passed = evaluation.total_passed
+    case_pass_rate = evaluation.case_pass_rate
+    case_failures = [
+        (f"{case.requirement_key} :: {case.case_title[:60]}", case.failed_items)
+        for case in evaluation.case_results.values()
+        if case.failed_items
+    ]
+    item_fail_counts = evaluation.item_fail_counts
+    item_warning_counts = evaluation.item_warning_counts
+    hard_gate_records = evaluation.hard_gate_records
+    review_summary = evaluation.manual_review_summary
+    if review_error:
+        review_summary = {"_error": review_error}
+
     req_count = len(data)
 
     # Per-item pass rates
@@ -277,8 +264,6 @@ def _render_hard_gate_section(records: list[dict]) -> str:
         bucket = rec["evaluation_bucket"]
         expected = ", ".join(rec["expected_missing_categories"]) or "—"
         actual = ", ".join(rec["actual_missing_categories"]) or "—"
-        missing = ", ".join(rec["missing_from_actual"])
-        extra = ", ".join(rec["extra_in_actual"])
         item_ids = ", ".join(rec.get("item_ids", [])) or "—"
 
         severity = ""
@@ -434,7 +419,7 @@ def _render_manual_review_section(review_summary: dict) -> str:
         status = "❌" if d["unacceptable"] else "✅"
         warn_note = ""
         if d["warnings"]:
-            warn_note = f' <span style="color:var(--warn);font-size:0.78rem">[WARN]</span>'
+            warn_note = ' <span style="color:var(--warn);font-size:0.78rem">[WARN]</span>'
         detail_rows += (
             f"<tr>"
             f"<td>{d['requirement_key']}</td>"

@@ -128,62 +128,19 @@ def apply_hard_gates(
     generated_case: dict | None = None,
     expected_missing_categories: list[str] | None = None,
 ) -> HardGateResult:
-    """Apply hard gates before accepting a weighted score.
+    """Apply hard gates before accepting a weighted score."""
+    from optimization.evaluator import evaluate_manual_review_hard_gates
 
-    Requires:
-    - entry: the manual review entry
-    - generated_case: the matching case dict from generated_cases.json
-    - expected_missing_categories: from the Prompt Evaluation Set entry
-    """
-    result = HardGateResult()
-
-    # Gate 1: missing_information_detection < 3
-    if entry.missing_information_detection < 3:
-        result.unacceptable = True
-        result.reasons.append(
-            f"missing_information_detection={entry.missing_information_detection} (< 3)"
-        )
-
-    # Gates 2-4 require the generated case and expected_missing_categories
-    if generated_case is None:
-        return result
-
-    steps = generated_case.get("steps", [])
-    nr_in_steps = any(
-        "[needs review]" in (s["action"] + str(s["expected"] or "")).lower()
-        for s in steps
+    gate = evaluate_manual_review_hard_gates(
+        entry,
+        generated_case,
+        expected_missing_categories,
     )
-    has_expected_missing = bool(expected_missing_categories)
-
-    # Gate 2: case should contain [NEEDS REVIEW] but does not
-    if has_expected_missing and not nr_in_steps:
-        result.unacceptable = True
-        result.reasons.append(
-            f"Expected missing {expected_missing_categories} but case lacks [NEEDS REVIEW]"
-        )
-
-    # Gate 3: case invents missing semantics — heuristically: expected missing
-    # is non-empty but case has numeric values without [NEEDS REVIEW]
-    if has_expected_missing:
-        for s in steps:
-            text = f"{s['action']} {s['expected'] or ''}"
-            import re
-            if re.search(r"\d+\.?\d+", text) and "[needs review]" not in text.lower():
-                result.unacceptable = True
-                result.reasons.append(
-                    "Case contains numeric value(s) that appear to invent "
-                    "missing threshold/timing semantics"
-                )
-                break
-
-    # Gate 4: semantically complete but unnecessary [NEEDS REVIEW] → warning
-    if not has_expected_missing and nr_in_steps:
-        result.warnings.append(
-            "Requirement appears semantically complete but case contains "
-            "[NEEDS REVIEW] — penalized but not automatically severe"
-        )
-
-    return result
+    return HardGateResult(
+        unacceptable=gate["unacceptable"],
+        reasons=gate["reasons"],
+        warnings=gate["warnings"],
+    )
 
 
 # ── Summary helpers for report rendering ─────────────────────────────────

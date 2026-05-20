@@ -1,6 +1,5 @@
 from testcase_agent.parser.html_parser import (
     AnalysisResult,
-    GeneratedCase,
     MissingInfo,
     parse_analysis,
     parse_generated_case,

@@ -1,13 +1,8 @@
 """Tests for manual review score loading, weighted calculation, hard gates, and rendering."""
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
-
-_PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(_PROJECT_ROOT))
 
 from optimization.manual_review import (
     ReviewEntry,
@@ -15,7 +10,6 @@ from optimization.manual_review import (
     apply_hard_gates,
     load_review_scores,
     get_review_summary,
-    HardGateResult,
 )
 
 

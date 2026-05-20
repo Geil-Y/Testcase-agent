@@ -33,13 +33,13 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
-from openpyxl import load_workbook
+from openpyxl import load_workbook  # noqa: E402
 
-from testcase_agent.config import get_settings
-from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
-from testcase_agent.pipeline.post_process import sanitize_numeric_values
-from testcase_agent.provider.factory import create_provider
-from testcase_agent.quality.gate import evaluate_cases
+from testcase_agent.config import get_settings  # noqa: E402
+from testcase_agent.pipeline.generate import RequirementInput, run_pipeline  # noqa: E402
+from testcase_agent.pipeline.post_process import sanitize_numeric_values  # noqa: E402
+from testcase_agent.provider.factory import create_provider  # noqa: E402
+from testcase_agent.quality.gate import evaluate_cases  # noqa: E402
 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
@@ -115,7 +115,6 @@ def build_requirement_inputs(rows: list[dict]) -> list[RequirementInput]:
             if pending_info:
                 context_parts.append("Context: " + " | ".join(pending_info))
 
-            existing_supp = ""
             # If the requirement has a function_name, note it
             if row.get("function_name"):
                 context_parts.insert(0, f"Function: {row['function_name']}")
@@ -175,7 +174,7 @@ def validate_requirement_set(data: dict, path: str) -> None:
 
     name = data.get("name")
     if not isinstance(name, str) or not name.strip():
-        raise ValueError(f"Requirement set is missing a non-empty 'name' field")
+        raise ValueError("Requirement set is missing a non-empty 'name' field")
 
     entries = data.get("entries")
     if not isinstance(entries, list) or len(entries) == 0:
@@ -262,6 +261,38 @@ def archive_prompts(round_dir: Path) -> None:
         print(f"  Archived prompt: {src.name} -> {dest_name}")
 
 
+def _serialize_case_for_output(
+    case,
+    report,
+    *,
+    sanitize_enabled: bool,
+    sanitize_replacements: list[str],
+) -> dict:
+    """Serialize one generated case for generated_cases.json."""
+    return {
+        "title": case.title,
+        "objective": case.objective,
+        "precondition": case.precondition,
+        "postcondition": case.postcondition,
+        "related_requirement": case.related_requirement,
+        "steps": [
+            {"order": s.order, "action": s.action, "expected": s.expected}
+            for s in case.steps
+        ],
+        "raw_html": case.raw_html,
+        "sanitize": {
+            "enabled": sanitize_enabled,
+            "replacement_count": len(sanitize_replacements),
+            "replacements": sanitize_replacements,
+        },
+        "quality": {
+            "passed": report.passed,
+            "failures": report.failures,
+            "warnings": report.warnings,
+        },
+    }
+
+
 def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
@@ -302,11 +333,14 @@ def run_batch(
             print(f"  ERROR: {result.error}")
             continue
 
-        if sanitize and result.analysis:
+        sanitize_enabled_for_case = bool(sanitize and result.analysis)
+        sanitize_replacements_by_case: list[list[str]] = [[] for _ in result.cases]
+        if sanitize_enabled_for_case:
             sigs = result.analysis.signals
             thr = result.analysis.thresholds
             tim = result.analysis.timing
             sanitized_cases = []
+            replacement_lists = []
             total_replacements = 0
             for case in result.cases:
                 sc, reps = sanitize_numeric_values(
@@ -318,8 +352,10 @@ def run_batch(
                     extracted_timing=tim,
                 )
                 sanitized_cases.append(sc)
+                replacement_lists.append(reps)
                 total_replacements += len(reps)
             result.cases = sanitized_cases
+            sanitize_replacements_by_case = replacement_lists
             if total_replacements:
                 print(f"  sanitize: {total_replacements} value(s) replaced with [NEEDS REVIEW]")
 
@@ -346,24 +382,17 @@ def run_batch(
             }
 
         cases_data = []
-        for case, report in zip(result.cases, quality_reports):
-            cases_data.append({
-                "title": case.title,
-                "objective": case.objective,
-                "precondition": case.precondition,
-                "postcondition": case.postcondition,
-                "related_requirement": case.related_requirement,
-                "steps": [
-                    {"order": s.order, "action": s.action, "expected": s.expected}
-                    for s in case.steps
-                ],
-                "raw_html": case.raw_html,
-                "quality": {
-                    "passed": report.passed,
-                    "failures": report.failures,
-                    "warnings": report.warnings,
-                },
-            })
+        for case, report, replacements in zip(
+            result.cases,
+            quality_reports,
+            sanitize_replacements_by_case,
+        ):
+            cases_data.append(_serialize_case_for_output(
+                case,
+                report,
+                sanitize_enabled=sanitize_enabled_for_case,
+                sanitize_replacements=replacements,
+            ))
 
         entry: dict = {
             "requirement_key": req.requirement_key,
