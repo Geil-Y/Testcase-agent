@@ -24,6 +24,9 @@ optimization_runs/
         │   ├── sampled_requirements.json
         │   ├── summary.json
         │   ├── generated_cases.json
+        │   ├── hardrule_evaluation.json
+        │   ├── deepseek_evaluation.json
+        │   ├── chatgpt_evaluation.json
         │   ├── evaluation_report.html
         │   └── cases_report.html
         └── ...
@@ -39,9 +42,12 @@ Each round directory may contain:
 | `sampled_requirements.json` | Requirements selected for the round |
 | `summary.json` | Generation summary and optional requirement-set metadata |
 | `generated_cases.json` | Generated requirements/cases, quality data, and sanitize provenance |
-| `manual_review_scores.json` | Optional human/agent review scores |
-| `evaluation_report.html` | Checklist, hard-gate, and optional manual-review report |
-| `cases_report.html` | Per-case display report |
+| `manual_review_scores.json` | Optional human/agent 8-dimension review scores |
+| `hardrule_evaluation.json` | Per-evaluator hard-rule evaluation data |
+| `deepseek_evaluation.json` | Per-evaluator DeepSeek 8-dimension evaluation data |
+| `chatgpt_evaluation.json` | Per-evaluator ChatGPT evaluation data |
+| `evaluation_report.html` | Checklist, hard-gate, and optional manual-review summary |
+| `cases_report.html` | Unified main report combining all evaluators with per-case display |
 
 ## Notes
 

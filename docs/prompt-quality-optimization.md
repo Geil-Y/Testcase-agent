@@ -298,9 +298,8 @@ Completed work:
   Evaluation Set metadata and returns `(failed, warnings)` tuple.
 - `evaluate_missing_info_hard_gates()` compares expected vs actual missing
   categories and detects case-level [NEEDS REVIEW] gaps.
-- `evaluation_report.html` includes a "Missing Information Hard Gates" section
-  with per-requirement expected/actual comparison and severity ratings.
-- `cases_report.html` shows `evaluation_bucket`, expected/actual missing
+- `cases_report.html` includes hard-gate evaluation (3.2.x items) per case with
+  evaluator badge cards, and displays `evaluation_bucket`, expected/actual missing
   categories, states, and observations per requirement.
 - 26 new evaluator tests covering all 3.x items and hard gate logic.
 - WARNING items (3.2.3, 4.1.1) are tracked separately and do not count toward

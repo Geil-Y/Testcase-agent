@@ -7,211 +7,373 @@
       "requirement_key": "REQ-BMS-OVP-002",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information.",
+      "description": "IF  BMS_CellOV_Detect = 1 for a continuous duration >= t_CellOV_Debounce\nTHEN\n  · BMS_CellOV_Flag := 1\n  · Store the maximum cell voltage and affected cell ID in the fault record",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation"
     },
     {
       "requirement_key": "REQ-BMS-OVP-009",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information.",
+      "description": "Upon BMS_CellOV_L3_Flag = 1:\n  · Charge contactor shall open within 200 ms\n  · Discharge contactor shall open within 100 ms of charge contactor Open\n  · BMS_ChargeContactor_State := Open\n  · BMS_DischargeContactor_State := Open",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery"
     },
     {
       "requirement_key": "REQ-BMS-ISO-002",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information.",
+      "description": "IF  BMS_InsulationFault_Flag = 1 for >= 1 s\nTHEN\n  · BMS_InsulationFault_Latch := 1\n  · Store DTC in non-volatile memory\n  · HV contactor closure disabled until diagnostic clear",
+      "function_name": "Insulation & HVIL",
+      "supplementary_info": "Function: Insulation & HVIL\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring"
     },
     {
       "requirement_key": "REQ-BMS-COM-004",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information.",
+      "description": "IF  BMS_VCULost_Flag = 1 for >= 1 s\nTHEN\n  · Open main contactors\n  · BMS_SystemState := SafeState",
+      "function_name": "Communication & Diagnostics",
+      "supplementary_info": "Function: Communication & Diagnostics\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring"
     },
     {
       "requirement_key": "REQ-BMS-STM-002",
       "evaluation_bucket": "complete_information_baseline",
       "expected_missing_categories": [],
-      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information."
+      "rationale": "Confirm model does not add unnecessary [NEEDS REVIEW] when requirement gives enough semantic information.",
+      "description": "Wake-up sources:\n  · CAN bus activity\n  · Dedicated wake-up pin\nWake-up shall complete initialisation within 500 ms and report BMS_SystemState on CAN.",
+      "function_name": "BMS State Machine",
+      "supplementary_info": "Function: BMS State Machine\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling > 13 BMS State Machine > 13.1 Power-Up and Initialization"
     },
     {
       "requirement_key": "REQ-BMS-OVP-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "The BMS shall monitor each cell voltage against the overvoltage threshold. BMS_CellOV_Detect shall be set to 1 when any cell voltage >= r_CellOV_Threshold.",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation\nContext: Overvoltage protection ensures that cell voltages remain within the safe operating range defined by the cell manufacturer. Detection is performed continuously and follows a three-level escalation scheme:\n- BMS_CellOV_Detect = 1: cell voltage >= r_CellOV_Threshold (raw detection)\n- BMS_CellOV_Flag = 1: detection debounced for >= t_CellOV_Debounce (confirmed fault)\n- BMS_CellOV_L3_Flag = 1: voltage >= r_CellOV_L3_Threshold (critical, contactor opening) | The following calibration parameters define the overvoltage detection thresholds and timing:\n- r_CellOV_Threshold: detection level [4.15 V - 4.35 V]\n- t_CellOV_Debounce: confirmation debounce time [50 ms - 500 ms]\n- r_CellOV_L3_Threshold: critical overvoltage level [4.25 V - 4.40 V]"
     },
     {
       "requirement_key": "REQ-BMS-OVP-003",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  BMS_CellOV_Detect de-asserts before t_CellOV_Debounce expires\nTHEN\n  · The debounce timer shall reset\n  · BMS_CellOV_Flag shall remain 0\n  · No fault record shall be stored",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation"
     },
     {
       "requirement_key": "REQ-BMS-OVP-006",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  BMS_CellOV_Flag = 1 AND charge current already derated to 50 % for >= 1 s\n    AND any cell voltage >= r_CellOV_Threshold\nTHEN\n  · BMS_ChargeTerm_Req := 1",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating"
     },
     {
       "requirement_key": "REQ-BMS-CUR-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  pack charge current exceeds 150 A\nTHEN\n  · BMS_ChargeOC_Flag := 1\n  · Limit charge current to 100 A within 50 ms",
+      "function_name": "Current Management",
+      "supplementary_info": "Function: Current Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection\nContext: Overcurrent protection monitors charge and discharge currents independently, as they imply different hazard profiles. Charge overcurrent primarily risks cell overvoltage (see section 1), while discharge overcurrent may indicate a load-side fault. All thresholds are calibration parameters:\n- BMS_ChargeOC_Flag = 1: charge current > 150 A\n- BMS_DischargeOC_Flag = 1: discharge current > 200 A\n- Recovery ramp: power restored at max 10 % per second after 2 s hold"
     },
     {
       "requirement_key": "REQ-BMS-CUR-002",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Discharge overcurrent boundary, symmetric to CUR-001 charge OC; tests directional threshold handling and symbolic parameter usage."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Discharge overcurrent boundary, symmetric to CUR-001 charge OC; tests directional threshold handling and symbolic parameter usage.",
+      "description": "IF  pack discharge current exceeds 200 A\nTHEN\n  · BMS_DischargeOC_Flag := 1\n  · Limit discharge power to 75 % of MaxDischargePower",
+      "function_name": "Current Management",
+      "supplementary_info": "Function: Current Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection"
     },
     {
       "requirement_key": "REQ-BMS-CUR-003",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "OC recovery timing chain with hold timer and ramp rate; tests multi-stage sequential timing behavior."
+      "rationale": "OC recovery timing chain with hold timer and ramp rate; tests multi-stage sequential timing behavior.",
+      "description": "After both BMS_ChargeOC_Flag = 0 and BMS_DischargeOC_Flag = 0:\n  · Power limit shall be maintained for 2 s hold time\n  · Power shall ramp back to nominal at max 10 % per second\n  · A new overcurrent event during ramp shall reset the hold timer",
+      "function_name": "Current Management",
+      "supplementary_info": "Function: Current Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection"
     },
     {
       "requirement_key": "REQ-BMS-CUR-004",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  pack discharge current >= 300 A for >= 10 ms\nTHEN\n  · BMS_SCD_Flag := 1\n  · Open both main contactors immediately\n  · BMS_SystemState := SafeState",
+      "function_name": "Current Management",
+      "supplementary_info": "Function: Current Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection\nContext: Short circuit detection uses a higher threshold and shorter integration window than overcurrent detection, targeting hard faults such as harness shorts or inverter bridge shoot-through. The SCD response overrides all other current management actions and requires a diagnostic clear to recover:\n- BMS_SCD_Flag = 1: discharge current >= 300 A for >= 10 ms\n- BMS_SCD_Latch = 1: latched state persistent across power cycles"
     },
     {
       "requirement_key": "REQ-BMS-UVP-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Undervoltage domain baseline: single-threshold detection with unspecified power limit value and response timing."
+      "expected_missing_categories": [
+        "threshold",
+        "timing"
+      ],
+      "rationale": "Undervoltage domain baseline: single-threshold detection with unspecified power limit value and response timing.",
+      "description": "IF  any cell voltage <= 2.80 V\nTHEN\n  · BMS_CellUV_Flag := 1\n  · Limit discharge power",
+      "function_name": "Undervoltage Protection",
+      "supplementary_info": "Function: Undervoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response\nContext: Undervoltage protection prevents cell damage from over-discharge by limiting power draw and, if the voltage continues to fall, opening the discharge contactor. A proportional power limit is applied between the warning and critical thresholds to give the load time to reduce demand before hard shutdown. Recovery requires cells to return above 3.00 V:\n- BMS_CellUV_Flag = 1: any cell <= 2.80 V (proportional power limiting)\n- BMS_CellUV_L2_Flag = 1: any cell <= 2.50 V (contactor open, discharge prohibited)"
     },
     {
       "requirement_key": "REQ-BMS-UVP-002",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Multi-stage UV escalation with asymmetric recovery threshold (3.00 V); tests L2 escalation and hysteresis semantics."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Multi-stage UV escalation with asymmetric recovery threshold (3.00 V); tests L2 escalation and hysteresis semantics.",
+      "description": "IF  min cell voltage <= 2.50 V\nTHEN\n  · BMS_CellUV_L2_Flag := 1\n  · Open discharge contactor\n  · Prohibit further discharge until voltage recovers > 3.00 V",
+      "function_name": "Undervoltage Protection",
+      "supplementary_info": "Function: Undervoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response"
     },
     {
       "requirement_key": "REQ-BMS-UVP-003",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Proportional power limiting with conditional L2 escalation; tests proportionally-derived limits and state-dependent escalation."
+      "expected_missing_categories": [
+        "threshold",
+        "timing"
+      ],
+      "rationale": "Proportional power limiting with conditional L2 escalation; tests proportionally-derived limits and state-dependent escalation.",
+      "description": "While BMS_CellUV_Flag = 1 AND BMS_CellUV_L2_Flag = 0:\n  · Discharge power shall be limited proportionally to undervoltage severity\n  · IF voltage continues to fall towards 2.50 V\n    THEN BMS_CellUV_L2_Flag shall be set",
+      "function_name": "Undervoltage Protection",
+      "supplementary_info": "Function: Undervoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response"
     },
     {
       "requirement_key": "REQ-BMS-COM-003",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  VCU heartbeat signal lost > 500 ms\nTHEN\n  · BMS_VCULost_Flag := 1\n  · Revert to default safe-state assumptions",
+      "function_name": "Communication & Diagnostics",
+      "supplementary_info": "Function: Communication & Diagnostics\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring\nContext: VCU heartbeat monitoring ensures the BMS can detect loss of coordination with the vehicle controller and transition to a safe default state. A two-stage response provides a short grace period for transient communication loss before contactor-level action:\n- BMS_VCULost_Flag = 1: heartbeat lost > 500 ms (revert to safe defaults)\n- Main contactors open if BMS_VCULost_Flag persists >= 1 s\n- BMS_SystemState := SafeState on contactor open"
     },
     {
       "requirement_key": "REQ-BMS-CHG-002",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
+      "description": "IF  charge current <= 3 A AND max cell voltage >= 4.18 V\nTHEN\n  · BMS_ChargeComplete_Flag := 1\n  · Terminate charge session",
+      "function_name": "Charge Management",
+      "supplementary_info": "Function: Charge Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination\nContext: Charge termination is triggered by normal completion criteria (current taper indicating full charge), external requests, or fault conditions from other protection functions (e.g., overvoltage from section 1). A charge event record is stored for diagnostic and lifecycle tracking:\n- BMS_ChargeComplete_Flag = 1: charge current <= 3 A AND max cell >= 4.18 V\n- BMS_ChargeTerm_Req = 1: termination requested (from charge complete or section 1)\n- Recorded data: final SOC, energy transferred, session duration"
     },
     {
       "requirement_key": "REQ-BMS-THM-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing", "observation"],
-      "rationale": "Over-temperature detection boundary, symmetric to THM-004 under-temperature; tests high-side temperature threshold and DTC storage semantics."
+      "expected_missing_categories": [
+        "timing",
+        "observation"
+      ],
+      "rationale": "Over-temperature detection boundary, symmetric to THM-004 under-temperature; tests high-side temperature threshold and DTC storage semantics.",
+      "description": "IF  any cell temperature sensor >= 55 C\nTHEN\n  · BMS_CellOT_Flag := 1\n  · Store DTC in non-volatile memory",
+      "function_name": "Thermal Management",
+      "supplementary_info": "Function: Thermal Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection\nContext: Cell temperature is monitored continuously to prevent thermal damage and maintain safe operating limits. Over-temperature events are classified into escalating response levels, with cross-dependency on overvoltage protection (section 1) for coordinated power reduction:\n- BMS_CellOT_Flag = 1: any cell >= 55 C\n- BMS_CellOT_L2_Flag = 1: any cell >= 60 C (maximum cooling, power reduction)\n- BMS_ChargeDerating_Active = 1: cell > 45 C during charging"
     },
     {
       "requirement_key": "REQ-BMS-THM-006",
       "evaluation_bucket": "threshold_timing_boundary_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Derived-value threshold comparison (max delta > 15 C); tests whether model handles computed values rather than direct sensor readings."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Derived-value threshold comparison (max delta > 15 C); tests whether model handles computed values rather than direct sensor readings.",
+      "description": "IF  maximum cell temperature delta within pack > 15 C\nTHEN\n  · BMS_TempImbalance_Flag := 1\n  · Send DTC P0A0A to VCU",
+      "function_name": "Thermal Management",
+      "supplementary_info": "Function: Thermal Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance\nContext: Temperature imbalance monitoring detects cooling system faults or uneven cell aging by tracking the maximum temperature spread across the pack. When imbalance is present alongside an over-temperature condition, cooling is prioritised to the hottest zone:\n- BMS_TempImbalance_Flag = 1: max delta > 15 C\n- DTC P0A0A sent to VCU on fault"
     },
     {
       "requirement_key": "REQ-BMS-THM-004",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": [
+        "threshold",
+        "timing"
+      ],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
+      "description": "IF  any cell temperature <= low temperature limit\nTHEN\n  · BMS_CellUT_Flag := 1\n  · BMS_ChargeReady_Flag := 0 (charging prohibited)",
+      "function_name": "Thermal Management",
+      "supplementary_info": "Function: Thermal Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection\nContext: Low temperature protection prevents charging when cells are too cold to accept current without damage, and manages the battery heater to enable charging under cold conditions. The heater is de-energized on overtemperature or when no longer needed:\n- BMS_CellUT_Flag = 1: any cell <= low temperature limit (charging prohibited, BMS_ChargeReady_Flag = 0)\n- BMS_HeaterOT_Flag = 1: heater temperature exceeds safe limit\n- Heater activation threshold: cell <= -10 C during charge session"
     },
     {
       "requirement_key": "REQ-BMS-PVP-001",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": [
+        "threshold",
+        "timing"
+      ],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
+      "description": "IF  total pack voltage < minimum operating threshold\nTHEN\n  · BMS_PackUV_Flag := 1\n  · Send DTC P0A01 to VCU\n  · Limit discharge power proportionally to undervoltage severity",
+      "function_name": "Pack Voltage Protection",
+      "supplementary_info": "Function: Pack Voltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring\nContext: Pack voltage monitoring provides a system-level check that complements individual cell monitoring (section 8). A pack undervoltage or sensor plausibility fault is reported to the VCU with DTC. The pack voltage measurement is cross-checked against the sum of cell voltages to detect sensor faults:\n- BMS_PackUV_Flag = 1: pack voltage < minimum operating threshold, DTC P0A01 sent\n- BMS_PackVoltSensorFault_Flag = 1: cell-sum to pack measurement deviation > 5 V"
     },
     {
       "requirement_key": "REQ-BMS-DEG-001",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "observation"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": [
+        "threshold",
+        "observation"
+      ],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
+      "description": "The BMS shall continuously track:\n  · Capacity fade (current vs. rated capacity)\n  · DC internal resistance trend\n  · Cell voltage deviation under load",
+      "function_name": "Degradation Monitoring",
+      "supplementary_info": "Function: Degradation Monitoring\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection\nContext: Degradation monitoring tracks long-term cell aging through multiple indicators to detect capacity loss and impedance increase before they affect system performance. The SOH prediction model is updated when any indicator exceeds its threshold:\n- Capacity fade: current capacity vs. rated capacity\n- Impedance growth: DC internal resistance trend\n- Voltage deviation: cell voltage dispersion under load\n- BMS_CellDegrade_Warn = 1: any indicator exceeds defined threshold"
     },
     {
       "requirement_key": "REQ-BMS-STM-003",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
+      "description": "Upon VCU_HVConnect_Req = 1 with all preconditions satisfied:\n  · Close negative main contactor\n  · Enable precharge circuit\n  · BMS_SystemState := PrechargeActive",
+      "function_name": "BMS State Machine",
+      "supplementary_info": "Function: BMS State Machine\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling > 13 BMS State Machine > 13.1 Power-Up and Initialization > 13.2 HV Activation\nContext: HV activation follows a precharge sequence to safely energise the DC link before closing the positive contactor, preventing inrush current damage. The sequence is aborted if the bus voltage does not rise within the expected time. Up to 2 retries are permitted before locking out HV activation until power cycle:\n- Preconditions: VCU_HVConnect_Req = 1, no active faults, isolation OK, contactors Open, pack voltage in range\n- Success criteria: DC bus >= 90 % of pack voltage within precharge timeout\n- Failure: BMS_SystemState = HV_Failure, BMS_PrechargeFault_Flag = 1"
     },
     {
       "requirement_key": "REQ-BMS-STM-005",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Precharge retry counter: tests retry-count semantics and lockout state with genuinely missing retry-interval timing."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Precharge retry counter: tests retry-count semantics and lockout state with genuinely missing retry-interval timing.",
+      "description": "IF  BMS_PrechargeFault_Flag = 1\nTHEN up to 2 retries shall be permitted before locking out HV activation until power cycle.",
+      "function_name": "BMS State Machine",
+      "supplementary_info": "Function: BMS State Machine\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling > 13 BMS State Machine > 13.1 Power-Up and Initialization > 13.2 HV Activation"
     },
     {
       "requirement_key": "REQ-BMS-BAL-002",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["threshold", "timing"],
-      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker."
+      "expected_missing_categories": [
+        "threshold",
+        "timing"
+      ],
+      "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
+      "description": "During active balancing:\n  · Selected cells shall be discharged through balancing resistor\n  · Balancing shall continue until delta < 20 mV or timeout reached\n  · Balancing shall be suspended when pack current > 5 A",
+      "function_name": "Cell Balancing",
+      "supplementary_info": "Function: Cell Balancing\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation"
     },
     {
       "requirement_key": "REQ-BMS-CUR-005",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["timing"],
-      "rationale": "SCD latch persistence across power cycles: tests non-volatile state semantics with missing diagnostic-clear timing."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "SCD latch persistence across power cycles: tests non-volatile state semantics with missing diagnostic-clear timing.",
+      "description": "While BMS_SCD_Flag = 1:\n  · BMS_SCD_Latch := 1 (persistent across power cycles)\n  · BMS_SCD_Latch shall only clear via diagnostic command\n  · HV contactor closure shall be prohibited while latched",
+      "function_name": "Current Management",
+      "supplementary_info": "Function: Current Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection"
     },
     {
       "requirement_key": "REQ-BMS-ISO-003",
       "evaluation_bucket": "missing_information_traps",
-      "expected_missing_categories": ["timing"],
-      "rationale": "HVIL hardware interlock interrupt: tests a physically distinct detection mechanism (loop continuity vs. resistance measurement)."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "HVIL hardware interlock interrupt: tests a physically distinct detection mechanism (loop continuity vs. resistance measurement).",
+      "description": "The BMS shall monitor the HV interlock loop continuously.\nIF  HVIL circuit is interrupted\nTHEN  BMS_HVILFault_Flag := 1\n  · All HV contactor closure prohibited",
+      "function_name": "Insulation & HVIL",
+      "supplementary_info": "Function: Insulation & HVIL\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring\nContext: The HV interlock loop (HVIL) provides a hardware-based detection path for connector disconnection or harness damage. When the circuit is interrupted, the system must immediately isolate the HV system to prevent exposure to live terminals:\n- BMS_HVILFault_Flag = 1: HVIL circuit interrupted\n- Response: all contactors open within 100 ms, BMS_SystemState = SafeState"
     },
     {
       "requirement_key": "REQ-BMS-THM-007",
       "evaluation_bucket": "multi_branch_and_multi_mode_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes.",
+      "description": "IF  BMS_TempImbalance_Flag = 1 AND (BMS_CellOT_Flag = 1 OR BMS_CellOT_L2_Flag = 1)\nTHEN\n  · Cooling request shall prioritise the hottest zone\n  · Discharge power shall be limited to the lowest permitted level among all active thermal faults",
+      "function_name": "Thermal Management",
+      "supplementary_info": "Function: Thermal Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance"
     },
     {
       "requirement_key": "REQ-BMS-CHG-001",
       "evaluation_bucket": "multi_branch_and_multi_mode_cases",
-      "expected_missing_categories": ["observation"],
-      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+      "expected_missing_categories": [
+        "observation"
+      ],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes.",
+      "description": "Upon charger connection detection (CP/PP or CC signal):\n  · Verify all safety preconditions\n  · IF all preconditions satisfied\n    THEN BMS_ChargeReady_Flag := 1\n  · ELSE BMS_ChargeReady_Flag := 0, report reason on CAN",
+      "function_name": "Charge Management",
+      "supplementary_info": "Function: Charge Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation\nContext: Charge initiation is gated by a set of safety preconditions verified after charger connection. The BMS signals readiness on CAN once all preconditions are satisfied. If any precondition is not met, the reason is reported on CAN for diagnostic and HMI purposes:\n- BMS_ChargeReady_Flag = 1: charger detected, no active faults, temperature in range, pack voltage in range\n- Preconditions checked: active faults (sections 1-8), temperature limits (section 3), OVP state (section 1), undervoltage (section 8)"
     },
     {
       "requirement_key": "REQ-BMS-CHG-004",
       "evaluation_bucket": "multi_branch_and_multi_mode_cases",
-      "expected_missing_categories": ["state", "observation"],
-      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+      "expected_missing_categories": [
+        "state",
+        "observation"
+      ],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes.",
+      "description": "A charge session shall be terminated on any of the following conditions:\n  · BMS_ChargeComplete_Flag = 1\n  · BMS_ChargeTerm_Req = 1 (from section 1 overvoltage)\n  · Any active fault requiring contactor open (sections 1-8)\n  · Charger disconnected",
+      "function_name": "Charge Management",
+      "supplementary_info": "Function: Charge Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination"
     },
     {
       "requirement_key": "REQ-BMS-STM-004",
       "evaluation_bucket": "multi_branch_and_multi_mode_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Verify LLM#1 splits case intents without merging independent branches, modes, or outcomes.",
+      "description": "IF  DC bus voltage >= 90 % of pack voltage within precharge timeout\nTHEN\n  · Close positive main contactor\n  · Disable precharge circuit\n  · BMS_SystemState := HV_Active\nELSE\n  · Abort HV activation\n  · BMS_SystemState := HV_Failure\n  · BMS_PrechargeFault_Flag := 1",
+      "function_name": "BMS State Machine",
+      "supplementary_info": "Function: BMS State Machine\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling > 13 BMS State Machine > 13.1 Power-Up and Initialization > 13.2 HV Activation"
     },
     {
       "requirement_key": "REQ-BMS-OVP-004",
       "evaluation_bucket": "state_observation_and_diagnostic_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs.",
+      "description": "The following data shall be stored in the fault record upon BMS_CellOV_Flag = 1:\n  · Peak cell voltage and affected cell ID\n  · Pack temperature at time of fault\n  · Event timestamp",
+      "function_name": "Overvoltage Protection",
+      "supplementary_info": "Function: Overvoltage Protection\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation"
     },
     {
       "requirement_key": "REQ-BMS-BAL-003",
       "evaluation_bucket": "state_observation_and_diagnostic_cases",
-      "expected_missing_categories": ["observation"],
-      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+      "expected_missing_categories": [
+        "observation"
+      ],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs.",
+      "description": "The following data shall be logged for each balancing event:\n  · Balancing start and end timestamps\n  · Cells balanced and discharge duration per cell\n  · Cell voltage delta before and after balancing",
+      "function_name": "Cell Balancing",
+      "supplementary_info": "Function: Cell Balancing\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation"
     },
     {
       "requirement_key": "REQ-BMS-FLT-001",
       "evaluation_bucket": "state_observation_and_diagnostic_cases",
-      "expected_missing_categories": ["timing"],
-      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+      "expected_missing_categories": [
+        "timing"
+      ],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs.",
+      "description": "IF  unrecoverable internal fault detected\nTHEN\n  · Transition to SafeState\n  · Open all contactors\n  · BMS_Fault_Latch := 1\n  · Broadcast fault status on CAN",
+      "function_name": "Fault Management",
+      "supplementary_info": "Function: Fault Management\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling\nContext: Unrecoverable internal faults represent failures from which the BMS cannot safely continue normal operation. These include hardware integrity failures and critical sensor path loss. Recovery from this state requires a power cycle, and the fault code is retained for diagnostic readout:\n- Memory error (ECC uncorrectable), critical sensor failure, watchdog timeout\n- Response: SafeState, all contactors open, BMS_Fault_Latch = 1, power cycle required"
     },
     {
       "requirement_key": "REQ-BMS-STM-006",
       "evaluation_bucket": "state_observation_and_diagnostic_cases",
-      "expected_missing_categories": ["state", "timing"],
-      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs."
+      "expected_missing_categories": [
+        "state",
+        "timing"
+      ],
+      "rationale": "Verify extraction and use of BMS states, DTCs, logged records, CAN messages, fault records, and observable diagnostic outputs.",
+      "description": "Upon VCU_HVDisconnect_Req or critical fault:\n  · Open both main contactors\n  · Discharge DC link capacitance\n  · BMS_SystemState := HV_Deactivating\n  · THEN Standby or SafeState as appropriate",
+      "function_name": "BMS State Machine",
+      "supplementary_info": "Function: BMS State Machine\nSection: 1 Overvoltage Protection > 1.1 Detection and Confirmation > 1.2 Warning and Derating > 1.3 Severe Fault and Recovery > 2 Current Management > 2.1 Overcurrent Detection > 2.2 Short Circuit Detection > 2.3 Current Sensor Fault > 3 Thermal Management > 3.1 Over-Temperature Protection > 3.2 Under-Temperature Protection > 3.3 Temperature Imbalance > 4 SOC/SOH Estimation > 4.1 Low SOC Monitoring > 4.2 SOH Degradation Monitoring > 5 Cell Balancing > 5.1 Balancing Detection and Activation > 6 Insulation and HVIL > 6.1 Insulation Resistance Monitoring > 6.2 HV Interlock Monitoring > 6.3 HV Leakage Detection > 7 Communication and Diagnostics > 7.1 CAN Bus Fault > 7.2 VCU Heartbeat Monitoring > 8 Undervoltage Protection > 8.1 Detection and Response > 9 Charge Management > 9.1 Charge Initiation > 9.2 Charge Termination > 10 Pack Voltage Protection > 10.1 Pack Voltage Monitoring > 11 Degradation Monitoring > 11.1 Cell Degradation Detection > 12 Fault Management > 12.1 Unrecoverable Fault Handling > 13 BMS State Machine > 13.1 Power-Up and Initialization > 13.2 HV Activation > 13.3 HV Deactivation and Sleep\nContext: HV deactivation is triggered by normal shutdown requests or fault conditions from any protection function (sections 1-12). After contactors open and the DC link discharges, the system may enter low-power sleep mode to conserve quiescent current while maintaining wake-up capability:\n- Deactivation: open contactors, discharge DC link, transition through HV_Deactivating to Standby or SafeState\n- Sleep entry: Standby with no CAN activity for configurable timeout\n- Sleep exit: CAN activity or wake pin assertion"
     }
   ]
 }

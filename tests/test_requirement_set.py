@@ -41,6 +41,7 @@ def _entry(key: str, bucket: str = "test", cats: list[str] | None = None) -> dic
         "evaluation_bucket": bucket,
         "expected_missing_categories": cats if cats is not None else [],
         "rationale": "test rationale",
+        "description": "Test requirement description for " + key,
     }
 
 

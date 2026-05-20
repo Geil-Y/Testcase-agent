@@ -144,11 +144,14 @@ Use this for one-shot measurement without modifying prompts.
 2. Run `generate_report()` on the round directory.
 3. Run `generate_round_html()` on the round directory if individual case
    browsing is needed.
-4. Optionally write `manual_review_scores.json` and rerun `generate_report()`.
+4. Optionally run AI evaluation (produces `deepseek_evaluation.json`, `chatgpt_evaluation.json`):
+   `python -m optimization.cli evaluate --round-dir <round_dir>`
+5. Optionally write `manual_review_scores.json` and rerun `generate_report()`.
+6. `hardrule_evaluation.json` is auto-saved after hard-rule evaluation completes.
 
 ```powershell
-python -c "from pathlib import Path; from optimization.generate_report import generate_report; generate_report(Path('<round_dir>'), 1, max_rounds=1)"
 python -c "from pathlib import Path; from optimization.generate_case_html import generate_round_html; generate_round_html(Path('<round_dir>'), 1)"
+python -m optimization.cli evaluate --round-dir <round_dir>
 ```
 
 ### Optimization Run
@@ -158,16 +161,21 @@ Use this for prompt changes.
 1. Choose checklist version and optimization goal for the run name.
 2. Generate cases, normally with the full Prompt Evaluation Set for acceptance
    signal.
-3. Generate `evaluation_report.html` and optionally `cases_report.html`.
-4. If using Manual Review Scores, write `manual_review_scores.json` and rerun
+3. Generate `cases_report.html` (the unified main report). Optionally also generate `evaluation_report.html`.
+4. Run AI evaluation to produce `deepseek_evaluation.json` and `chatgpt_evaluation.json`:
+   `python -m optimization.cli evaluate --round-dir <round_dir>`
+   `hardrule_evaluation.json` is auto-saved after hard-rule evaluation completes.
+5. If using Manual Review Scores, write `manual_review_scores.json` and rerun
    `generate_report()`.
-5. Diagnose the lowest-quality cases before editing prompts.
-6. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output
+6. Diagnose the lowest-quality cases before editing prompts.
+7. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output
    format.
-7. Repeat for the next round.
+8. Repeat for the next round.
 
-Acceptance is based on Manual Review Scores when available. Without Manual
-Review Scores, use automated checklist pass rate as the fallback signal.
+Acceptance signal priority:
+1. Manual Review Scores (when available)
+2. AI Review Scores (`deepseek_evaluation.json`, `chatgpt_evaluation.json`, rendered in `cases_report.html`)
+3. Automated checklist pass rate (hard-rule fallback)
 
 ## Related Docs
 

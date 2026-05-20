@@ -25,33 +25,52 @@ The current evaluator and workflow are documented in
 
 When reading a report, separate:
 
-- Automated checklist failures.
+- Automated checklist failures (hard-rule evaluator).
+- AI Review Scores (`deepseek_evaluation.json`, `chatgpt_evaluation.json`, rendered in `cases_report.html`) — semantic judgments by DeepSeek and ChatGPT against checklist_v2.md.
 - Missing Information Hard Gates.
 - Manual Review Scores, when present.
 - Sanitizer provenance in `generated_cases.json`.
 
 Manual Review Scores are the preferred acceptance signal when available.
-Without them, use automated checklist pass rate as the fallback signal.
+Next preference is AI Review Scores (semantic, covers items hard rules cannot).
+Without either, use automated checklist pass rate as the fallback signal.
+
+### AI Review vs Hard-Rule
+
+The `cases_report.html` compares hard-rule, DeepSeek, and ChatGPT scores per case
+with evaluator badge cards. Key differences to watch:
+
+- Items where AI is significantly stricter (Δ < -5%): hard rules may be missing
+  semantic violations (e.g., generic titles, vague expected results).
+- Items where AI is significantly looser (Δ > +5%): AI may be lenient on
+  mechanical rules (e.g., word count checks).
+- AI covers cross-case items (5.2.x) that hard rules skip entirely.
+- AI notes provide concrete reasons for each fail, useful for diagnosis.
 
 ## Manual Review Scoring
 
-Score each generated case on four dimensions from 1 to 5:
+Score on 8 dimensions, 1-5 scale. `coverage_value` is scored once per
+requirement over the full generated case set; the other seven dimensions
+are scored per case.
 
 | Dimension | Weight | Score high when... | Score low when... |
 | --- | ---: | --- | --- |
-| Executability | 20% | A HIL engineer can run the procedure without rewriting it | Steps are vague or require rewriting |
-| Observability | 20% | Expected results are concrete and judgeable from BMS outputs | Expected results are vague or read-only |
-| Coverage Value | 20% | The case verifies meaningful requirement behavior or risk | The case is trivial, redundant, or off-target |
-| Missing Information Detection | 40% | Missing requirement semantics are marked with `[NEEDS REVIEW]` | The case invents missing values or behavior |
+| Requirement Alignment | 20% | Case clearly addresses the requirement's intent and scope | Case is off-target, misinterprets, or addresses a different concern |
+| Information Integrity | 20% | Missing semantics are correctly marked with `[NEEDS REVIEW]`; no invented values | Case invents missing signal, threshold, timing, state, or observation |
+| Executability | 15% | A HIL engineer can run the procedure without rewriting it | Steps are vague or require rewriting |
+| Observability | 15% | Expected results are concrete and judgeable from BMS outputs | Expected results are vague or read-only |
+| Pass/Fail Clarity | 10% | Pass/fail criteria are explicit and unambiguous | Criteria are implied, fuzzy, or missing |
+| Coverage Value | 10% | The requirement-level case set verifies meaningful behavior or risk | The cases are trivial, redundant, or off-target |
+| State & Environment | 5% | Initial state and environment setup are explicit and complete | Preconditions lack necessary state/bench details |
+| Automation Readiness | 5% | Steps are atomic, well-structured, and directly automatable | Steps are narrative or require human interpretation |
 
-Hard gates:
+Hard gates (implemented by shared evaluator in `optimization/evaluator.py`):
 
-- `missing_information_detection < 3` makes the case unacceptable.
-- A case that should contain `[NEEDS REVIEW]` but does not is unacceptable.
+- `information_integrity < 3` makes the case unacceptable.
+- A case that should contain `[NEEDS REVIEW]` but does not is unacceptable (3.2.1).
 - A case that invents missing signal, threshold, timing, state, or observation
-  semantics is unacceptable.
-- Unnecessary `[NEEDS REVIEW]` on a complete requirement is a warning unless it
-  blocks executability.
+  semantics is unacceptable (3.2.2).
+- Unnecessary `[NEEDS REVIEW]` on a complete requirement is a warning (3.2.3).
 
 ## Diagnosis Loop
 

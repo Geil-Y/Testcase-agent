@@ -25,8 +25,9 @@ Ask only the questions needed for the selected mode:
 1. Eval-only or optimization mode?
 2. Which Excel file should be used?
 3. Random exploration or fixed Prompt Evaluation Set?
-4. Should Manual Review Scores be produced?
-5. For optimization mode: checklist version and short goal name.
+4. Should AI Review Scores be produced? (DeepSeek evaluates each requirement group against checklist_v2.md)
+5. Should Manual Review Scores be produced?
+6. For optimization mode: checklist version and short goal name.
 
 Use `docs/optimization-workflow.md` for the exact commands and selection
 semantics.
@@ -35,8 +36,9 @@ semantics.
 
 - Do not create a branch.
 - Do not edit prompt files.
-- Generate `evaluation_report.html`.
-- Generate `cases_report.html` when the user needs to inspect cases.
+- Generate `cases_report.html` (the unified main report combining all evaluators).
+- Optionally generate `evaluation_report.html` for checklist/hard-gate summary.
+- If AI Review Scores are requested, run `python -m optimization.cli evaluate --round-dir <round_dir>`.
 - If Manual Review Scores are requested, write `manual_review_scores.json` and
   rerun `generate_report()`.
 
@@ -48,8 +50,10 @@ semantics.
   failures.
 - Prefer fixing the lowest-quality cases from Manual Review Scores when
   available.
-- If Manual Review Scores are not available, use automated checklist pass rate
-  as the fallback signal.
+- If Manual Review Scores are not available, prefer AI Review Scores
+  (in `cases_report.html`) as the signal.
+- If neither is available, use automated checklist pass rate as the fallback
+  signal.
 - Keep each round focused; do not change more than a few prompt concerns in one
   round.
 

@@ -209,15 +209,42 @@ def validate_requirement_set(data: dict, path: str) -> None:
                 f"Allowed: {sorted(_VALID_CATEGORIES)}"
             )
 
+        # Validate inline content (only required for self-contained sets)
+        desc = entry.get("description", "")
+        if not isinstance(desc, str) or not desc.strip():
+            raise ValueError(
+                f"Entry '{key}' in '{name}' is missing 'description'. "
+                f"Requirement sets must be self-contained with inline content."
+            )
+
+
+def build_requirements_from_set(req_set_data: dict) -> list[RequirementInput]:
+    """Build RequirementInput list directly from a self-contained requirement set.
+
+    Each entry must have: requirement_key, description.
+    Optional: function_name, supplementary_info.
+    """
+    selected: list[RequirementInput] = []
+    for entry in req_set_data["entries"]:
+        selected.append(RequirementInput(
+            requirement_key=entry["requirement_key"],
+            description=entry["description"],
+            function_name=entry.get("function_name", ""),
+            supplementary_info=entry.get("supplementary_info", ""),
+        ))
+    return selected
+
 
 def select_by_requirement_set(
     all_inputs: list[RequirementInput],
     req_set_data: dict,
 ) -> list[RequirementInput]:
-    """Select and order RequirementInputs by a requirement set.
+    """Select and order RequirementInputs by a requirement set from Excel.
 
     Preserves the order in the set. Raises ValueError if any requirement
     key in the set is not found in all_inputs.
+
+    Only used when --excel is provided alongside --requirement-set.
     """
     lookup: dict[str, RequirementInput] = {
         ri.requirement_key: ri for ri in all_inputs
@@ -454,6 +481,17 @@ def run_batch(
         encoding="utf-8",
     )
 
+    # Save hard-rule evaluation
+    try:
+        from optimization.evaluator import evaluate_generated_cases, save_evaluation_result
+        with open(cases_path, encoding="utf-8") as f:
+            gen_data = json.load(f)
+        hr_result = evaluate_generated_cases(gen_data)
+        save_evaluation_result(hr_result, "hardrule", output_dir)
+        print(f"Hard-rule evaluation saved ({hr_result.case_pass_rate}%)")
+    except Exception as exc:
+        print(f"Hard-rule evaluation save failed: {exc}")
+
     print(f"\nDone. {len(requirements)} requirements → {total_cases} cases, {len(errors)} errors")
     print(f"Output: {output_dir}")
 
@@ -466,7 +504,7 @@ def main():
 
     # run command
     run_parser = sub.add_parser("run", help="Generate cases for sampled requirements")
-    run_parser.add_argument("--excel", required=True, help="Path to Excel requirements file")
+    run_parser.add_argument("--excel", default=None, help="Path to Excel requirements file (optional if --requirement-set provides inline content)")
     run_parser.add_argument("--output-dir", required=True, help="Output directory for this round")
     run_parser.add_argument("--sample", type=int, default=20, help="Number of requirements to sample (default: 20, ignored with --requirement-set)")
     run_parser.add_argument("--seed", type=int, default=None, help="Random seed for sampling (for reproducibility)")
@@ -475,28 +513,24 @@ def main():
     run_parser.add_argument("--desc-col", default="Requirement Description")
     run_parser.add_argument("--type-col", default="Type")
     run_parser.add_argument("--func-col", default="function")
+    run_parser.add_argument("--limit", type=int, default=None, help="Limit to first N requirements (for quick testing, works with --requirement-set)")
     run_parser.add_argument("--no-sanitize", action="store_true", help="Disable post-processing that replaces invented numeric values with [NEEDS REVIEW] (sanitize is ON by default)")
+
+    # evaluate command
+    eval_parser = sub.add_parser("evaluate", help="Run AI evaluation against checklist_v2.md")
+    eval_parser.add_argument("--round-dir", required=True, help="Path to a round directory containing generated_cases.json")
+    eval_parser.add_argument("--model", default=None, help="Model ID (default: from ANTHROPIC_MODEL env or deepseek-v4-flash[1m])")
+    eval_parser.add_argument("--delay", type=float, default=0.5, help="Seconds between API calls (default: 0.5)")
+    eval_parser.add_argument("--report", action="store_true", help="Regenerate cases_report.html from existing evaluation files")
 
     args = parser.parse_args()
 
     if args.command == "run":
-        print(f"Reading: {args.excel}")
-        rows = read_excel(
-            args.excel,
-            requirement_key_col=args.key_col,
-            description_col=args.desc_col,
-            type_col=args.type_col,
-            function_name_col=args.func_col,
-        )
-        all_inputs = build_requirement_inputs(rows)
-        print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
-
         requirement_set_data: dict | None = None
 
         if args.requirement_set:
             set_path = args.requirement_set
             if not Path(set_path).is_absolute():
-                # Resolve relative to project root (where the CLI is invoked from)
                 set_path = str(_PROJECT_ROOT / set_path)
             requirement_set_data = load_requirement_set(set_path)
             requirement_set_data["_source_path"] = set_path
@@ -504,11 +538,46 @@ def main():
             count = len(requirement_set_data["entries"])
             print(f"Using requirement set: {name} ({count} entries)")
 
-            selected = select_by_requirement_set(all_inputs, requirement_set_data)
-            print(f"Matched {len(selected)}/{count} requirements from set")
-        else:
+            # Prefer inline content from self-contained sets
+            if requirement_set_data["entries"][0].get("description", "").strip():
+                selected = build_requirements_from_set(requirement_set_data)
+                if args.limit is not None and args.limit < len(selected):
+                    selected = selected[:args.limit]
+                    print(f"Loaded {len(selected)}/{count} requirements from set (limited)")
+                else:
+                    print(f"Loaded {len(selected)} requirements from set (inline content)")
+            elif args.excel:
+                # Fallback: match by key from Excel
+                rows = read_excel(
+                    args.excel,
+                    requirement_key_col=args.key_col,
+                    description_col=args.desc_col,
+                    type_col=args.type_col,
+                    function_name_col=args.func_col,
+                )
+                all_inputs = build_requirement_inputs(rows)
+                selected = select_by_requirement_set(all_inputs, requirement_set_data)
+                print(f"Matched {len(selected)}/{count} requirements from Excel")
+            else:
+                parser.error(
+                    "Requirement set entries lack inline 'description'. "
+                    "Provide --excel to pull requirement content from an Excel file."
+                )
+        elif args.excel:
+            print(f"Reading: {args.excel}")
+            rows = read_excel(
+                args.excel,
+                requirement_key_col=args.key_col,
+                description_col=args.desc_col,
+                type_col=args.type_col,
+                function_name_col=args.func_col,
+            )
+            all_inputs = build_requirement_inputs(rows)
+            print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
             selected = sample_requirements(all_inputs, args.sample, args.seed)
             print(f"Sampled {len(selected)} requirements (seed={args.seed})")
+        else:
+            parser.error("Either --excel or --requirement-set must be provided.")
 
         run_batch(
             selected,
@@ -517,8 +586,21 @@ def main():
             requirement_set_data=requirement_set_data,
         )
 
-    else:
-        parser.print_help()
+    elif args.command == "evaluate":
+        round_dir = Path(args.round_dir)
+        if not round_dir.is_absolute():
+            round_dir = _PROJECT_ROOT / round_dir
+
+        if args.report:
+            from optimization.generate_case_html import generate_round_html
+            generate_round_html(round_dir, 1)
+        else:
+            from optimization.claude_evaluator import DEFAULT_MODEL, run_full_evaluation
+            run_full_evaluation(
+                round_dir,
+                model=args.model or DEFAULT_MODEL,
+                delay=args.delay,
+            )
 
 
 if __name__ == "__main__":
