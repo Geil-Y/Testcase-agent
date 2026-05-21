@@ -101,13 +101,15 @@ When `--requirement-set` is provided:
 - `generated_cases.json` is enriched with `evaluation_bucket`, `expected_missing_categories`, and `requirement_set_note`.
 - `summary.json` records `requirement_set_name`, `requirement_set_path`, and `total_requirement_set_entries`.
 
-## Sanitization
+## Post-Generation Quality Loop
 
-Sanitization is ON by default for `optimization.cli run`.
+The batch runner applies three post-generation quality steps per case:
 
-- Use `--no-sanitize` to disable it.
-- Sanitization replaces invented numeric values with `[NEEDS REVIEW]`.
-- Each case in `generated_cases.json` records case-level provenance: `sanitize.enabled`, `sanitize.replacement_count`, and `sanitize.replacements`.
+1. **Self-check** — LLM reviews the case for invented signal names / DTCs / state names not in the known lists, replacing inventions with `[NEEDS REVIEW]`.
+2. **Numeric sanitization** — deterministic post-processing replaces unsupported concrete numeric values with `[NEEDS REVIEW]`. Only the selected requirement or an explicitly accepted test basis authorizes concrete values; supplementary context does not.
+3. **Retry loop** — hard-gate rules (from `evaluate_case()`) are run against the case. Failed hard gates trigger regeneration with the failure reason as `review_comment`, up to 2 retries. Regenerated cases pass through self-check and numeric sanitization again before re-evaluation. Exhausted retries are recorded in the case output.
+
+Each case in `generated_cases.json` records `sanitize.*` provenance and `retry.attempts`, `retry.exhausted`, `retry.failures`, and `retry.self_check_changed`.
 
 ## Evaluation Architecture
 

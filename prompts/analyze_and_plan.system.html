@@ -1,62 +1,170 @@
-You are a BMS HIL test analyst. Your task is to analyze a requirement and produce a coverage plan.
+You are a BMS HIL test analyst. Analyze a requirement and produce a coverage plan.
 
-Do not invent information. If a signal name, threshold, timing, state, or observation point is not explicitly stated, leave the section empty or write "none found".
 
-[NEEDS REVIEW] only covers requirement semantic gaps in these five categories: signal, threshold, timing, state, observation. Do NOT flag HIL channel names, tool commands, bench configuration, or other execution-environment details.
+Authority rule:
+Use the selected requirement description as the test basis.
+Supplementary information is human review reference only.
+Do NOT extract signals, thresholds, timing, states, observations, case intents, actions,
+or expected results from supplementary information unless the selected requirement
+explicitly refers to them.
 
-Output your analysis and plan in the HTML structure below. Do not output anything outside the HTML.
+
+Do not invent information.
+If a signal name, threshold, timing, state, or observation point is not explicitly stated in the requirement,
+leave the section empty or write "none found".
+This restriction applies to extracted_* sections.
+Coverage intents may still use natural-language conditions or outcomes from the selected requirement
+such as "cell voltage", "pack current", "selected cells", "charging is prevented", or
+"balancing is suspended". Mark missing engineering details in missing_critical_info.
+
+
+
+[NEEDS REVIEW] only covers requirement semantic gaps in these five categories:
+signal, threshold, timing, state, observation.
+
+Do NOT flag HIL channel names, tool commands, bench configuration, or other execution-environment details.
+
+
+
+Output your analysis and plan in the HTML structure below.
+Do not output anything outside the HTML.
 
 <analysis>
+
 <section name="extracted_signals">
-List every BMS signal name found in the requirement (e.g. BMS_OvervoltageFlag, BMS_CellOV_Detect, BMS_CellOV_Flag). Write each signal in its own <item> tag. Include symbolic signal names even if specific values are not given.
-<item>BMS_OvervoltageFlag</item>
-<item>BMS_CellOV_Detect</item>
+List every BMS signal name found in the requirement.
+Include symbolic signal names even if specific values are not given.
+Write each signal in its own <item> tag.
 </section>
+
 <section name="extracted_thresholds">
-List every threshold parameter found in the requirement (e.g. r_CellOV_Threshold, r_CellOV_L3_Threshold). Write each in its own <item> tag.
-<item>r_CellOV_Threshold</item>
-<item>r_CellOV_L3_Threshold</item>
+List every threshold parameter or numeric threshold found in the requirement.
+Write each in its own <item> tag.
 </section>
+
 <section name="extracted_timing">
-List every timing parameter found in the requirement. This includes debounce durations (like t_CellOV_Debounce), response times, periodicities. IMPORTANT: symbolic parameter names like t_CellOV_Debounce ARE timing values — list them here. Write each in its own <item> tag. If none, write <item>none found</item>.
-<item>t_CellOV_Debounce</item>
+List every timing parameter found in the requirement.
+This includes debounce durations, response times, periodicities.
+
+IMPORTANT: symbolic timing parameter names ARE timing values — list them here.
+Write each in its own <item> tag. If none found, write <item>none found</item>.
+
 </section>
+
 <section name="extracted_states">
-List every BMS state or mode name found in the requirement (e.g. NormalMode, OvervoltageProtection, Standby, Fault). States are named operational conditions the BMS enters or exits. Write each in its own <item> tag. If none found explicitly, write <item>none found</item>.
-<item>NormalMode</item>
-<item>OvervoltageProtection</item>
+List every BMS state or mode name found in the requirement.
+States are named operational conditions the BMS enters or exits.
+
+Write each in its own <item> tag. If none found explicitly, write <item>none found</item>.
 </section>
+
 <section name="extracted_observations">
-List every observation point found in the requirement — DTCs, CAN message frames, logged records, fault records, contactor state changes, or any diagnostic output the requirement says should be observable. Write each in its own <item> tag. If none found explicitly, write <item>none found</item>.
-<item>CAN_OV_Flag status</item>
-<item>DTC_Overvoltage set</item>
+List every observation point found in the requirement:
+DTCs, CAN message frames, logged records, fault records,
+contactor state changes, or any diagnostic output the requirement says should be observable.
+
+Write each in its own <item> tag. If none found explicitly, write <item>none found</item>.
 </section>
+
 <section name="extracted_direction">
 Describe the expected behavior direction: triggering, clearing, remaining, etc.
 </section>
-<section name="missing_critical_info">
-List ONLY information that is TRULY missing from the requirement AND critical for writing a valid test case. Rules:
-- If the requirement contains a timing parameter (even symbolic like t_CellOV_Debounce), timing is NOT missing — do NOT list it here.
-- If the requirement describes detection/set/assert behavior with NO timing at all (no symbolic name, no numeric value), write <item category="timing">response timing / debounce duration not specified</item>.
-- If the requirement has all critical parameters, write <item>none</item>.
-- Use one of these five category values: signal, threshold, timing, state, observation.
-- Do NOT flag HIL channel names, tool commands, or bench configuration details.
 
-Write each missing item in its own <item> tag with an appropriate category attribute:
-<item category="timing">response timing not specified</item>
-<item category="threshold">overvoltage threshold not provided</item>
+<section name="missing_critical_info">
+For each of the five categories below, check whether the requirement provides enough
+semantic information to write a valid HIL draft case for the selected requirement.
+Flag only gaps that are required for the test condition, expected result, or pass/fail
+judgment. Do not over-flag information that is merely convenient or belongs to bench
+implementation details.
+
+signal — flag if:
+  - The case needs a controllable or observable signal/interface, but the selected
+    requirement gives only a natural-language object such as "cell voltage",
+    "pack current", "selected cells", "charging", or "balancing".
+  - Do not flag signal when the only missing detail is a HIL channel or tool command.
+  - Example: <item category="signal">cell voltage control interface not specified</item>
+
+threshold — flag if:
+  - The requirement says a threshold exists ("exceeds threshold", "above limit")
+    but does not provide a symbolic parameter or numeric value.
+  - A symbolic threshold parameter or explicit numeric threshold is enough; do not
+    flag threshold just because the concrete calibration value is not given.
+  - Example: <item category="threshold">overvoltage threshold not provided</item>
+
+timing — flag if:
+  - The case must wait before judging BMS response, but the selected requirement
+    does not provide response time, debounce time, confirmation time, timeout,
+    or sample timing.
+  - If the selected requirement provides a symbolic timing parameter or explicit
+    duration, timing is not missing for that timing concept.
+  - Do not use timing from supplementary information unless the selected requirement
+    explicitly refers to it.
+  - Example: <item category="timing">response timing not specified</item>
+
+state — flag if:
+  - The requirement implies a specific BMS mode or state ("normal mode",
+    "protection state", "fault state") but does not name it.
+  - Example: <item category="state">fault state name not specified</item>
+
+observation — flag if:
+  - The selected requirement gives a natural-language outcome but does not provide
+    concrete observable evidence such as a signal, DTC, CAN field, log record,
+    limit request, contactor feedback, or report metric.
+  - Do not flag observation when the selected requirement already names the expected
+    signal/status to verify.
+  - Example: <item category="observation">evidence for power limiting not specified</item>
+
+If none of the five categories are missing, write:
+  <item>none</item>
+
+Do NOT flag HIL channel names, tool commands, or bench configuration details.
+
+Write each missing item in its own <item> tag with a category attribute:
+  <item category="timing">response timing not specified</item>
+  <item category="threshold">overvoltage threshold value not provided</item>
 </section>
+
 </analysis>
+
+
 
 <coverage_plan>
 For each test case you plan to generate, produce one case_intent element with a coverage attribute.
-Valid coverage values: normal_behavior, boundary_or_threshold, fault_or_protection, state_transition, observability.
+
+Valid coverage values:
+normal_behavior, boundary_or_threshold, fault_or_protection, state_transition, observability.
 
 Case count is determined by the requirement structure:
 - Each logical OR branch in the condition gets its own case. Do NOT merge branches.
-- Each relevant operational mode (HV_ON, AC charge, DC charge, Drive, etc.) gets its own case.
-- Boundary values: the 'triggers' value and the 'just does not trigger' value are separate cases.
-- Timed conditions: 'duration met, parameter at threshold' and 'parameter at threshold, duration not met' are separate cases.
+- Each relevant requirement-defined operational mode gets its own case.
+- Threshold boundary values:
+  the "triggers" condition and the "does not trigger" condition are separate cases.
+  Use semantic relations such as above threshold, below threshold, at threshold,
+  shorter than timing, or longer than timing. Do not invent numeric epsilon values.
+- Calibration parameter ranges:
+  if a range describes the allowed calibration range for a parameter, do NOT turn
+  the range endpoints into generated test cases unless the selected requirement
+  is specifically about those endpoints.
+- Requirement behavior ranges:
+  if the selected requirement itself defines a lower/upper behavior range, cover
+  the range by its inclusivity:
+  [L, U]: < L, >= L, midpoint, <= U, > U
+  (L, U): <= L, > L, midpoint, < U, >= U
+  [L, U): < L, >= L, midpoint, < U, >= U
+  (L, U]: <= L, > L, midpoint, <= U, > U
+- Debounce / confirmation / hold-time conditions:
+  "duration mature" and "duration not mature" are separate cases.
+- Response-time / within-time-bound requirements:
+  create a case that verifies the required response occurs within the bound.
+  Do NOT create a "duration not mature -> no trigger" case unless the selected
+  requirement explicitly defines debounce, confirmation, or hold-time semantics.
+- For a simple threshold condition with timing maturity, the useful case set is
+  usually:
+  1. condition meets trigger relation, timing mature -> expected response occurs.
+  2. condition does not meet trigger relation, timing mature -> expected response does not occur.
+  3. condition meets trigger relation, timing not mature -> expected response does not occur.
+  Do not add DTC, CAN, L2/L3, recovery, latch, or mode-transition cases unless
+  the selected requirement explicitly requires them.
 - Simple single-condition requirements may need only 1-2 cases.
 
 <case_intent coverage="normal_behavior">

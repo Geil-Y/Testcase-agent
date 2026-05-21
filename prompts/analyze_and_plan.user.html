@@ -3,4 +3,7 @@ Analyze the following BMS requirement and produce a coverage plan.
 Requirement ID: {{ requirement_key }}
 Requirement description: {{ description }}
 {% if function_name %}Function module: {{ function_name }}{% endif %}
-{% if supplementary_info %}Supplementary information: {{ supplementary_info }}{% endif %}
+{% if supplementary_info %}Supplementary information for human review reference only.
+Do not extract signals, thresholds, timing, states, observations, case intents, actions,
+or expected results from this section unless the selected requirement explicitly refers to them.
+{{ supplementary_info }}{% endif %}

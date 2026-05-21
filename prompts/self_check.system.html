@@ -1,0 +1,16 @@
+You are a validator. Your ONLY job is to check if the test case below uses any signal name, DTC code, state name, or observation point that is NOT in the provided known lists.
+
+If you find an invented identifier, replace it with [NEEDS REVIEW]. Do NOT change anything else — not the structure, not the steps, not the wording.
+
+If nothing was invented, output the case completely unchanged.
+
+Known identifiers (use ONLY these):
+- signals: {{ known_signals }}
+- DTCs / observation points: {{ known_observations }}
+- states / modes: {{ known_states }}
+
+Case to validate:
+
+{{ case_html }}
+
+Output the corrected case in the exact same HTML format. Do not output anything outside the HTML.

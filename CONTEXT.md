@@ -61,14 +61,16 @@ from structured requirements.
   when regenerating the case.
 
 - **Supplementary Info** — a catch-all field holding additional Excel column
-  content (signal names, thresholds, timing, etc.) beyond the core requirement
-  fields. Used alongside `description` as input to LLM#1.
+  content beyond the core requirement fields. It is preserved for human review
+  reference, but it is not generation authority for new test objectives,
+  actions, expected results, identifiers, thresholds, or timing values.
 
-- **Quality Checklist** — a set of 33 evaluation items (6 categories, 28 hard + 5
-  warning) derived from current project prompts and CodeX `case_generation`
-  modules. Used by Claude Code (not the 7B model) to evaluate generated case
-  quality. Items sourced from CodeX are annotated `[CodeX]`. Current version:
-  `optimization_runs/checklist_v2.md`.
+- **Quality Checklist** — a set of 34 evaluation items across 6 categories
+  derived from current project prompts and CodeX `case_generation` modules.
+  Includes hard-gate items that make a case unacceptable and warning items that
+  flag likely issues. Used by Claude Code (not the 7B model) to evaluate
+  generated case quality. Items sourced from CodeX are annotated `[CodeX]`.
+  Current version: `optimization_runs/checklist_v2.md`.
 
 - **Prompt Evaluation Set** — a stable representative set of source
   requirements used to compare prompt changes with the same inputs and review

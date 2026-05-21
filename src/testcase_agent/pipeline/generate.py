@@ -6,6 +6,8 @@ from ..parser.html_parser import AnalysisResult, GeneratedCase, parse_analysis, 
 from ..prompts import render_prompt
 from ..provider.base import LlmProvider
 
+_GENERATION_SUPPLEMENTARY_INFO = ""
+
 
 @dataclass
 class RequirementInput:
@@ -31,7 +33,7 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
         requirement_key=requirement.requirement_key,
         description=requirement.description,
         function_name=requirement.function_name,
-        supplementary_info=requirement.supplementary_info,
+        supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
     )
     html1 = provider.complete(sys1, usr1)
     analysis = parse_analysis(html1)
@@ -59,7 +61,7 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
             "generate_case",
             requirement_key=requirement.requirement_key,
             description=requirement.description,
-            supplementary_info=requirement.supplementary_info,
+            supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
             coverage_dimension=intent.coverage,
             case_intent=intent.description,
             review_comment="",
@@ -99,7 +101,7 @@ def regenerate_case(
         "generate_case",
         requirement_key=requirement.requirement_key,
         description=requirement.description,
-        supplementary_info=requirement.supplementary_info,
+        supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
         coverage_dimension=coverage_dimension,
         case_intent=case_intent,
         review_comment=review_comment,

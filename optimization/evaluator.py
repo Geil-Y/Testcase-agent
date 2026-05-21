@@ -18,35 +18,93 @@ CHECKLIST = {
     "1.1.2": ("objective 不为空", "结构完整性"),
     "1.1.3": ("precondition 不为空", "结构完整性"),
     "1.1.4": ("postcondition 不为空", "结构完整性"),
-    "1.1.5": ("至少1个step且有action", "结构完整性"),
-    "1.1.6": ("related_requirement 存在", "结构完整性"),
-    "2.1.1": ("已知信号名在case中引用", "领域正确性"),
-    "2.1.2": ("不凭空发明标识符", "领域正确性"),
-    "2.2.1": ("不凭空发明数值阈值", "领域正确性"),
-    "2.2.2": ("符号化参数名视为有效值", "领域正确性"),
-    "3.2.1": ("[HARD] 需要signal/threshold/timing/state/observation但case未标[NEEDS REVIEW]", "NEEDS REVIEW规范"),
-    "3.2.2": ("[HARD] action/expected编造需求未提供的signal/threshold/timing/state/observation", "NEEDS REVIEW规范"),
-    "3.2.3": ("[WARNING] 需求语义完整但case添加不必要[NEEDS REVIEW]", "NEEDS REVIEW规范"),
+    "1.1.5": ("至少1个step且有action，且至少一个step有非空expected", "结构完整性"),
+    "1.1.6": ("related_requirement 字段存在且非空", "结构完整性"),
+    "2.1.1": ("已知信号名在case中引用（匹配时忽略标点）", "领域正确性"),
+    "2.1.2": ("不凭空发明当前需求或accepted test basis未提供的标识符", "领域正确性"),
+    "2.2.1": ("不凭空发明当前需求或accepted test basis未提供的数值阈值", "领域正确性"),
+    "2.2.2": ("符号化参数名视为有效值（可用于Set或Wait步骤）", "领域正确性"),
+    "3.2.1": ("[HARD] 需signal/threshold/timing/state/observation但当前需求未提供且case未标[NEEDS REVIEW]", "NEEDS REVIEW规范"),
+    "3.2.2": ("[HARD] action/expected编造当前需求或accepted test basis未提供的signal/threshold/timing/state/observation", "NEEDS REVIEW规范"),
+    "3.2.3": ("[HARD] 需求语义完整但case添加不必要[NEEDS REVIEW]", "NEEDS REVIEW规范"),
     "3.3.1": ("[NEEDS REVIEW]只能放在action/expected，不放在title/objective/precondition/postcondition", "NEEDS REVIEW规范"),
-    "3.3.2": ("timing缺失时[NEEDS REVIEW]应放在Wait action", "NEEDS REVIEW规范"),
-    "3.3.3": ("禁止[NEEDS REVIEW: timing]带category后缀", "NEEDS REVIEW规范"),
-    "4.1.1": ("时序等待与执行动作分两步 [WARNING]", "步骤质量"),
-    "4.1.4": ("action 不包含意图叙述（无 such that / in order to 等）", "步骤质量"),
-    "4.1.5": ("action 不冗长（每条 ≤15 词）", "步骤质量"),
-    "4.2.1": ("至少一个expected具体可观测", "步骤质量"),
+    "3.3.2": ("timing缺失时[NEEDS REVIEW]需单独一条Wait step", "NEEDS REVIEW规范"),
+    "3.3.3": ("[WARNING] [NEEDS REVIEW]不推荐带category后缀", "NEEDS REVIEW规范"),
+    "4.1.1": ("输入刺激建立与BMS响应等待/验证分离", "步骤质量"),
+    "4.1.4": ("action不含意图叙述和观察动词（such that/in order to/check/verify等）", "步骤质量"),
     "4.2.2": ("无模糊expected result", "步骤质量"),
-    "4.2.3": ("无read/check-only expected", "步骤质量"),
-    "4.2.4": ("expected 不冗长（每条 ≤15 词）", "步骤质量"),
-    "5.2.1": ("触发/不触发等价类覆盖", "覆盖维度"),
-    "5.2.2": ("边界值case覆盖", "覆盖维度"),
-    "5.2.3": ("参数/时序正交拆分", "覆盖维度"),
-    "6.1.1": ("所有case统一precondition", "测试工程深度"),
-    "6.1.2": ("所有case统一postcondition", "测试工程深度"),
+    "4.2.3": ("expected不只有read/check/verify等观察动词或空[NEEDS REVIEW]而无期望值", "步骤质量"),
+    "5.1.1": ("normal_behavior的case描述正常功能路径的触发和响应，且不违反阈值/时序边界语义", "覆盖维度"),
+    "5.1.2": ("boundary_or_threshold的case测试阈值边界的触发/不触发行为", "覆盖维度"),
+    "5.1.3": ("fault_or_protection的case测试故障场景和保护响应", "覆盖维度"),
+    "5.1.4": ("state_transition的case测试状态变更", "覆盖维度"),
+    "5.1.5": ("observability的case验证信号/数据可观测性", "覆盖维度"),
+    "5.2.1": ("触发/不触发等价类覆盖 [LLM evaluator]", "覆盖维度"),
+    "5.2.2": ("边界值case覆盖 [LLM evaluator]", "覆盖维度"),
+    "5.2.3": ("参数/时序正交拆分 [LLM evaluator]", "覆盖维度"),
+    "6.1.1": ("所有case统一precondition [LLM evaluator]", "测试工程深度"),
+    "6.1.2": ("所有case统一postcondition [LLM evaluator]", "测试工程深度"),
     "6.1.3": ("setup动作放action非precondition", "测试工程深度"),
     "6.2.1": ("Title描述测试条件和预期行为", "测试工程深度"),
     "6.3.1": ("每个case仅验证一个需求的一个行为", "测试工程深度"),
     "6.3.2": ("不合并多个阈值场景", "测试工程深度"),
 }
+
+
+_CODE_IDENTIFIER_RE = re.compile(r"\b(?:BMS|CAN|DTC)_[A-Za-z0-9_]+\b", re.IGNORECASE)
+_NEEDS_REVIEW_RE = re.compile(r"\[needs review\]", re.IGNORECASE)
+_REQ_ASSIGN_ONE_RE = re.compile(
+    r"\b([A-Za-z_][A-Za-z0-9_]*)\b\s*(?::=|==|=)\s*1\b",
+    re.IGNORECASE,
+)
+_BOUNDARY_VALUE_PATTERN = (
+    r"[A-Za-z_][A-Za-z0-9_]*|"
+    r"\d+(?:\.\d+)?\s*(?:deg\s*C|°C|mV|mA|ms|V|A|s|%)?"
+)
+_INCLUSIVE_RELATION_PATTERNS = [
+    re.compile(rf"(?:>=|=>|≥)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:<=|=<|≤)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+    re.compile(
+        rf"\b(?:at\s+or\s+above|at\s+least|no\s+less\s+than|not\s+less\s+than|"
+        rf"reach(?:es|ed)?)\s+(?P<value>{_BOUNDARY_VALUE_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:at\s+or\s+below|at\s+most|no\s+more\s+than|not\s+greater\s+than|"
+        rf"not\s+higher\s+than)\s+(?P<value>{_BOUNDARY_VALUE_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(rf"(?:达到|不低于|不小于|不高于|不大于)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+]
+_STRICT_RELATION_PATTERNS = [
+    re.compile(rf"(?:>|＞)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+    re.compile(rf"(?:<|＜)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+    re.compile(
+        rf"\b(?:above|greater\s+than|exceeds?|higher\s+than|more\s+than)\s+"
+        rf"(?P<value>{_BOUNDARY_VALUE_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:below|less\s+than|lower\s+than|shorter\s+than|before)\s+"
+        rf"(?P<value>{_BOUNDARY_VALUE_PATTERN})",
+        re.IGNORECASE,
+    ),
+    re.compile(rf"(?:高于|超过|大于|低于|小于|短于|未达到)\s*(?P<value>{_BOUNDARY_VALUE_PATTERN})", re.IGNORECASE),
+]
+_WITHIN_TIME_RE = re.compile(
+    rf"\bwithin\s+(?P<value>{_BOUNDARY_VALUE_PATTERN})|"
+    rf"(?P<cn_value>{_BOUNDARY_VALUE_PATTERN})\s*(?:内|以内|之内)",
+    re.IGNORECASE,
+)
+_SET_ACTION_RE = re.compile(
+    r"^\s*(?:set|change|adjust|apply|inject|force|simulate|command|drive)\b",
+    re.IGNORECASE,
+)
+_UNIT_PATTERN = r"deg\s*C|°C|kOhm|MOhm|mOhm|kΩ|MΩ|mΩ|mV|mA|ms|ohm|Ω|deg|V|A|s|%"
+_NUMERIC_VALUE_RE = re.compile(
+    rf"\d+\.?\d*\s*(?P<unit>{_UNIT_PATTERN})(?!\w)",
+    re.IGNORECASE,
+)
 
 
 @dataclass
@@ -167,10 +225,11 @@ def evaluate_manual_review_hard_gates(
             "Case contains numeric value(s) that appear to invent "
             "missing threshold/timing semantics"
         )
-    if "3.2.3" in warnings:
-        result["warnings"].append(
+    if "3.2.3" in failed:
+        result["unacceptable"] = True
+        result["reasons"].append(
             "Requirement appears semantically complete but case contains "
-            "[NEEDS REVIEW] — penalized but not automatically severe"
+            "unnecessary [NEEDS REVIEW]"
         )
 
     return result
@@ -188,6 +247,216 @@ def _normalize_case_for_manual_gate(entry: Any, generated_case: dict) -> dict:
     }
 
 
+def _normalize_token(text: str) -> str:
+    return re.sub(r"\s+", "", text).lower()
+
+
+def _only_needs_review(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    return not _NEEDS_REVIEW_RE.sub("", stripped).strip(" .:;,-_/")
+
+
+def _unsupported_identifiers(
+    step_text: str,
+    requirement_text: str,
+    accepted_test_basis: str = "",
+) -> list[str]:
+    supported_text = f"{requirement_text} {accepted_test_basis}"
+    supported = {m.group(0).lower() for m in _CODE_IDENTIFIER_RE.finditer(supported_text)}
+    used = {m.group(0) for m in _CODE_IDENTIFIER_RE.finditer(step_text)}
+    return sorted(ident for ident in used if ident.lower() not in supported)
+
+
+def _normalized_unit(unit: str) -> str:
+    return unit.lower().replace(" ", "")
+
+
+def _is_supported_numeric_value(value_text: str, known_text: str) -> bool:
+    if value_text.lower() in known_text:
+        return True
+
+    match = _NUMERIC_VALUE_RE.fullmatch(value_text.strip())
+    if not match:
+        return False
+
+    num_match = re.match(r"\d+\.?\d*", value_text.strip())
+    if not num_match:
+        return False
+
+    value = float(num_match.group(0))
+    unit = _normalized_unit(match.group("unit"))
+
+    for known_match in _NUMERIC_VALUE_RE.finditer(known_text):
+        known_num_match = re.match(r"\d+\.?\d*", known_match.group(0))
+        if not known_num_match:
+            continue
+        known_value = float(known_num_match.group(0))
+        known_unit = _normalized_unit(known_match.group("unit"))
+        if unit == known_unit and known_value > 0:
+            if abs(value - known_value) / known_value <= 0.20:
+                return True
+
+    return False
+
+
+def _has_negative_expectation_for_signal(expected_text: str, signal: str) -> bool:
+    sig = re.escape(signal)
+    patterns = [
+        rf"\b{sig}\b\s*(?:==|:=|=)\s*0\b",
+        rf"\b{sig}\b[^&.;\n]*(?:not\s+set|remains?\s+unset|inactive|not\s+active)",
+    ]
+    return any(re.search(pattern, expected_text, re.IGNORECASE) for pattern in patterns)
+
+
+def _has_positive_expectation_for_signal(expected_text: str, signal: str) -> bool:
+    sig = re.escape(signal)
+    patterns = [
+        rf"\b{sig}\b\s*(?:==|:=|=)\s*1\b",
+        rf"\b{sig}\b[^&.;\n]*(?:set|active|becomes?\s+active|asserted)",
+    ]
+    return any(re.search(pattern, expected_text, re.IGNORECASE) for pattern in patterns)
+
+
+def _value_regex(value: str) -> str:
+    return re.escape(value.strip()).replace(r"\ ", r"\s*")
+
+
+def _extract_trigger_boundaries(requirement_text: str) -> list[tuple[str, bool]]:
+    boundaries: list[tuple[str, bool]] = []
+    for pattern in _INCLUSIVE_RELATION_PATTERNS:
+        for match in pattern.finditer(requirement_text):
+            value = match.groupdict().get("value")
+            if value:
+                boundaries.append((value.strip(), True))
+    for pattern in _STRICT_RELATION_PATTERNS:
+        for match in pattern.finditer(requirement_text):
+            value = match.groupdict().get("value")
+            if value:
+                boundaries.append((value.strip(), False))
+    return boundaries
+
+
+def _action_sets_exact_boundary(action_text: str, boundary_value: str) -> bool:
+    if not action_text.strip() or not boundary_value.strip():
+        return False
+    value = _value_regex(boundary_value)
+    action_lower = action_text.lower()
+    if _normalize_token(boundary_value) not in _normalize_token(action_text):
+        return False
+
+    relation_before_value = [
+        "above", "greater than", "exceeds", "exceed", "higher than", "more than",
+        "below", "less than", "lower than", "shorter than", "before",
+        "at least", "at most", "no less than", "no more than",
+    ]
+    for relation in relation_before_value:
+        if re.search(rf"\b{re.escape(relation)}\s+(?:the\s+)?{value}\b", action_lower, re.IGNORECASE):
+            return False
+    if re.search(rf"(?:>=|<=|>|<|≥|≤|＞|＜)\s*(?:the\s+)?{value}\b", action_text, re.IGNORECASE):
+        return False
+
+    exact_patterns = [
+        rf"\b(?:to|at|exactly|equals?|for|wait(?:\s+for)?|reach(?:es|ed)?)\s+(?:the\s+)?{value}\b",
+        rf"(?:==|=)\s*(?:the\s+)?{value}\b",
+    ]
+    return any(re.search(pattern, action_text, re.IGNORECASE) for pattern in exact_patterns)
+
+
+def _contradicts_trigger_boundary(steps: list[dict], requirement_text: str) -> bool:
+    action_text = " ".join(step.get("action", "") for step in steps)
+    expected_text = " ".join(str(step.get("expected") or "") for step in steps)
+    assigned_signals = {
+        match.group(1)
+        for match in _REQ_ASSIGN_ONE_RE.finditer(requirement_text)
+    }
+    if not assigned_signals:
+        return False
+
+    for boundary_value, inclusive in _extract_trigger_boundaries(requirement_text):
+        if not _action_sets_exact_boundary(action_text, boundary_value):
+            continue
+        for signal in assigned_signals:
+            if inclusive and _has_negative_expectation_for_signal(expected_text, signal):
+                return True
+            if not inclusive and _has_positive_expectation_for_signal(expected_text, signal):
+                return True
+    return False
+
+
+def _action_waits_before_time_bound(action_text: str, bound_value: str) -> bool:
+    if _normalize_token(bound_value) not in _normalize_token(action_text):
+        return False
+    value = _value_regex(bound_value)
+    before_patterns = [
+        rf"\b(?:shorter\s+than|less\s+than|before|prior\s+to|under)\s+(?:the\s+)?{value}\b",
+        rf"(?:<|＜)\s*(?:the\s+)?{value}\b",
+        rf"(?:短于|少于|小于|未达到)\s*(?:the\s+)?{value}\b",
+        rf"{value}\s*(?:前|之前)",
+    ]
+    return any(re.search(pattern, action_text, re.IGNORECASE) for pattern in before_patterns)
+
+
+def _contradicts_response_time_bound(steps: list[dict], requirement_text: str) -> bool:
+    expected_text = " ".join(str(step.get("expected") or "") for step in steps)
+    assigned_signals = {
+        match.group(1)
+        for match in _REQ_ASSIGN_ONE_RE.finditer(requirement_text)
+    }
+    if not assigned_signals:
+        return False
+
+    response_bounds = []
+    for match in _WITHIN_TIME_RE.finditer(requirement_text):
+        value = match.groupdict().get("value") or match.groupdict().get("cn_value")
+        if value:
+            response_bounds.append(value.strip())
+    if not response_bounds:
+        return False
+
+    action_text = " ".join(step.get("action", "") for step in steps)
+    waits_before_bound = any(
+        _action_waits_before_time_bound(action_text, bound)
+        for bound in response_bounds
+    )
+    if not waits_before_bound:
+        return False
+
+    return any(
+        _has_negative_expectation_for_signal(expected_text, signal)
+        for signal in assigned_signals
+    )
+
+
+def _set_step_expects_bms_response(step: dict, requirement_text: str) -> bool:
+    action = str(step.get("action") or "")
+    expected = str(step.get("expected") or "")
+    if not expected.strip() or not _SET_ACTION_RE.search(action):
+        return False
+
+    action_ids = {m.group(0).lower() for m in _CODE_IDENTIFIER_RE.finditer(action)}
+    expected_ids = {m.group(0) for m in _CODE_IDENTIFIER_RE.finditer(expected)}
+    supported_ids = {
+        m.group(0).lower()
+        for m in _CODE_IDENTIFIER_RE.finditer(requirement_text)
+    }
+    for expected_id in expected_ids:
+        expected_id_lower = expected_id.lower()
+        if expected_id_lower in supported_ids and expected_id_lower not in action_ids:
+            return True
+
+    natural_response_patterns = [
+        r"\bfault\b.*\bset\b",
+        r"\bflag\b.*\b(?:set|active|asserted)\b",
+        r"\bcharging\s+is\s+prevented\b",
+        r"\bdischarge\s+power\s+is\s+limited\b",
+        r"\bbalancing\s+is\s+suspended\b",
+        r"\bcontactor\b.*\b(?:open|closed|prohibited)\b",
+    ]
+    return any(re.search(pattern, expected, re.IGNORECASE) for pattern in natural_response_patterns)
+
+
 def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[str], list[str]]:
     """Evaluate a single case against checklist items.
 
@@ -201,6 +470,7 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[s
     pre = case["precondition"].strip()
     post = case["postcondition"].strip()
     steps = case["steps"]
+    rr = case.get("related_requirement", "").strip()
 
     signals = [s.strip() for s in req_info.get("signals", []) if s.strip()]
     thresholds = [t.strip() for t in req_info.get("thresholds", []) if t.strip()]
@@ -208,7 +478,9 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[s
     expected_missing = req_info.get("expected_missing_categories", [])
 
     all_expected = " ".join([s["expected"] or "" for s in steps]).lower()
-    rr = case.get("related_requirement", "").strip()
+    all_step_text = " ".join(
+        f"{s['action']} {s.get('expected') or ''}" for s in steps
+    ).lower()
 
     steps_lower = "".join(
         s["action"] + (s.get("expected") or "")
@@ -217,37 +489,70 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[s
     non_step_fields = f"{title} {obj} {pre} {post}".lower()
     has_needs_review = "[needs review]" in f"{non_step_fields} {steps_lower}"
 
+    req_desc = req_info.get("requirement_description", "").lower()
+    accepted_raw = req_info.get("accepted_test_basis", [])
+    if isinstance(accepted_raw, str):
+        accepted_test_basis = accepted_raw.lower()
+    else:
+        accepted_test_basis = " ".join(str(item) for item in accepted_raw).lower()
+
+    # ── 1.1.1 ────────────────────────────────────────────────────────
     if not title or title.lower() in {"draft test case", "test case", "boundary test"}:
         failed.append("1.1.1")
+    # ── 1.1.2 ────────────────────────────────────────────────────────
     if not obj:
         failed.append("1.1.2")
+    # ── 1.1.3 ────────────────────────────────────────────────────────
     if not pre:
         failed.append("1.1.3")
+    # ── 1.1.4 ────────────────────────────────────────────────────────
     if not post:
         failed.append("1.1.4")
+    # ── 1.1.5 ────────────────────────────────────────────────────────
     if not steps:
         failed.append("1.1.5")
+    else:
+        has_action = any(s["action"].strip() for s in steps)
+        has_expected = any((s["expected"] or "").strip() and (s["expected"] or "").strip().lower() not in ("null", "none") for s in steps)
+        if not has_action or not has_expected:
+            failed.append("1.1.5")
+    # ── 1.1.6 ────────────────────────────────────────────────────────
     if not rr:
         failed.append("1.1.6")
 
-    if signals and all_expected:
-        if not any(s.lower() in all_expected for s in signals):
+    # ── 2.1.1 ────────────────────────────────────────────────────────
+    if signals and all_expected and "[needs review]" not in all_expected:
+        # Strip punctuation from expected text for matching
+        clean_expected = re.sub(r"[,.:;!?，。：；！？]", " ", all_expected)
+        if not any(re.sub(r"[,.:;!?，。：；！？]", " ", s.lower()) in clean_expected for s in signals):
             failed.append("2.1.1")
 
-    req_desc = req_info.get("requirement_description", "").lower()
-    supp_info = req_info.get("supplementary_info", "").lower()
-    known_text = req_desc + " " + supp_info + " " + " ".join(timing + thresholds + signals).lower()
+    # ── 2.1.2 ────────────────────────────────────────────────────────
+    unsupported_step_ids = _unsupported_identifiers(
+        all_step_text,
+        req_info.get("requirement_description", ""),
+        accepted_test_basis,
+    )
+    if unsupported_step_ids:
+        failed.append("2.1.2")
+
+    # ── 2.2.1 ────────────────────────────────────────────────────────
+    # Supplementary context is human review reference, not generation authority.
+    # Concrete numeric values must come from the selected requirement or an
+    # explicitly accepted test basis.
+    known_text = req_desc + " " + accepted_test_basis
     for step in steps:
         text = f"{step['action']} {step['expected'] or ''}"
-        found_nums = re.findall(r"\d+\.?\d*\s*(?:deg\s*C|°C|kOhm|MOhm|mOhm|kΩ|MΩ|mΩ|mV|mA|ms|ohm|Ω|deg|V|A|s|%)(?!\w)", text, re.IGNORECASE)
+        found_nums = [match.group(0) for match in _NUMERIC_VALUE_RE.finditer(text)]
         for num in found_nums:
-            if num.lower() not in known_text:
+            if not _is_supported_numeric_value(num, known_text):
                 failed.append("2.2.1")
                 break
         else:
             continue
         break
 
+    # ── 3.2.1 ────────────────────────────────────────────────────────
     if expected_missing:
         nr_in_steps = any(
             "[needs review]" in (s["action"] + str(s["expected"] or "")).lower()
@@ -256,111 +561,108 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[s
         if not nr_in_steps:
             failed.append("3.2.1")
 
+    # ── 3.2.2 ────────────────────────────────────────────────────────
     if expected_missing:
         if "threshold" in expected_missing:
             for step in steps:
                 text = f"{step['action']} {step['expected'] or ''}"
-                if re.search(r"\d+\.?\d+", text) and "[needs review]" not in text.lower():
+                found_nums = [match.group(0) for match in _NUMERIC_VALUE_RE.finditer(text)]
+                invented_nums = [
+                    num for num in found_nums
+                    if not _is_supported_numeric_value(num, known_text)
+                ]
+                if invented_nums and "[needs review]" not in text.lower():
                     failed.append("3.2.2")
                     break
 
+    # ── 3.2.3 ────────────────────────────────────────────────────────
     if has_needs_review and not expected_missing:
-        warnings.append("3.2.3")
+        failed.append("3.2.3")
 
+    # ── 3.3.1 ────────────────────────────────────────────────────────
     nr_in_non_step = "[needs review]" in non_step_fields
     if nr_in_non_step:
         failed.append("3.3.1")
 
+    # ── 3.3.2 ────────────────────────────────────────────────────────
     needs_review_in_steps = any(
         "[needs review]" in (s["action"] + str(s["expected"] or "")).lower()
         for s in steps
     )
     if "timing" in expected_missing and needs_review_in_steps:
-        nr_in_wait = any(
-            "[needs review]" in s["action"].lower() and "wait" in s["action"].lower()
+        # Timing placeholder must be a standalone Wait step:
+        # action contains "wait" AND "[needs review]". The wait step may also
+        # carry the response expected result that becomes judgeable after wait.
+        has_dedicated_wait_nr = any(
+            "wait" in s["action"].lower()
+            and "[needs review]" in s["action"].lower()
             for s in steps
         )
-        if not nr_in_wait:
+        if not has_dedicated_wait_nr:
             failed.append("3.3.2")
 
+    # ── 3.3.3 ────────────────────────────────────────────────────────
     nr_with_suffix_pattern = re.compile(
         r"\[needs review\s*:\s*\w+\]", re.IGNORECASE
     )
     if nr_with_suffix_pattern.search(case.get("raw_html", "")) or nr_with_suffix_pattern.search(steps_lower):
-        failed.append("3.3.3")
+        warnings.append("3.3.3")
 
-    has_merged_wait = False
-    wait_count = 0
-    separated_count = 0
-    for i, step in enumerate(steps):
-        action = step["action"].strip().lower()
-        expected = step["expected"]
-        if "wait" in action:
-            wait_count += 1
-            if expected and expected != "none":
-                has_merged_wait = True
-            if i + 1 < len(steps):
-                next_expected = (steps[i + 1]["expected"] or "").strip()
-                if next_expected and next_expected.lower() != "none":
-                    separated_count += 1
-    if has_merged_wait and separated_count < wait_count:
-        warnings.append("4.1.1")
+    # ── 4.1.1 ────────────────────────────────────────────────────────
+    if any(
+        _set_step_expects_bms_response(step, req_info.get("requirement_description", ""))
+        for step in steps
+    ):
+        failed.append("4.1.1")
 
+    # ── 4.1.4 ────────────────────────────────────────────────────────
     intent_patterns = ["such that", "in order to", "to verify", "to ensure",
                        "to check", "so that", "to confirm", "to validate"]
+    observe_verbs = ["check", "verify", "observe", "monitor", "capture"]
     for step in steps:
         action = step["action"].strip().lower()
         if any(pattern in action for pattern in intent_patterns):
             failed.append("4.1.4")
             break
-
-    for step in steps:
-        action = step["action"].strip()
-        if not action:
-            continue
-        if len(action.split()) > 15:
-            failed.append("4.1.5")
+        # Also check for observation verbs in action
+        if any(verb in action.split() for verb in observe_verbs):
+            failed.append("4.1.4")
             break
 
-    has_concrete = any(
-        (s["expected"] or "").strip().lower() not in ("", "none", "null") and len((s["expected"] or "").strip()) > 10
-        for s in steps
-    )
-    if not has_concrete:
-        failed.append("4.2.1")
-
+    # ── 4.2.2 ────────────────────────────────────────────────────────
     for step in steps:
         expected = (step["expected"] or "").lower()
         if expected and any(v in expected for v in ["system works correctly", "behaves as expected", "works as expected"]):
             failed.append("4.2.2")
             break
 
+    # ── 4.2.3 ────────────────────────────────────────────────────────
     for step in steps:
         expected = (step["expected"] or "").lower()
-        action = step["action"].lower()
-        if expected and any(v in expected for v in ["read", "check", "verify", "observe", "monitor", "capture"]):
-            if not any(w in action for w in ["set", "apply", "simulate"]):
+        if expected:
+            if _only_needs_review(expected):
+                failed.append("4.2.3")
+                break
+            # Skip if expected uses [NEEDS REVIEW] placeholder with preserved
+            # requirement behavior, for example "charging is prevented
+            # [NEEDS REVIEW]".
+            if "[needs review]" in expected:
+                continue
+            observe_words = ["read", "check", "verify", "observe", "monitor", "capture"]
+            if any(v in expected.split() for v in observe_words):
+                # Expected is only observation verbs without concrete value
                 if len(expected.split()) < 8:
                     failed.append("4.2.3")
                     break
 
-    for step in steps:
-        expected = (step["expected"] or "").strip()
-        if not expected or expected.lower() == "none":
-            continue
-        if len(expected.split()) > 15:
-            failed.append("4.2.4")
-            break
+    # ── 5.1.1 ────────────────────────────────────────────────────────
+    if (
+        _contradicts_trigger_boundary(steps, req_info.get("requirement_description", ""))
+        or _contradicts_response_time_bound(steps, req_info.get("requirement_description", ""))
+    ):
+        failed.append("5.1.1")
 
-    pre_keywords = ["bms initialized", "normal operating", "no active fault"]
-    pre_lower = pre.lower()
-    if not any(kw in pre_lower for kw in pre_keywords):
-        failed.append("6.1.1")
-
-    post_lower = post.lower()
-    if not ("return" in post_lower or "normal" in post_lower or "restored" in post_lower):
-        failed.append("6.1.2")
-
+    # ── 6.1.3 ────────────────────────────────────────────────────────
     for step in steps:
         action = step["action"].strip().lower()
         if any(p in action for p in ["bms shall", "bms initiates", "bms verifies",
@@ -368,6 +670,7 @@ def evaluate_case(case: dict, req_info: dict, global_data: dict) -> tuple[list[s
             failed.append("6.1.3")
             break
 
+    # ── 6.2.1 ────────────────────────────────────────────────────────
     if title.lower() in {"draft test case", "test case", "boundary test"}:
         failed.append("6.2.1")
 
@@ -387,6 +690,7 @@ def _enrich_req_info(req: dict) -> dict:
         "case_coverage": "",
         "requirement_description": req.get("description", ""),
         "supplementary_info": req.get("supplementary_info", ""),
+        "accepted_test_basis": req.get("accepted_test_basis", ""),
     }
     if req.get("expected_missing_categories") is not None:
         info["expected_missing_categories"] = req["expected_missing_categories"]

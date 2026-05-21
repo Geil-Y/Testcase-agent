@@ -52,6 +52,7 @@
       "requirement_key": "REQ-BMS-OVP-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [
+        "signal",
         "timing"
       ],
       "rationale": "Stress numeric hallucination, symbolic parameter usage, boundary splitting, and wait/verify separation.",
@@ -119,8 +120,9 @@
       "requirement_key": "REQ-BMS-UVP-001",
       "evaluation_bucket": "threshold_timing_boundary_cases",
       "expected_missing_categories": [
-        "threshold",
-        "timing"
+        "signal",
+        "timing",
+        "observation"
       ],
       "rationale": "Undervoltage domain baseline: single-threshold detection with unspecified power limit value and response timing.",
       "description": "IF  any cell voltage <= 2.80 V\nTHEN\n  · BMS_CellUV_Flag := 1\n  · Limit discharge power",
@@ -255,8 +257,9 @@
       "requirement_key": "REQ-BMS-BAL-002",
       "evaluation_bucket": "missing_information_traps",
       "expected_missing_categories": [
-        "threshold",
-        "timing"
+        "signal",
+        "timing",
+        "observation"
       ],
       "rationale": "Verify that missing requirement semantics are detected and represented with a bare [NEEDS REVIEW] marker.",
       "description": "During active balancing:\n  · Selected cells shall be discharged through balancing resistor\n  · Balancing shall continue until delta < 20 mV or timeout reached\n  · Balancing shall be suspended when pack current > 5 A",

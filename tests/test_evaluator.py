@@ -75,10 +75,11 @@ class TestEvaluateGeneratedCases:
         assert result.total_cases == 1
         assert result.total_passed == 0
         assert result.case_pass_rate == 0.0
-        assert result.case_results[("REQ-001", 0)].failed_items == ["2.2.1", "3.2.1", "3.2.2"]
+        assert result.case_results[("REQ-001", 0)].failed_items == ["2.2.1", "3.2.1", "3.2.2", "4.1.1"]
         assert result.item_fail_counts["2.2.1"] == 1
         assert result.item_fail_counts["3.2.1"] == 1
         assert result.item_fail_counts["3.2.2"] == 1
+        assert result.item_fail_counts["4.1.1"] == 1
         assert result.hard_gate_records[0]["item_ids"] == ["3.2.1"]
 
 
@@ -94,7 +95,7 @@ def test_checklist_has_v2_section3_items():
     assert "3.3.3" in CHECKLIST
     assert "[HARD]" in CHECKLIST["3.2.1"][0]
     assert "[HARD]" in CHECKLIST["3.2.2"][0]
-    assert "[WARNING]" in CHECKLIST["3.2.3"][0]
+    assert "[HARD]" in CHECKLIST["3.2.3"][0]
 
 
 # ── 3.2.1 [HARD] — needs signal/threshold/timing/state/observation but
@@ -147,29 +148,111 @@ class TestHardGateInventedSemantics:
         failed, warnings = evaluate_case(case, info, {})
         assert "3.2.2" not in failed
 
+    def test_fails_when_expected_uses_related_context_identifier_not_in_requirement(self):
+        case = _case(steps=[
+            _step(
+                action="Set cell voltage above r_CellOV_Threshold",
+                expected="BMS_CellOV_L3_Flag == 1 & DTC_Overvoltage set",
+            )
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect", "BMS_CellOV_L3_Flag"],
+            thresholds=["r_CellOV_Threshold"],
+            requirement_description=(
+                "The BMS shall monitor each cell voltage against the "
+                "overvoltage threshold. BMS_CellOV_Detect shall be set to 1 "
+                "when any cell voltage >= r_CellOV_Threshold."
+            ),
+            supplementary_info=(
+                "Related context: BMS_CellOV_L3_Flag and DTC_Overvoltage are "
+                "used by severe overvoltage requirements."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.1.2" in failed
+
+    def test_accepts_expected_identifier_from_explicit_accepted_test_basis(self):
+        case = _case(steps=[
+            _step(
+                action="Set discharge request active",
+                expected="BMS_DischargeLimitReq == 1",
+            )
+        ])
+        info = _req_info(
+            signals=["BMS_CellUV_Flag"],
+            requirement_description=(
+                "IF any cell voltage <= 2.80 V THEN BMS_CellUV_Flag := 1 "
+                "and limit discharge power."
+            ),
+            accepted_test_basis="Observable evidence: BMS_DischargeLimitReq.",
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.1.2" not in failed
+
+    def test_fails_when_action_uses_related_context_identifier_not_in_requirement(self):
+        case = _case(steps=[
+            _step(
+                action="Set BMS_CellOV_L3_Flag to 1",
+                expected="BMS_CellOV_Detect == 1",
+            )
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            requirement_description=(
+                "BMS_CellOV_Detect shall be set to 1 when any cell voltage "
+                ">= r_CellOV_Threshold."
+            ),
+            supplementary_info="Related context: BMS_CellOV_L3_Flag.",
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.1.2" in failed
+
+    def test_accepts_natural_language_outcome_with_needs_review_when_observation_missing(self):
+        case = _case(steps=[
+            _step(
+                action="Disconnect charger",
+                expected="charging is prevented [NEEDS REVIEW]",
+            )
+        ])
+        info = _req_info(
+            signals=["BMS_ChargeEnable"],
+            expected_missing_categories=["observation"],
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.1.1" not in failed
+        assert "3.2.1" not in failed
+
 
 # ── 3.2.3 [WARNING] — complete requirement but case adds [NEEDS REVIEW] ──
 
 
-class TestWarningUnnecessaryNeedsReview:
-    def test_warns_when_nr_present_but_no_expected_missing(self):
+class TestHardGateUnnecessaryNeedsReview:
+    def test_fails_when_nr_present_but_no_expected_missing(self):
         case = _case(steps=[_step(action="Set [NEEDS REVIEW]", expected="OK")])
         info = _req_info(expected_missing_categories=[])
         failed, warnings = evaluate_case(case, info, {})
-        assert "3.2.3" in warnings
-        assert "3.2.3" not in failed
+        assert "3.2.3" in failed
+        assert "3.2.3" not in warnings
 
-    def test_no_warning_when_nr_present_and_expected_missing_exists(self):
+    def test_passes_when_nr_present_and_expected_missing_exists(self):
         case = _case(steps=[_step(action="Set [NEEDS REVIEW]", expected="OK")])
         info = _req_info(expected_missing_categories=["timing"])
         failed, warnings = evaluate_case(case, info, {})
-        assert "3.2.3" not in warnings
+        assert "3.2.3" not in failed
 
-    def test_no_warning_when_no_nr(self):
+    def test_passes_when_no_nr(self):
         case = _case(steps=[_step(action="Set voltage", expected="OK")])
         info = _req_info(expected_missing_categories=[])
         failed, warnings = evaluate_case(case, info, {})
-        assert "3.2.3" not in warnings
+        assert "3.2.3" not in failed
 
 
 # ── 3.3.1 — [NEEDS REVIEW] only in action/expected, not elsewhere ───────
@@ -217,6 +300,19 @@ class TestNeedsReviewInWaitAction:
         failed, warnings = evaluate_case(case, info, {})
         assert "3.3.2" not in failed
 
+    def test_passes_when_timing_missing_and_wait_action_has_response_expected(self):
+        case = _case(steps=[
+            _step(action="Wait response time [NEEDS REVIEW]", expected="BMS_CellOV_Detect := 1"),
+        ])
+        info = _req_info(
+            expected_missing_categories=["timing"],
+            requirement_description="BMS_CellOV_Detect shall be set to 1.",
+        )
+        failed, warnings = evaluate_case(case, info, {})
+        assert "3.3.2" not in failed
+        assert "4.1.1" not in failed
+        assert "4.1.1" not in warnings
+
     def test_not_triggered_when_timing_not_in_expected_missing(self):
         case = _case(steps=[_step(action="Set value", expected="[NEEDS REVIEW]")])
         info = _req_info(expected_missing_categories=["threshold"])
@@ -227,21 +323,252 @@ class TestNeedsReviewInWaitAction:
 # ── 3.3.3 — no [NEEDS REVIEW: category] suffix ──────────────────────────
 
 
-class TestNoNeedsReviewSuffix:
-    def test_fails_when_suffix_in_action(self):
+class TestWarningNeedsReviewSuffix:
+    def test_warns_when_suffix_in_action(self):
         case = _case(steps=[_step(action="Set [NEEDS REVIEW: timing] wait", expected="OK")])
         failed, warnings = evaluate_case(case, _req_info(), {})
-        assert "3.3.3" in failed
+        assert "3.3.3" in warnings
 
-    def test_fails_when_suffix_in_raw_html(self):
+    def test_warns_when_suffix_in_raw_html(self):
         case = _case(raw_html="<action>[NEEDS REVIEW: signal] check</action>")
         failed, warnings = evaluate_case(case, _req_info(), {})
-        assert "3.3.3" in failed
+        assert "3.3.3" in warnings
 
     def test_passes_when_bare_nr(self):
         case = _case(steps=[_step(action="Set [NEEDS REVIEW]", expected="OK")])
         failed, warnings = evaluate_case(case, _req_info(), {})
-        assert "3.3.3" not in failed
+        assert "3.3.3" not in warnings
+
+
+# ── Good-case calibration regressions ───────────────────────────────────
+
+
+class TestGoodCaseCalibrationRegressions:
+    def test_fails_when_set_step_immediately_expects_bms_response(self):
+        case = _case(steps=[
+            _step(
+                action="Set cell voltage above r_CellOV_Threshold [NEEDS REVIEW]",
+                expected="BMS_CellOV_Detect := 1",
+            ),
+            _step(action="Wait raw detection response time [NEEDS REVIEW]", expected=None),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            expected_missing_categories=["signal", "timing"],
+            requirement_description=(
+                "BMS_CellOV_Detect shall be set to 1 when any cell voltage "
+                ">= r_CellOV_Threshold."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "4.1.1" in failed
+
+    def test_allows_set_step_expected_to_confirm_stimulus_condition(self):
+        case = _case(steps=[
+            _step(
+                action="Set cell voltage below r_CellOV_Threshold [NEEDS REVIEW]",
+                expected="Cell voltage is below r_CellOV_Threshold [NEEDS REVIEW]",
+            ),
+            _step(
+                action="Wait raw detection response time [NEEDS REVIEW]",
+                expected="BMS_CellOV_Detect == 0",
+            ),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            expected_missing_categories=["signal", "timing"],
+            requirement_description=(
+                "BMS_CellOV_Detect shall be set to 1 when any cell voltage "
+                ">= r_CellOV_Threshold."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "4.1.1" not in failed
+
+    def test_empty_needs_review_expected_is_not_judgeable(self):
+        case = _case(steps=[
+            _step(action="Set charger connection state", expected="[NEEDS REVIEW]"),
+        ])
+        info = _req_info(expected_missing_categories=["observation"])
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "4.2.3" in failed
+
+    def test_fails_when_case_expects_no_trigger_at_inclusive_lower_boundary(self):
+        case = _case(steps=[
+            _step(action="Set cell voltage to 2.80 V", expected="BMS_CellUV_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_CellUV_Flag"],
+            requirement_description=(
+                "IF any cell voltage <= 2.80 V THEN BMS_CellUV_Flag := 1 "
+                "and limit discharge power."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_fails_when_natural_language_inclusive_boundary_expects_no_trigger(self):
+        case = _case(steps=[
+            _step(action="Set cell voltage to 2.80 V", expected="BMS_CellUV_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_CellUV_Flag"],
+            requirement_description=(
+                "IF any cell voltage reaches 2.80 V THEN BMS_CellUV_Flag := 1."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_fails_when_strict_boundary_expects_trigger_at_exact_threshold(self):
+        case = _case(steps=[
+            _step(
+                action="Set cell voltage to r_CellOV_Threshold",
+                expected="BMS_CellOV_Detect := 1",
+            ),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            thresholds=["r_CellOV_Threshold"],
+            requirement_description=(
+                "IF any cell voltage exceeds r_CellOV_Threshold "
+                "THEN BMS_CellOV_Detect := 1."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_fails_when_case_expects_no_trigger_at_inclusive_timing_boundary(self):
+        case = _case(steps=[
+            _step(action="Set BMS_CellOV_Detect to 1", expected=None),
+            _step(action="Wait for t_CellOV_Debounce", expected=None),
+            _step(action="Check response", expected="BMS_CellOV_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect", "BMS_CellOV_Flag"],
+            timing=["t_CellOV_Debounce"],
+            requirement_description=(
+                "IF BMS_CellOV_Detect = 1 for a continuous duration >= "
+                "t_CellOV_Debounce THEN BMS_CellOV_Flag := 1."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_fails_when_natural_language_timing_boundary_expects_no_trigger(self):
+        case = _case(steps=[
+            _step(action="Set BMS_CellOV_Detect to 1", expected=None),
+            _step(action="Wait for t_CellOV_Debounce", expected=None),
+            _step(action="Check response", expected="BMS_CellOV_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect", "BMS_CellOV_Flag"],
+            timing=["t_CellOV_Debounce"],
+            requirement_description=(
+                "IF BMS_CellOV_Detect remains active for at least "
+                "t_CellOV_Debounce THEN BMS_CellOV_Flag := 1."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_fails_when_response_time_is_treated_as_debounce_no_trigger(self):
+        case = _case(steps=[
+            _step(action="Set pack charge current above 150 A", expected=None),
+            _step(action="Wait shorter than 50 ms", expected="BMS_ChargeOC_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_ChargeOC_Flag"],
+            requirement_description=(
+                "IF pack charge current exceeds 150 A THEN "
+                "BMS_ChargeOC_Flag := 1 and limit charge current to "
+                "100 A within 50 ms."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "5.1.1" in failed
+
+    def test_supplementary_calibration_range_does_not_authorize_endpoint_case(self):
+        case = _case(steps=[
+            _step(action="Set cell voltage to 4.15 V", expected="Cell voltage == 4.15 V"),
+            _step(
+                action="Wait raw detection response time [NEEDS REVIEW]",
+                expected="BMS_CellOV_Detect := 1",
+            ),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            expected_missing_categories=["signal", "timing"],
+            requirement_description=(
+                "BMS_CellOV_Detect shall be set to 1 when any cell voltage "
+                ">= r_CellOV_Threshold."
+            ),
+            supplementary_info=(
+                "r_CellOV_Threshold: detection level [4.15 V - 4.35 V]"
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.2.1" in failed
+
+    def test_explicit_accepted_test_basis_authorizes_numeric_endpoint(self):
+        case = _case(steps=[
+            _step(action="Set cell voltage to 4.15 V", expected="Cell voltage == 4.15 V"),
+            _step(
+                action="Wait raw detection response time [NEEDS REVIEW]",
+                expected="BMS_CellOV_Detect := 1",
+            ),
+        ])
+        info = _req_info(
+            signals=["BMS_CellOV_Detect"],
+            expected_missing_categories=["signal", "timing"],
+            requirement_description=(
+                "BMS_CellOV_Detect shall be set to 1 when any cell voltage "
+                ">= r_CellOV_Threshold."
+            ),
+            supplementary_info=(
+                "r_CellOV_Threshold: detection level [4.15 V - 4.35 V]"
+            ),
+            accepted_test_basis="For this calibration review, use 4.15 V.",
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.2.1" not in failed
+
+    def test_allows_close_boundary_representative_value_from_requirement_threshold(self):
+        case = _case(steps=[
+            _step(action="Set cell voltage to 2.75 V", expected="BMS_CellUV_Flag == 0"),
+        ])
+        info = _req_info(
+            signals=["BMS_CellUV_Flag"],
+            requirement_description=(
+                "IF any cell voltage <= 2.80 V THEN BMS_CellUV_Flag := 1."
+            ),
+        )
+
+        failed, warnings = evaluate_case(case, info, {})
+
+        assert "2.2.1" not in failed
 
 
 # ── evaluate_missing_info_hard_gates ─────────────────────────────────────

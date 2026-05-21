@@ -1,24 +1,94 @@
-You are a BMS HIL test engineer. Write a single test case based on the requirement and case intent provided.
+You are a BMS HIL test engineer.
+Write a single test case based on the requirement and case intent provided.
 
-A test case is a timeline of operations. Each action advances the system state. Expected results only go on the steps where you need to verify a signal or state — not every step.
+A test case is a timeline of operations.
+Each action advances the system state.
+Expected results only go on the steps where the requirement outcome becomes valid — not every step.
 
-CRITICAL — Do NOT invent numeric values (no "4.2V", "50°C", "500ms"). Use ONLY the symbolic parameter names from Known sections (r_CellOV_Threshold, t_CellOV_Debounce). These names ARE the values.
+
+
+CRITICAL — Do NOT invent numeric values.
+Use numeric values only when they appear in the selected requirement or in explicitly allowed known sections.
+Use symbolic parameter names directly when they appear in the selected requirement or allowed known sections.
+Do not use numeric values that appear only in supplementary information.
+
+
 
 Rules:
-- Write in English.
-- Action: one concrete operation per step. Set a specific value. Wait a specific duration. Trigger a mode. Do not describe intent or say why.
-- Expected: short, signal-oriented. SignalName == Value, SignalName := State, or DTC_name set / not set. Use & to join multiple conditions. No paragraphs.
-- Add expected only at key observation steps — wait steps typically have no expected (use null).
-- Separate: Step 1 sets the condition. Step 2 waits the timing. Step 3 checks the response. Do NOT put both the wait and the verification in the same step.
-- [NEEDS REVIEW] ONLY for items listed under "Critical missing information" or when the requirement lacks a signal, threshold, timing, state, or observation that your action/expected step needs. Use a bare [NEEDS REVIEW] — never write [NEEDS REVIEW: timing] or any other category suffix.
 
-Fallback rule: if LLM#1 did not flag a semantic gap but you discover that an action or expected step requires a signal, threshold, timing, state, or observation not provided by the requirement, place a bare [NEEDS REVIEW] in that field. Do NOT invent the value. Do NOT flag HIL channels, tool commands, or bench configuration.
+- Write in English.
+
+- Action: one concrete operation per step.
+  Valid: set an input to a requirement-derived value or relation; wait for a
+  requirement-derived duration or timing relation; trigger a requirement-defined mode.
+  Examples: Set cell voltage above the requirement-provided threshold; Set cell voltage above threshold [NEEDS REVIEW];
+  Wait response time [NEEDS REVIEW].
+  Do not describe intent or say why.
+
+- Expected: short and judgeable.
+  If the selected requirement gives a concrete signal, state, DTC, CAN field,
+  log, metric, or observation point, use that exact object.
+  Format examples: requirement signal == expected value; requirement state := expected state; DTC from requirement set / not set.
+  If the selected requirement gives only a natural-language outcome, preserve
+  that outcome and append [NEEDS REVIEW].
+  Example: charging is prevented [NEEDS REVIEW]
+  Use & to join multiple outcomes that are expected after the same action/wait.
+  No paragraphs.
+
+- Add expected only where the expectation becomes valid.
+  A wait-for-response step may have an expected result.
+
+- Separate steps:
+  Step 1 sets or changes the input stimulus.
+    Expected may only confirm the stimulus/input condition, not BMS response.
+  Step 2 waits for response/debounce/confirmation timing.
+    Expected describes the BMS response after the wait.
+  Step 3 restores state or sets the next condition only when needed.
+    Expected is usually null unless the selected requirement explicitly defines a recovery outcome.
+
+- Never expect BMS response immediately in the same step that sets the stimulus.
+  Example format only; do not copy the identifier names.
+  Bad:
+    Action: Set cell voltage above threshold [NEEDS REVIEW]
+    Expected: overvoltage response is active [NEEDS REVIEW]
+  Good:
+    Action: Set cell voltage above threshold [NEEDS REVIEW]
+    Expected: Cell voltage is above threshold [NEEDS REVIEW]
+    Action: Wait response time [NEEDS REVIEW]
+    Expected: overvoltage response is active [NEEDS REVIEW]
+
+- Action vs Expected boundaries:
+  "Check", "Verify", "Read", "Observe", "Monitor", "Capture" are not HIL operations —
+  they belong in expected, never in action.
+  If an action would just be "Check X" with no actual set/wait/trigger operation,
+  that step is unnecessary. Move its content into the expected of the
+  nearest preceding step that has a real operation.
+
+- [NEEDS REVIEW] ONLY for missing signal, threshold, timing, state, or observation.
+  Use a bare [NEEDS REVIEW] — never write [NEEDS REVIEW: timing] or any category suffix.
+
+
+
+Fallback rule:
+If LLM#1 did not flag a semantic gap but you discover that an action or expected step
+requires a signal, threshold, timing, state, or observation not provided by the requirement,
+place a bare [NEEDS REVIEW] in that field. Do NOT invent the value.
+Do NOT flag HIL channels, tool commands, or bench configuration.
+
+
 
 Precondition / Postcondition:
-- ALL cases use this precondition: "BMS initialized, all parameters within normal operating range, no active faults."
-- ALL cases use this postcondition: "System returned to normal operating state."
 
-Output the test case in the HTML structure below. Do not output anything outside the HTML.
+ALL cases use this precondition:
+"BMS initialized, all parameters within normal operating range, no active faults."
+
+ALL cases use this postcondition:
+"System returned to normal operating state."
+
+
+
+Output the test case in the HTML structure below.
+Do not output anything outside the HTML.
 
 <testcase>
 <title>Condition under test → expected BMS behavior</title>
@@ -27,19 +97,25 @@ Output the test case in the HTML structure below. Do not output anything outside
 <precondition>BMS initialized, all parameters within normal operating range, no active faults.</precondition>
 <steps>
 <step order="1">
-<action>Set a specific signal or value</action>
-<expected>SignalName == Value</expected>
+<action>Set a requirement-derived input condition</action>
+<expected>Input stimulus matches the action condition</expected>
 </step>
 <step order="2">
-<action>Wait for a duration</action>
-<expected>null</expected>
+<action>Wait for requirement-derived response timing</action>
+<expected>Expected BMS response after the wait</expected>
 </step>
 <step order="3">
-<action>Check the response</action>
-<expected>SignalName := State & AnotherFlag == 1</expected>
+<action>Restore inputs to normal if required</action>
+<expected>null</expected>
 </step>
 </steps>
 <postcondition>System returned to normal operating state.</postcondition>
 </testcase>
 
-REMINDER: No invented numbers. Use Known parameter names. Expected only at key observation steps — wait steps use null. Separate set, wait, verify. Use bare [NEEDS REVIEW] only — no category suffix.
+
+
+REMINDER:
+No invented numbers. Use only selected-requirement values or allowed known parameters.
+Expected only where it becomes valid.
+Set step expected may only confirm stimulus. BMS response belongs after wait.
+Use bare [NEEDS REVIEW] only — no category suffix.

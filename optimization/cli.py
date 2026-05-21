@@ -36,12 +36,99 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 from openpyxl import load_workbook  # noqa: E402
 
 from testcase_agent.config import get_settings  # noqa: E402
-from testcase_agent.pipeline.generate import RequirementInput, run_pipeline  # noqa: E402
+from testcase_agent.parser.html_parser import parse_generated_case  # noqa: E402
+from testcase_agent.pipeline.generate import RequirementInput, regenerate_case, run_pipeline  # noqa: E402
 from testcase_agent.pipeline.post_process import sanitize_numeric_values  # noqa: E402
+from testcase_agent.prompts import render_prompt  # noqa: E402
 from testcase_agent.provider.factory import create_provider  # noqa: E402
 from testcase_agent.quality.gate import evaluate_cases  # noqa: E402
+from optimization.evaluator import CHECKLIST, evaluate_case  # noqa: E402
 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
+
+
+def _case_to_dict(case) -> dict:
+    """Convert a GeneratedCase dataclass to a dict for evaluate_case()."""
+    return {
+        "title": case.title,
+        "objective": case.objective,
+        "precondition": case.precondition,
+        "postcondition": case.postcondition,
+        "related_requirement": case.related_requirement,
+        "steps": [{"order": s.order, "action": s.action, "expected": s.expected} for s in case.steps],
+        "raw_html": case.raw_html or "",
+    }
+
+
+def _build_review_comment(hard_fails: list[str]) -> str:
+    """Build a review comment from failed checklist item IDs."""
+    parts: list[str] = []
+    for item_id in hard_fails:
+        desc = CHECKLIST.get(item_id, (item_id, ""))[0]
+        parts.append(f"{item_id}: {desc}")
+    return "Previous case failed hard-gate checks. Fix these issues: " + "; ".join(parts)
+
+
+def _build_req_info_for_eval(
+    req: RequirementInput,
+    analysis,
+    set_meta: dict | None,
+) -> dict:
+    """Build the req_info dict needed by evaluate_case()."""
+    signals = analysis.signals if analysis else []
+    thresholds = analysis.thresholds if analysis else []
+    timing = [t for t in (analysis.timing if analysis else [])
+              if t.strip().lower() != "none found"]
+
+    # Expected missing categories: prefer requirement set, fall back to LLM#1 analysis
+    expected_missing: list[str] = []
+    if set_meta and set_meta.get("expected_missing_categories"):
+        expected_missing = set_meta["expected_missing_categories"]
+    elif analysis and analysis.missing_info_items:
+        expected_missing = [mi.category for mi in analysis.missing_info_items if mi.category]
+
+    return {
+        "signals": signals,
+        "thresholds": thresholds,
+        "timing": timing,
+        "case_coverage": "",
+        "requirement_description": req.description,
+        "supplementary_info": req.supplementary_info,
+        "accepted_test_basis": set_meta.get("accepted_test_basis", "") if set_meta else "",
+        "expected_missing_categories": expected_missing,
+    }
+
+
+def _self_check_case(case, analysis, provider) -> tuple:
+    """Run LLM self-check for invented identifiers.
+
+    Returns (corrected_case, had_changes: bool).
+    If the LLM call fails or parsing fails, returns the original case unchanged.
+    """
+    if not analysis or not (analysis.signals or analysis.observations or analysis.states):
+        return case, False
+
+    try:
+        known_signals = ", ".join(analysis.signals) if analysis.signals else "(none)"
+        known_observations = ", ".join(analysis.observations) if analysis.observations else "(none)"
+        known_states = ", ".join(analysis.states) if analysis.states else "(none)"
+        case_html = case.raw_html or ""
+
+        sys_prompt, usr_prompt = render_prompt(
+            "self_check",
+            known_signals=known_signals,
+            known_observations=known_observations,
+            known_states=known_states,
+            case_html=case_html,
+        )
+        output = provider.complete(sys_prompt, usr_prompt)
+        corrected = parse_generated_case(output)
+        if corrected and corrected.steps and corrected.title:
+            return corrected, True
+    except Exception:
+        pass
+
+    return case, False
 
 
 def _cell_str(row: tuple, index: int) -> str:
@@ -292,11 +379,13 @@ def _serialize_case_for_output(
     case,
     report,
     *,
-    sanitize_enabled: bool,
-    sanitize_replacements: list[str],
+    retry_meta: dict | None = None,
+    sanitize_enabled: bool = False,
+    sanitize_replacements: list[str] | None = None,
 ) -> dict:
     """Serialize one generated case for generated_cases.json."""
-    return {
+    replacements = sanitize_replacements or []
+    out: dict = {
         "title": case.title,
         "objective": case.objective,
         "precondition": case.precondition,
@@ -309,8 +398,8 @@ def _serialize_case_for_output(
         "raw_html": case.raw_html,
         "sanitize": {
             "enabled": sanitize_enabled,
-            "replacement_count": len(sanitize_replacements),
-            "replacements": sanitize_replacements,
+            "replacement_count": len(replacements),
+            "replacements": replacements,
         },
         "quality": {
             "passed": report.passed,
@@ -318,12 +407,15 @@ def _serialize_case_for_output(
             "warnings": report.warnings,
         },
     }
+    if retry_meta:
+        out["retry"] = retry_meta
+    return out
 
 
 def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
-    sanitize: bool = False,
+    sanitize: bool = True,
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
@@ -361,32 +453,81 @@ def run_batch(
             print(f"  ERROR: {result.error}")
             continue
 
+        # ── Retry + self-check ───────────────────────────────────────
+        set_meta = set_lookup.get(req.requirement_key)
+        req_info = _build_req_info_for_eval(req, result.analysis, set_meta)
+        intents = result.analysis.case_intents if result.analysis else []
         sanitize_enabled_for_case = bool(sanitize and result.analysis)
-        sanitize_replacements_by_case: list[list[str]] = [[] for _ in result.cases]
-        if sanitize_enabled_for_case:
-            sigs = result.analysis.signals
-            thr = result.analysis.thresholds
-            tim = result.analysis.timing
-            sanitized_cases = []
-            replacement_lists = []
-            total_replacements = 0
-            for case in result.cases:
-                sc, reps = sanitize_numeric_values(
+        sigs = result.analysis.signals if result.analysis else []
+        thr = result.analysis.thresholds if result.analysis else []
+        tim = [
+            t for t in (result.analysis.timing if result.analysis else [])
+            if t.strip().lower() != "none found"
+        ]
+
+        def _post_process_case(case, retry_meta: dict) -> tuple:
+            corrected, sc_changed = _self_check_case(case, result.analysis, provider)
+            if sc_changed:
+                case = corrected
+                retry_meta["self_check_changed"] = True
+
+            replacements: list[str] = []
+            if sanitize_enabled_for_case:
+                case, replacements = sanitize_numeric_values(
                     case,
                     requirement_description=req.description,
                     supplementary_info=req.supplementary_info,
                     extracted_signals=sigs,
                     extracted_thresholds=thr,
                     extracted_timing=tim,
+                    accepted_test_basis=req_info.get("accepted_test_basis", ""),
                 )
-                sanitized_cases.append(sc)
-                replacement_lists.append(reps)
-                total_replacements += len(reps)
-            result.cases = sanitized_cases
-            sanitize_replacements_by_case = replacement_lists
-            if total_replacements:
-                print(f"  sanitize: {total_replacements} value(s) replaced with [NEEDS REVIEW]")
+            return case, replacements
 
+        retry_metas: list[dict] = []
+        sanitize_replacements_by_case: list[list[str]] = []
+        new_cases: list = []
+        for ci, case in enumerate(result.cases):
+            intent = intents[ci] if ci < len(intents) else None
+            retry_meta: dict = {"attempts": 0, "exhausted": False, "failures": [], "self_check_changed": False}
+            sanitize_replacements: list[str] = []
+
+            # Step 1: Self-check identifiers, then sanitize invented numeric values.
+            case, replacements = _post_process_case(case, retry_meta)
+            sanitize_replacements.extend(replacements)
+
+            # Step 2: Retry loop (max 2 retries + initial = 3 attempts)
+            for attempt in range(3):
+                hard_fails, _ = evaluate_case(_case_to_dict(case), req_info, {})
+                if not hard_fails:
+                    break
+                retry_meta["failures"].append(hard_fails)
+                if attempt < 2 and intent:
+                    review = _build_review_comment(hard_fails)
+                    try:
+                        case = regenerate_case(
+                            req, intent.description, intent.coverage,
+                            review, provider, analysis=result.analysis,
+                        )
+                        retry_meta["attempts"] = attempt + 1
+                        case, replacements = _post_process_case(case, retry_meta)
+                        sanitize_replacements.extend(replacements)
+                    except Exception:
+                        retry_meta["exhausted"] = True
+                        break
+                else:
+                    retry_meta["exhausted"] = True
+
+            new_cases.append(case)
+            retry_metas.append(retry_meta)
+            sanitize_replacements_by_case.append(sanitize_replacements)
+
+        result.cases = new_cases
+        total_sanitize_replacements = sum(len(reps) for reps in sanitize_replacements_by_case)
+        if total_sanitize_replacements:
+            print(f"  sanitize: {total_sanitize_replacements} value(s) replaced with [NEEDS REVIEW]")
+
+        # ── Quality gate (runtime schema) ────────────────────────────
         quality_reports = evaluate_cases(result.cases)
 
         analysis_data = None
@@ -410,14 +551,16 @@ def run_batch(
             }
 
         cases_data = []
-        for case, report, replacements in zip(
+        for case, report, retry_meta, replacements in zip(
             result.cases,
             quality_reports,
+            retry_metas,
             sanitize_replacements_by_case,
         ):
             cases_data.append(_serialize_case_for_output(
                 case,
                 report,
+                retry_meta=retry_meta,
                 sanitize_enabled=sanitize_enabled_for_case,
                 sanitize_replacements=replacements,
             ))
@@ -431,14 +574,16 @@ def run_batch(
             "cases": cases_data,
         }
         # Enrich with requirement set metadata when available
-        set_meta = set_lookup.get(req.requirement_key)
         if set_meta:
             entry["evaluation_bucket"] = set_meta["evaluation_bucket"]
             entry["expected_missing_categories"] = set_meta["expected_missing_categories"]
             entry["requirement_set_note"] = set_meta.get("rationale", "")
         all_results.append(entry)
         total_cases += len(cases_data)
-        print(f"  {len(cases_data)} cases generated, quality passed: {all(report.passed for report in quality_reports)}")
+
+        passed_count = sum(1 for r in quality_reports if r.passed)
+        retried = sum(1 for rm in retry_metas if rm["attempts"] > 0)
+        print(f"  {len(cases_data)} cases, quality: {passed_count}/{len(cases_data)} passed, {retried} retried")
 
     # Save generated cases
     cases_path = output_dir / "generated_cases.json"
