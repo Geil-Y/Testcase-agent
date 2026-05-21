@@ -16,10 +16,14 @@ Case intent: {{ case_intent }}
 {% if extracted_timing %}Allowed timing parameters from the selected requirement. Reference only when needed by this case intent: {{ extracted_timing }}{% endif %}
 {% if extracted_states %}Allowed BMS states from the selected requirement. Use only when needed by this case intent: {{ extracted_states }}{% endif %}
 {% if extracted_observations %}Allowed observation points from the selected requirement. Verify only when needed by this case intent: {{ extracted_observations }}{% endif %}
+{% if missing_info or missing_info_items %}
 {% if missing_info %}Critical missing information — you MUST use [NEEDS REVIEW] placeholders in action or expected for these: {{ missing_info }}{% endif %}
 {% if missing_info_items %}
 Categorized missing information — you MUST use a bare [NEEDS REVIEW] where these missing semantics are required:
 {{ missing_info_items }}{% endif %}
+{% else %}
+No critical missing information was identified. Do not use [NEEDS REVIEW] unless the selected requirement itself leaves a required signal, threshold, timing, state, or observation unspecified for this case.
+{% endif %}
 {% if review_comment %}
 Reviewer instruction (takes priority over the original requirement for missing values):
 {{ review_comment }}

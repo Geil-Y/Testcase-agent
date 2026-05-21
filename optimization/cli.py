@@ -82,7 +82,7 @@ def _build_req_info_for_eval(
 
     # Expected missing categories: prefer requirement set, fall back to LLM#1 analysis
     expected_missing: list[str] = []
-    if set_meta and set_meta.get("expected_missing_categories"):
+    if set_meta and "expected_missing_categories" in set_meta:
         expected_missing = set_meta["expected_missing_categories"]
     elif analysis and analysis.missing_info_items:
         expected_missing = [mi.category for mi in analysis.missing_info_items if mi.category]

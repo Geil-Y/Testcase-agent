@@ -84,3 +84,5 @@ def test_regenerate_case_does_not_send_supplementary_info_to_prompt():
     assert "SUPP_ONLY_TOKEN" not in regenerate_user_prompt
     assert "BMS_CellOV_L3_Flag" not in regenerate_user_prompt
     assert "t_CellOV_Debounce" not in regenerate_user_prompt
+
+
