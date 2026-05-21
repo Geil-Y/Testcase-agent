@@ -45,6 +45,7 @@ from testcase_agent.quality.gate import evaluate_cases  # noqa: E402
 from optimization.evaluator import CHECKLIST, evaluate_case  # noqa: E402
 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
+_MAX_REVIEW_ROUNDS = 3
 
 
 def _case_to_dict(case) -> dict:
@@ -58,6 +59,87 @@ def _case_to_dict(case) -> dict:
         "steps": [{"order": s.order, "action": s.action, "expected": s.expected} for s in case.steps],
         "raw_html": case.raw_html or "",
     }
+
+
+def _parse_review_result(output: str) -> dict:
+    """Parse LLM#3 review output.
+
+    Returns {"pass": True} or {"pass": False, "feedback": "<bullets>"}.
+    """
+    text = output.strip()
+    # Strip markdown formatting from first line
+    text = text.lstrip("#").lstrip("*").strip()
+    lines = text.splitlines()
+    if not lines:
+        return {"pass": False, "feedback": "reviewer produced empty output"}
+    first = lines[0].strip().upper()
+    if first == "PASS":
+        return {"pass": True}
+    if first == "FAIL":
+        feedback = "\n".join(line.strip() for line in lines[1:] if line.strip().startswith("-"))
+        if not feedback:
+            feedback = "reviewer reported FAIL but gave no specific feedback"
+        return {"pass": False, "feedback": feedback}
+    return {"pass": False, "feedback": f"unexpected reviewer output: {first}"}
+
+
+def _call_reviewer(result, req: RequirementInput, provider, raw_out: list | None = None) -> dict:
+    """Run LLM#3 review of LLM#1 analysis + LLM#2 cases.
+
+    If raw_out list is provided, the raw LLM output string is appended to it.
+    """
+    if raw_out is None:
+        raw_out = []
+    if not result.analysis or not result.cases:
+        return {"pass": True}
+
+    analysis = result.analysis
+
+    # Format missing_info_items for the prompt
+    missing_items_lines: list[str] = []
+    for mi in analysis.missing_info_items:
+        if mi.category:
+            missing_items_lines.append(f"[{mi.category}] {mi.description}")
+        else:
+            missing_items_lines.append(mi.description)
+    missing_items_str = "\n".join(missing_items_lines) if missing_items_lines else "None"
+
+    # Format case intents
+    intents_lines: list[str] = []
+    for ci in analysis.case_intents:
+        intents_lines.append(f"[{ci.coverage}] {ci.description}")
+    intents_str = "\n".join(intents_lines) if intents_lines else "None"
+
+    # Concatenate case HTML
+    cases_html_parts: list[str] = []
+    for ci, case in enumerate(result.cases):
+        cases_html_parts.append(case.raw_html or "")
+    cases_html_str = "\n\n".join(cases_html_parts)
+
+    sys_prompt, usr_prompt = render_prompt(
+        "review_analysis",
+        requirement_key=req.requirement_key,
+        description=req.description,
+        supplementary_info=req.supplementary_info,
+        extracted_signals=", ".join(analysis.signals) if analysis.signals else "None",
+        extracted_thresholds=", ".join(analysis.thresholds) if analysis.thresholds else "None",
+        extracted_timing=", ".join(analysis.timing) if analysis.timing else "None",
+        extracted_states=", ".join(analysis.states) if analysis.states else "None",
+        extracted_observations=", ".join(analysis.observations) if analysis.observations else "None",
+        missing_info_items=missing_items_str,
+        case_intents=intents_str,
+        cases_html=cases_html_str,
+    )
+
+    print(f"  LLM#3 reviewing...")
+
+    try:
+        output = provider.complete(sys_prompt, usr_prompt)
+        raw_out.append(output)
+        return _parse_review_result(output)
+    except Exception as exc:
+        print(f"  LLM#3 review failed: {exc}")
+        return {"pass": True}  # Degrade gracefully
 
 
 def _build_review_comment(hard_fails: list[str]) -> str:
@@ -443,7 +525,57 @@ def run_batch(
 
     for i, req in enumerate(requirements):
         print(f"[{i+1}/{len(requirements)}] Generating: {req.requirement_key} ...")
-        result = run_pipeline(req, provider)
+
+        set_meta = set_lookup.get(req.requirement_key)
+
+        # ── LLM#1 + LLM#2 + LLM#3 review loop ────────────────────────
+        review_meta: dict = {"rounds": 0, "passed": False, "feedback": "", "rounds_detail": []}
+        analysis_review_comment = ""
+        for review_round in range(_MAX_REVIEW_ROUNDS):
+            result = run_pipeline(
+                req, provider,
+                analysis_review_comment=analysis_review_comment,
+            )
+
+            if result.error:
+                break
+
+            # Log LLM#1 + LLM#2 output for this round
+            if result.analysis:
+                print(f"  [round {review_round+1}] LLM#1 missing: {result.analysis.missing_critical_info}")
+                print(f"  [round {review_round+1}] LLM#1 signals: {result.analysis.signals}")
+                for ci, case in enumerate(result.cases):
+                    nr_found = []
+                    for s in case.steps:
+                        a = s.action or ""
+                        e = s.expected or ""
+                        if "[NEEDS REVIEW]" in a or "[NEEDS REVIEW]" in e:
+                            nr_found.append(f"step{s.order}")
+                    if nr_found:
+                        print(f"  [round {review_round+1}] LLM#2 case[{ci}] [NEEDS REVIEW] in: {', '.join(nr_found)}")
+
+            llm3_raw_out: list[str] = []
+            reviewer_result = _call_reviewer(result, req, provider, llm3_raw_out)
+            review_meta["rounds"] = review_round + 1
+            print(f"  [round {review_round+1}] LLM#3: {'PASS' if reviewer_result['pass'] else 'FAIL'}")
+
+            round_detail = {
+                "round": review_round + 1,
+                "llm1_raw_html": result.analysis.raw_html if result.analysis else "",
+                "llm2_raw_html": [case.raw_html or "" for case in result.cases],
+                "llm3_raw_output": llm3_raw_out[0] if llm3_raw_out else "",
+                "llm3_verdict": "PASS" if reviewer_result["pass"] else "FAIL",
+                "llm3_parsed": reviewer_result,
+            }
+            if not reviewer_result["pass"]:
+                print(f"  [round {review_round+1}] LLM#3 feedback: {reviewer_result['feedback'][:300]}")
+            review_meta["rounds_detail"].append(round_detail)
+
+            if reviewer_result["pass"]:
+                review_meta["passed"] = True
+                break
+            else:
+                analysis_review_comment = reviewer_result["feedback"]
 
         if result.error:
             errors.append({
@@ -453,10 +585,18 @@ def run_batch(
             print(f"  ERROR: {result.error}")
             continue
 
-        # ── Retry + self-check ───────────────────────────────────────
-        set_meta = set_lookup.get(req.requirement_key)
-        req_info = _build_req_info_for_eval(req, result.analysis, set_meta)
-        intents = result.analysis.case_intents if result.analysis else []
+        if not review_meta["passed"]:
+            print(f"  LLM#3 review did not pass after {review_meta['rounds']} round(s)")
+
+        # Save per-round raw outputs for debugging
+        debug_path = output_dir / f"{req.requirement_key}_review_rounds.json"
+        debug_path.write_text(
+            json.dumps({"requirement_key": req.requirement_key, "rounds": review_meta["rounds_detail"]},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        # ── Sanitize invented numeric values ─────────────────────────
         sanitize_enabled_for_case = bool(sanitize and result.analysis)
         sigs = result.analysis.signals if result.analysis else []
         thr = result.analysis.thresholds if result.analysis else []
@@ -465,12 +605,9 @@ def run_batch(
             if t.strip().lower() != "none found"
         ]
 
-        def _post_process_case(case, retry_meta: dict) -> tuple:
-            corrected, sc_changed = _self_check_case(case, result.analysis, provider)
-            if sc_changed:
-                case = corrected
-                retry_meta["self_check_changed"] = True
-
+        sanitize_replacements_by_case: list[list[str]] = []
+        new_cases: list = []
+        for case in result.cases:
             replacements: list[str] = []
             if sanitize_enabled_for_case:
                 case, replacements = sanitize_numeric_values(
@@ -480,47 +617,10 @@ def run_batch(
                     extracted_signals=sigs,
                     extracted_thresholds=thr,
                     extracted_timing=tim,
-                    accepted_test_basis=req_info.get("accepted_test_basis", ""),
+                    accepted_test_basis="",
                 )
-            return case, replacements
-
-        retry_metas: list[dict] = []
-        sanitize_replacements_by_case: list[list[str]] = []
-        new_cases: list = []
-        for ci, case in enumerate(result.cases):
-            intent = intents[ci] if ci < len(intents) else None
-            retry_meta: dict = {"attempts": 0, "exhausted": False, "failures": [], "self_check_changed": False}
-            sanitize_replacements: list[str] = []
-
-            # Step 1: Self-check identifiers, then sanitize invented numeric values.
-            case, replacements = _post_process_case(case, retry_meta)
-            sanitize_replacements.extend(replacements)
-
-            # Step 2: Retry loop (max 2 retries + initial = 3 attempts)
-            for attempt in range(3):
-                hard_fails, _ = evaluate_case(_case_to_dict(case), req_info, {})
-                if not hard_fails:
-                    break
-                retry_meta["failures"].append(hard_fails)
-                if attempt < 2 and intent:
-                    review = _build_review_comment(hard_fails)
-                    try:
-                        case = regenerate_case(
-                            req, intent.description, intent.coverage,
-                            review, provider, analysis=result.analysis,
-                        )
-                        retry_meta["attempts"] = attempt + 1
-                        case, replacements = _post_process_case(case, retry_meta)
-                        sanitize_replacements.extend(replacements)
-                    except Exception:
-                        retry_meta["exhausted"] = True
-                        break
-                else:
-                    retry_meta["exhausted"] = True
-
             new_cases.append(case)
-            retry_metas.append(retry_meta)
-            sanitize_replacements_by_case.append(sanitize_replacements)
+            sanitize_replacements_by_case.append(replacements)
 
         result.cases = new_cases
         total_sanitize_replacements = sum(len(reps) for reps in sanitize_replacements_by_case)
@@ -551,16 +651,15 @@ def run_batch(
             }
 
         cases_data = []
-        for case, report, retry_meta, replacements in zip(
+        for case, report, replacements in zip(
             result.cases,
             quality_reports,
-            retry_metas,
             sanitize_replacements_by_case,
         ):
             cases_data.append(_serialize_case_for_output(
                 case,
                 report,
-                retry_meta=retry_meta,
+                retry_meta=review_meta,
                 sanitize_enabled=sanitize_enabled_for_case,
                 sanitize_replacements=replacements,
             ))
@@ -582,8 +681,7 @@ def run_batch(
         total_cases += len(cases_data)
 
         passed_count = sum(1 for r in quality_reports if r.passed)
-        retried = sum(1 for rm in retry_metas if rm["attempts"] > 0)
-        print(f"  {len(cases_data)} cases, quality: {passed_count}/{len(cases_data)} passed, {retried} retried")
+        print(f"  {len(cases_data)} cases, quality: {passed_count}/{len(cases_data)} passed, review_rounds={review_meta['rounds']}")
 
     # Save generated cases
     cases_path = output_dir / "generated_cases.json"

@@ -24,6 +24,14 @@ signal, threshold, timing, state, observation.
 
 Do NOT flag HIL channel names, tool commands, bench configuration, or other execution-environment details.
 
+{% if review_comment %}
+## Previous Review Feedback (for reference only)
+
+{{ review_comment }}
+
+Consider the feedback but rely on the requirement as the primary source.
+Only adopt suggestions that are consistent with the requirement text.
+{% endif %}
 
 
 Output your analysis and plan in the HTML structure below.
@@ -102,9 +110,8 @@ timing — flag if:
   - Example: <item category="timing">response timing not specified</item>
 
 state — flag if:
-  - The requirement implies a specific BMS mode or state ("normal mode",
-    "protection state", "fault state") but does not name it.
-  - Example: <item category="state">fault state name not specified</item>
+  - The selected case must set, enter, exit, or verify a specific BMS mode
+    or state but the requirement does not name it.
 
 observation — flag if:
   - The selected requirement gives a natural-language outcome but does not provide
@@ -112,7 +119,6 @@ observation — flag if:
     limit request, contactor feedback, or report metric.
   - Do not flag observation when the selected requirement already names the expected
     signal/status to verify.
-  - Example: <item category="observation">evidence for power limiting not specified</item>
 
 If none of the five categories are missing, write:
   <item>none</item>

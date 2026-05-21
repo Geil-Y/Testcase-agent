@@ -24,7 +24,12 @@ class GenerationResult:
     error: str = ""
 
 
-def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> GenerationResult:
+def run_pipeline(
+    requirement: RequirementInput,
+    provider: LlmProvider,
+    *,
+    analysis_review_comment: str = "",
+) -> GenerationResult:
     result = GenerationResult()
 
     # LLM#1: analyze + plan
@@ -34,6 +39,7 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
         description=requirement.description,
         function_name=requirement.function_name,
         supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
+        review_comment=analysis_review_comment,
     )
     html1 = provider.complete(sys1, usr1)
     analysis = parse_analysis(html1)

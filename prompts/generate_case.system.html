@@ -69,11 +69,10 @@ Rules:
 
 
 
-Fallback rule:
-If LLM#1 did not flag a semantic gap but you discover that an action or expected step
-requires a signal, threshold, timing, state, or observation not provided by the requirement,
-place a bare [NEEDS REVIEW] in that field. Do NOT invent the value.
-Do NOT flag HIL channels, tool commands, or bench configuration.
+Do not add [NEEDS REVIEW] on your own judgment. Only use [NEEDS REVIEW] when LLM#1
+explicitly reported a missing category (see the user prompt). If no category was
+reported, do not add [NEEDS REVIEW] — use the requirement-provided values,
+symbolic parameters, or natural-language relations as-is.
 
 
 
