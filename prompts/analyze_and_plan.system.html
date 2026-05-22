@@ -147,6 +147,8 @@ Case count is determined by the requirement structure:
 - Do not create case intents that introduce new numeric test points, recovery
   scenarios, clear/reset actions, timeout behavior, or state transitions unless
   they are explicitly stated in the selected requirement.
+- A case_intent must not contain any numeric value unless that exact value appears
+  in the selected requirement. Do not derive or choose substitute numeric values.
 - For boundary or negative cases, express the condition using requirement-derived
   relations such as above threshold, below threshold, equal to threshold, shorter
   than timing, or longer than timing. Do not choose new concrete values.

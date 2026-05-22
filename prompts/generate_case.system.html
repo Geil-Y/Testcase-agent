@@ -21,17 +21,18 @@ Rules:
 - Action: one concrete operation per step.
   Valid: set an input to a requirement-derived value or relation; wait for a
   requirement-derived duration or timing relation; trigger a requirement-defined mode.
-  Examples: Set cell voltage above the requirement-provided threshold; Set cell voltage above threshold [NEEDS REVIEW];
-  Wait for requirement-derived timing.
+  Use only values, symbols, or relations from the selected requirement or LLM#1
+  allowed lists. If a required detail is unclear in the requirement wording,
+  preserve that wording and append [NEEDS REVIEW] at the exact unclear point.
+  Do not invent concrete values.
   Do not describe intent or say why.
 
 - Expected: short and judgeable.
   If the selected requirement gives a concrete signal, state, DTC, CAN field,
   log, metric, or observation point, use that exact object.
-  Format examples: requirement signal == expected value; requirement state := expected state; DTC from requirement set / not set.
   If the selected requirement gives only a natural-language outcome, preserve
-  that outcome and append [NEEDS REVIEW].
-  Example: charging is prevented [NEEDS REVIEW]
+  that outcome. If that outcome is unclear, append [NEEDS REVIEW] at the exact
+  unclear point.
   Use & to join multiple outcomes that are expected after the same action/wait.
   No paragraphs.
 
@@ -47,15 +48,15 @@ Rules:
     Expected is usually null unless the selected requirement explicitly defines a recovery outcome.
 
 - Never expect BMS response immediately in the same step that sets the stimulus.
-  Example format only; do not copy the identifier names.
+  Abstract format only; do not copy this wording.
   Bad:
-    Action: Set cell voltage above threshold [NEEDS REVIEW]
-    Expected: overvoltage response is active [NEEDS REVIEW]
+    Action: Set requirement stimulus
+    Expected: requirement response
   Good:
-    Action: Set cell voltage above threshold [NEEDS REVIEW]
-    Expected: Cell voltage is above threshold [NEEDS REVIEW]
+    Action: Set requirement stimulus
+    Expected: stimulus condition is active
     Action: Wait for requirement-derived timing
-    Expected: overvoltage response is active [NEEDS REVIEW]
+    Expected: requirement response
 
 - Action vs Expected boundaries:
   "Check", "Verify", "Read", "Observe", "Monitor", "Capture" are not HIL operations —
