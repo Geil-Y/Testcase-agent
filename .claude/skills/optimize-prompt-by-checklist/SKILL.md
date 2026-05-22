@@ -128,24 +128,23 @@ Renderers consume evaluator results:
 
 ### DeepSeek AI Review
 
-DeepSeek uses the 8-dimension scoring rubric in `optimization_runs/scoring_rubrics.md`.
-It evaluates requirement groups, not isolated flattened cases:
+**Unified scoring engine:** `optimization/claude_evaluator.py::_score_requirements_parallel`
+is the single entry point for all DeepSeek 8-dimension scoring. Both `run --eval` and
+the standalone `evaluate` command route through it.
+
+DeepSeek receives only the requirement description and final generated case content —
+no LLM#1 analysis intermediate data (signals, thresholds, timing, coverage plan, etc.).
+It evaluates requirement groups using the rubric in `optimization_runs/scoring_rubrics.md`:
 
 - `coverage_value` is scored once per requirement over the full generated case set.
 - Other 7 dimensions are scored per case.
 - `deepseek_evaluation.json` stores both nested `requirements` and flattened `cases`.
 - `overall_weighted` is computed by averaging per-requirement weighted scores.
 
-**Incremental scoring (--eval):** When `--eval` is passed to `run`, each requirement
-group is scored by DeepSeek immediately after its cases are generated — no waiting
-for all requirements to finish. Scores print in real-time:
-
-```
-[3/35] DeepSeek REQ-BMS-003 (weighted=3.8)
-```
-
-The standalone `evaluate` subcommand still batches 20 requirement groups per call,
-suitable for re-scoring existing round directories.
+**Batching:** Requirements are grouped into batches of 5 per API call, submitted with
+up to 3 concurrent workers. When `--eval` is passed to `run`, entries are buffered
+during generation and flushed in batches of 5. The standalone `evaluate` subcommand
+reads `generated_cases.json` and scores all entries in batches of 5.
 
 ### Manual Review Scores
 

@@ -22,7 +22,10 @@ python -m optimization.cli run `
   --output-dir optimization_runs/log/<run-name>
 ```
 
-This generates cases for all 35 requirements and runs DeepSeek 8-dimension scoring concurrently (batched, 5 reqs per API call).
+This generates cases for all 35 requirements and runs DeepSeek 8-dimension scoring
+via the unified scoring engine `_score_requirements_parallel` — 5 reqs per API call,
+3 concurrent workers. DeepSeek sees only the requirement description and final case
+content (no LLM#1 analysis data).
 
 ### 3. Wait for completion
 
@@ -46,7 +49,7 @@ Parse these from the output:
 
 ### 5. Commit prompt files
 
-Only stage files under `prompts/`. Do NOT commit generated reports, JSON files, or round directories.
+Stage ONLY files under `prompts/`. Use exact paths — never `git add .` or `git add -A`.
 
 ```bash
 git add prompts/
@@ -62,7 +65,10 @@ EOF
 )"
 ```
 
-Use Conventional Commits type (`fix`, `feat`, `refactor`) based on what changed in prompts. If no prompt changes were made (eval-only baseline), use `chore(prompts): baseline evaluation`.
+Use Conventional Commits type (`fix`, `feat`, `refactor`) based on what changed in prompts.
+If no prompt changes were made (eval-only baseline), use `chore(prompts): baseline evaluation`.
+
+Do NOT stage or commit anything outside `prompts/`. Ignore other dirty files.
 
 ### 6. Report
 
@@ -76,5 +82,6 @@ Run <log-folder-name>: N cases, XP/YF passed (Z%), DeepSeek weighted W.W. Commit
 
 - Always run all 35 requirements — no `--limit` unless user explicitly asks.
 - Do NOT commit `generated_cases.json`, `deepseek_evaluation.json`, `cases_report.html`, or any file under `optimization_runs/log/`.
-- Only commit changes under `prompts/` (and `src/` or `optimization/` if code was also changed).
+- Only stage and commit changes under `prompts/` — never `src/`, `optimization/`, or any other directory.
+- Ignore dirty files outside `prompts/`. They are not this skill's concern.
 - If the evaluation fails partway, report the error and ask whether to retry or commit partial results.
