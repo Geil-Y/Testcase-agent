@@ -179,40 +179,20 @@ def _fmt_missing_items(items: list[dict[str, Any]]) -> str:
 
 
 def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> str:
-    """Build user prompt for a batch of requirement groups."""
+    """Build user prompt for a batch of requirement groups — case content only."""
     parts = [
         f"Evaluate the following {len(requirements)} requirement group(s) "
         f"(batch {start_idx + 1}-{start_idx + len(requirements)} of {total} total).\n",
     ]
 
     for offset, req in enumerate(requirements):
-        analysis = req.get("analysis", {})
-        intents = analysis.get("case_intents", [])
-        intent_lines = []
-        for i, intent in enumerate(intents):
-            intent_lines.append(
-                f"  {i}. coverage={intent.get('coverage', '')}; "
-                f"intent={intent.get('description', '')}"
-            )
-
         parts.append(
             f"## Requirement Group {start_idx + offset}: {req.get('requirement_key', '')}\n"
             f"Function: {req.get('function_name', '')}\n"
             f"Description: {req.get('description', '')}\n"
-            f"Supplementary info: {req.get('supplementary_info', '')}\n"
-            f"Evaluation bucket: {req.get('evaluation_bucket', '')}\n"
-            f"Expected missing categories: {_fmt_list(req.get('expected_missing_categories', []))}\n"
-            f"Known signals: {_fmt_list(analysis.get('signals', []))}\n"
-            f"Known thresholds: {_fmt_list(analysis.get('thresholds', []))}\n"
-            f"Known timing: {_fmt_list(analysis.get('timing', []))}\n"
-            f"Known states: {_fmt_list(analysis.get('states', []))}\n"
-            f"Known observations: {_fmt_list(analysis.get('observations', []))}\n"
-            f"Missing information items:\n{_fmt_missing_items(analysis.get('missing_info_items', []))}\n"
-            f"Coverage plan:\n{chr(10).join(intent_lines) if intent_lines else '  none'}\n"
         )
 
         for ci, case in enumerate(req.get("cases", [])):
-            intent = intents[ci] if ci < len(intents) else {}
             steps_text = "\n".join(
                 f"    {s.get('order', j + 1)}. Action: {s.get('action', '')} | "
                 f"Expected: {s.get('expected', 'none')}"
@@ -220,8 +200,6 @@ def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> 
             )
             parts.append(
                 f"### Case {ci} — {case.get('title', '')}\n"
-                f"Case coverage: {intent.get('coverage', '')}\n"
-                f"Case intent: {intent.get('description', '')}\n"
                 f"Objective: {case.get('objective', '')}\n"
                 f"Precondition: {case.get('precondition', '')}\n"
                 f"Postcondition: {case.get('postcondition', '')}\n"
