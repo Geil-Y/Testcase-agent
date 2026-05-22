@@ -123,7 +123,7 @@ If none of the five categories are missing, write:
 Do NOT flag HIL channel names, tool commands, or bench configuration details.
 
 Write each missing item in its own <item> tag with a category attribute:
-  <item category="timing">response timing not specified</item>
+  <item category="timing">required timing not specified</item>
   <item category="threshold">overvoltage threshold value not provided</item>
 </section>
 
@@ -144,6 +144,12 @@ Case count is determined by the requirement structure:
   the "triggers" condition and the "does not trigger" condition are separate cases.
   Use semantic relations such as above threshold, below threshold, at threshold,
   shorter than timing, or longer than timing. Do not invent numeric epsilon values.
+- Do not create case intents that introduce new numeric test points, recovery
+  scenarios, clear/reset actions, timeout behavior, or state transitions unless
+  they are explicitly stated in the selected requirement.
+- For boundary or negative cases, express the condition using requirement-derived
+  relations such as above threshold, below threshold, equal to threshold, shorter
+  than timing, or longer than timing. Do not choose new concrete values.
 - For negative or boundary cases, derive the expected behavior from whether the
   full trigger condition is satisfied.
 - If any required trigger condition is not satisfied, the expected requirement

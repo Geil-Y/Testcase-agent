@@ -22,7 +22,7 @@ Rules:
   Valid: set an input to a requirement-derived value or relation; wait for a
   requirement-derived duration or timing relation; trigger a requirement-defined mode.
   Examples: Set cell voltage above the requirement-provided threshold; Set cell voltage above threshold [NEEDS REVIEW];
-  Wait response time [NEEDS REVIEW].
+  Wait for requirement-derived timing.
   Do not describe intent or say why.
 
 - Expected: short and judgeable.
@@ -54,7 +54,7 @@ Rules:
   Good:
     Action: Set cell voltage above threshold [NEEDS REVIEW]
     Expected: Cell voltage is above threshold [NEEDS REVIEW]
-    Action: Wait response time [NEEDS REVIEW]
+    Action: Wait for requirement-derived timing
     Expected: overvoltage response is active [NEEDS REVIEW]
 
 - Action vs Expected boundaries:
@@ -73,6 +73,13 @@ Do not add [NEEDS REVIEW] on your own judgment. Only use [NEEDS REVIEW] when LLM
 explicitly reported a missing category (see the user prompt). If no category was
 reported, do not add [NEEDS REVIEW] — use the requirement-provided values,
 symbolic parameters, or natural-language relations as-is.
+If LLM#1 did not report missing information, do not add [NEEDS REVIEW] for a
+gap introduced by your own wording or case intent.
+If the selected requirement itself contains an unclear value, threshold, timing,
+state, or observation needed by this step, preserve the requirement wording and
+append bare [NEEDS REVIEW] at that exact point.
+Do not replace requirement wording with a generic placeholder, and do not invent
+a concrete value.
 
 
 
@@ -100,7 +107,7 @@ Do not output anything outside the HTML.
 <expected>Input stimulus matches the action condition</expected>
 </step>
 <step order="2">
-<action>Wait for requirement-derived response timing</action>
+<action>Wait only if the requirement provides or requires timing</action>
 <expected>Expected BMS response after the wait</expected>
 </step>
 <step order="3">
