@@ -453,14 +453,31 @@ def score_batch(
     return _parse_requirement_scores(parsed)
 
 
+def _print_requirement_score(idx: int, total: int, req_key: str, r: "RequirementScore | None"):
+    """Print a single requirement's DeepSeek score line."""
+    if r is None:
+        print(f"  DeepSeek [{idx + 1}/{total}] {req_key} MISSING (not in batch response)")
+        return
+    avgs = r.case_dimension_averages
+    print(
+        f"  DeepSeek [{idx + 1}/{total}] {req_key}  "
+        f"w={r.weighted_score}  cov={r.coverage_value}  "
+        f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
+        f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
+        f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
+        f"ar={avgs['automation_readiness']}"
+    )
+
+
 def _score_requirements_parallel(
     data: list[dict],
     system_prompt: str,
     model: str = DEFAULT_MODEL,
-    max_concurrency: int = 5,
+    batch_size: int = 5,
+    max_concurrency: int = 3,
     submit_delay: float = 0.1,
 ) -> tuple[list[RequirementScore], int]:
-    """Score requirements in parallel with controlled concurrency.
+    """Score requirements in parallel, batching multiple entries per API call.
 
     Returns (all_scores_in_original_order, error_count).
     Prints per-requirement results as they complete.
@@ -469,46 +486,54 @@ def _score_requirements_parallel(
     results: dict[int, list[RequirementScore]] = {}
     errors = 0
 
-    def _score_one(idx: int, entry: dict) -> tuple[int, list[RequirementScore], Exception | None]:
+    # Split into batches
+    batches: list[tuple[list[int], list[dict]]] = []
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        batches.append((list(range(start, end)), data[start:end]))
+
+    def _score_batch(indices: list[int], entries: list[dict]):
         try:
-            scores = score_batch([entry], system_prompt, model, start_idx=idx, total=total)
-            return idx, scores, None
+            scores = score_batch(entries, system_prompt, model, start_idx=indices[0] + 1, total=total)
+            return indices, scores, None
         except Exception as exc:
-            return idx, [], exc
+            return indices, [], exc
 
     with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
-        future_to_idx: dict = {}
-        for idx, entry in enumerate(data):
-            future = executor.submit(_score_one, idx, entry)
-            future_to_idx[future] = idx
-            if submit_delay and idx + 1 < total:
+        future_to_indices: dict = {}
+        for indices, entries in batches:
+            future = executor.submit(_score_batch, indices, entries)
+            future_to_indices[future] = indices
+            if submit_delay and len(future_to_indices) < len(batches):
                 time.sleep(submit_delay)
 
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            req_key = data[idx].get("requirement_key", f"#{idx}")
+        for future in as_completed(future_to_indices):
+            indices = future_to_indices[future]
             try:
                 _, scores, exc = future.result()
                 if exc:
-                    print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
-                    errors += 1
+                    for idx in indices:
+                        req_key = data[idx].get("requirement_key", f"#{idx}")
+                        print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                        errors += 1
                 else:
-                    results[idx] = scores
-                    if scores:
-                        r = scores[0]
-                        avgs = r.case_dimension_averages
-                        print(
-                            f"  DeepSeek [{idx + 1}/{total}] {req_key}  "
-                            f"w={r.weighted_score}  cov={r.coverage_value}  "
-                            f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
-                            f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
-                            f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
-                            f"ar={avgs['automation_readiness']}"
-                        )
+                    score_by_key = {s.requirement_key: s for s in scores}
+                    for idx in indices:
+                        req_key = data[idx].get("requirement_key", f"#{idx}")
+                        s = score_by_key.get(req_key)
+                        if s:
+                            results[idx] = [s]
+                            _print_requirement_score(idx, total, req_key, s)
+                        else:
+                            _print_requirement_score(idx, total, req_key, None)
+                            errors += 1
                 sys.stdout.flush()
             except Exception as exc:
-                print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
-                errors += 1
+                for idx in indices:
+                    req_key = data[idx].get("requirement_key", f"#{idx}")
+                    print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                    errors += 1
+                sys.stdout.flush()
 
     all_scores: list[RequirementScore] = []
     for i in sorted(results.keys()):
@@ -543,6 +568,7 @@ def evaluate_round(
 
     result.requirements, result.errors = _score_requirements_parallel(
         data, system_prompt, model,
+        batch_size=5,
         max_concurrency=max_concurrency,
         submit_delay=delay,
     )

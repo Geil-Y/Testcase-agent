@@ -452,6 +452,7 @@ def run_batch(
         from concurrent.futures import ThreadPoolExecutor
         from optimization.claude_evaluator import (
             build_system_prompt, score_batch, save_evaluation,
+            _print_requirement_score,
             EvalResult, DEFAULT_MODEL as EVAL_DEFAULT_MODEL,
         )
 
@@ -495,17 +496,9 @@ def run_batch(
                         s = score_by_key.get(req_key)
                         if s:
                             results_by_idx[idx] = [s]
-                            avgs = s.case_dimension_averages
-                            print(
-                                f"  DeepSeek [{idx + 1}/{eval_total}] {req_key}  "
-                                f"w={s.weighted_score}  cov={s.coverage_value}  "
-                                f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
-                                f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
-                                f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
-                                f"ar={avgs['automation_readiness']}"
-                            )
+                            _print_requirement_score(idx, eval_total, req_key, s)
                         else:
-                            print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} MISSING (not in batch response)")
+                            _print_requirement_score(idx, eval_total, req_key, None)
                             _eval_errors[0] += 1
             except Exception as exc:
                 for idx in indices:
