@@ -416,6 +416,7 @@ def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
     sanitize: bool = True,
+    retry: bool = True,
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
@@ -574,13 +575,14 @@ def run_batch(
             case, replacements = _post_process_case(case, retry_meta)
             sanitize_replacements.extend(replacements)
 
-            # Step 2: Retry loop (max 2 retries + initial = 3 attempts)
-            for attempt in range(3):
+            # Step 2: Quality check + optional retry loop
+            _retry_attempts = 3 if retry else 1
+            for attempt in range(_retry_attempts):
                 hard_fails, _ = evaluate_case(_case_to_dict(case), req_info, {})
                 if not hard_fails:
                     break
                 retry_meta["failures"].append(hard_fails)
-                if attempt < 2 and intent:
+                if retry and attempt < 2 and intent:
                     review = _build_review_comment(hard_fails)
                     try:
                         case = regenerate_case(
@@ -773,6 +775,7 @@ def main():
     run_parser.add_argument("--func-col", default="function")
     run_parser.add_argument("--limit", type=int, default=None, help="Limit to first N requirements (for quick testing, works with --requirement-set)")
     run_parser.add_argument("--no-sanitize", action="store_true", help="Disable post-processing that replaces invented numeric values with [NEEDS REVIEW] (sanitize is ON by default)")
+    run_parser.add_argument("--no-retry", action="store_true", help="Skip LLM regeneration of cases that fail quality checks (retry is ON by default)")
     run_parser.add_argument("--eval", action="store_true", help="Run DeepSeek 8-dimension evaluation after generation and generate complete report")
 
     # evaluate command
@@ -843,6 +846,7 @@ def main():
             selected,
             Path(args.output_dir),
             sanitize=not args.no_sanitize,
+            retry=not args.no_retry,
             requirement_set_data=requirement_set_data,
             run_eval=args.eval,
         )
