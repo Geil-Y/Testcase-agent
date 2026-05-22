@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 import time
 from dataclasses import dataclass, field
@@ -24,7 +25,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-flash[1m]")
-MAX_REQUIREMENTS_PER_CALL = 20
 _RUBRICS_PATH = _PROJECT_ROOT / "optimization_runs" / "scoring_rubrics.md"
 
 CASE_LEVEL_DIMS = [
@@ -475,12 +475,80 @@ def score_batch(
     return _parse_requirement_scores(parsed)
 
 
+def _score_requirements_parallel(
+    data: list[dict],
+    system_prompt: str,
+    model: str = DEFAULT_MODEL,
+    max_concurrency: int = 5,
+    submit_delay: float = 0.1,
+) -> tuple[list[RequirementScore], int]:
+    """Score requirements in parallel with controlled concurrency.
+
+    Returns (all_scores_in_original_order, error_count).
+    Prints per-requirement results as they complete.
+    """
+    total = len(data)
+    results: dict[int, list[RequirementScore]] = {}
+    errors = 0
+
+    def _score_one(idx: int, entry: dict) -> tuple[int, list[RequirementScore], Exception | None]:
+        try:
+            scores = score_batch([entry], system_prompt, model, start_idx=idx, total=total)
+            return idx, scores, None
+        except Exception as exc:
+            return idx, [], exc
+
+    with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
+        future_to_idx: dict = {}
+        for idx, entry in enumerate(data):
+            future = executor.submit(_score_one, idx, entry)
+            future_to_idx[future] = idx
+            if submit_delay and idx + 1 < total:
+                time.sleep(submit_delay)
+
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
+            req_key = data[idx].get("requirement_key", f"#{idx}")
+            try:
+                _, scores, exc = future.result()
+                if exc:
+                    print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                    errors += 1
+                else:
+                    results[idx] = scores
+                    if scores:
+                        r = scores[0]
+                        avgs = r.case_dimension_averages
+                        print(
+                            f"  DeepSeek [{idx + 1}/{total}] {req_key}  "
+                            f"w={r.weighted_score}  cov={r.coverage_value}  "
+                            f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
+                            f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
+                            f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
+                            f"ar={avgs['automation_readiness']}"
+                        )
+                sys.stdout.flush()
+            except Exception as exc:
+                print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                errors += 1
+
+    all_scores: list[RequirementScore] = []
+    for i in sorted(results.keys()):
+        all_scores.extend(results[i])
+
+    return all_scores, errors
+
+
 def evaluate_round(
     round_dir: Path,
     model: str = DEFAULT_MODEL,
-    delay: float = 0.5,
+    delay: float = 0.1,
+    max_concurrency: int = 5,
 ) -> EvalResult:
-    """Score all requirement groups in a round using DeepSeek API."""
+    """Score all requirement groups in a round using DeepSeek API.
+
+    Requirements are scored in parallel with up to max_concurrency workers.
+    """
     cases_path = round_dir / "generated_cases.json"
     if not cases_path.exists():
         raise FileNotFoundError(f"generated_cases.json not found in {round_dir}")
@@ -491,46 +559,15 @@ def evaluate_round(
 
     with open(cases_path, encoding="utf-8") as f:
         data = json.load(f)
-    checklist = checklist_path.read_text(encoding="utf-8")
 
-    total = len(data)
-    system_prompt = _build_system_prompt(checklist)
+    system_prompt = _build_system_prompt(checklist_path.read_text(encoding="utf-8"))
     result = EvalResult(model_used=model)
 
-    for batch_start in range(0, total, MAX_REQUIREMENTS_PER_CALL):
-        batch = data[batch_start:batch_start + MAX_REQUIREMENTS_PER_CALL]
-        batch_num = batch_start // MAX_REQUIREMENTS_PER_CALL + 1
-        total_batches = (total + MAX_REQUIREMENTS_PER_CALL - 1) // MAX_REQUIREMENTS_PER_CALL
-
-        print(
-            f"[Batch {batch_num}/{total_batches}] Evaluating {len(batch)} requirement group(s) "
-            f"({batch_start + 1}-{batch_start + len(batch)} of {total}) ..."
-        )
-
-        try:
-            batch_scores = score_batch(
-                batch, system_prompt, model,
-                start_idx=batch_start, total=total,
-            )
-            missing_scores = [
-                rs for rs in batch_scores
-                if rs.coverage_value == 0 or any(
-                    getattr(cs, dim) == 0 for cs in rs.cases for dim in CASE_LEVEL_DIMS
-                )
-            ]
-            if missing_scores:
-                print(f"  WARNING: {len(missing_scores)} requirement group(s) have missing/invalid scores")
-
-            result.requirements.extend(batch_scores)
-            print(f"  Got {len(batch_scores)} requirement score(s)")
-            sys.stdout.flush()
-
-        except Exception as exc:
-            print(f"  ERROR: {exc}")
-            result.errors += 1
-
-        if batch_start + MAX_REQUIREMENTS_PER_CALL < total:
-            time.sleep(delay)
+    result.requirements, result.errors = _score_requirements_parallel(
+        data, system_prompt, model,
+        max_concurrency=max_concurrency,
+        submit_delay=delay,
+    )
 
     return result
 
@@ -611,13 +648,14 @@ def save_evaluation(result: EvalResult, round_dir: Path, evaluator_name: str = "
 def run_full_evaluation(
     round_dir: Path,
     model: str = DEFAULT_MODEL,
-    delay: float = 0.5,
+    delay: float = 0.1,
+    max_concurrency: int = 5,
 ) -> float:
     """Run DeepSeek 8-dimension scoring and save to deepseek_evaluation.json.
 
     Returns the overall weighted score (0.0-5.0).
     """
-    result = evaluate_round(round_dir, model=model, delay=delay)
+    result = evaluate_round(round_dir, model=model, delay=delay, max_concurrency=max_concurrency)
     save_evaluation(result, round_dir, evaluator_name="deepseek")
 
     avgs = result.dimension_averages

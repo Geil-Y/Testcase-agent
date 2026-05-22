@@ -441,6 +441,84 @@ def run_batch(
     total_cases = 0
     errors: list[dict] = []
 
+    # ── Background DeepSeek evaluator setup ──────────────────────────
+    eval_executor = None
+    eval_futures: dict = {}
+    results_by_idx: dict[int, list] = {}
+    _eval_errors: list[int] = [0]
+    _eval_buffer: list[tuple[int, dict]] = []
+    _eval_flush = None  # type: ignore[assignment]
+    if run_eval:
+        from concurrent.futures import ThreadPoolExecutor
+        from optimization.claude_evaluator import (
+            build_system_prompt, score_batch, save_evaluation,
+            EvalResult, DEFAULT_MODEL as EVAL_DEFAULT_MODEL,
+        )
+
+        eval_system_prompt = build_system_prompt()
+        _BATCH_SIZE = 5
+        eval_executor = ThreadPoolExecutor(max_workers=3)
+        eval_total = len(requirements)
+
+        def _submit_batch(batch_entries: list[tuple[int, dict]]):
+            entries = [e for _, e in batch_entries]
+            indices = [i for i, _ in batch_entries]
+
+            def _score_batch_entries():
+                try:
+                    scores = score_batch(
+                        entries, eval_system_prompt, EVAL_DEFAULT_MODEL,
+                        start_idx=indices[0] + 1, total=eval_total,
+                    )
+                    return indices, scores, None
+                except Exception as exc:
+                    return indices, [], exc
+
+            future = eval_executor.submit(_score_batch_entries)
+            future.add_done_callback(_on_batch_done)
+            eval_futures[future] = indices
+
+        def _on_batch_done(future):
+            indices = eval_futures[future]
+            try:
+                _, scores, exc = future.result()
+                if exc:
+                    for idx in indices:
+                        req_key = all_results[idx].get("requirement_key", f"#{idx}")
+                        print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} FAILED: {exc}")
+                        _eval_errors[0] += 1
+                else:
+                    score_by_key = {s.requirement_key: s for s in scores}
+                    for idx in indices:
+                        entry = all_results[idx]
+                        req_key = entry.get("requirement_key", f"#{idx}")
+                        s = score_by_key.get(req_key)
+                        if s:
+                            results_by_idx[idx] = [s]
+                            avgs = s.case_dimension_averages
+                            print(
+                                f"  DeepSeek [{idx + 1}/{eval_total}] {req_key}  "
+                                f"w={s.weighted_score}  cov={s.coverage_value}  "
+                                f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
+                                f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
+                                f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
+                                f"ar={avgs['automation_readiness']}"
+                            )
+                        else:
+                            print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} MISSING (not in batch response)")
+                            _eval_errors[0] += 1
+            except Exception as exc:
+                for idx in indices:
+                    req_key = all_results[idx].get("requirement_key", f"#{idx}")
+                    print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} FAILED: {exc}")
+                    _eval_errors[0] += 1
+            sys.stdout.flush()
+
+        def _eval_flush():
+            if _eval_buffer:
+                _submit_batch(list(_eval_buffer))
+                _eval_buffer.clear()
+
     for i, req in enumerate(requirements):
         print(f"[{i+1}/{len(requirements)}] Generating: {req.requirement_key} ...")
         result = run_pipeline(req, provider)
@@ -585,6 +663,16 @@ def run_batch(
         retried = sum(1 for rm in retry_metas if rm["attempts"] > 0)
         print(f"  {len(cases_data)} cases, quality: {passed_count}/{len(cases_data)} passed, {retried} retried")
 
+        # ── Buffer entries for batched DeepSeek scoring ────────────────
+        if eval_executor is not None:
+            _eval_buffer.append((i, entry))
+            if len(_eval_buffer) >= _BATCH_SIZE:
+                _eval_flush()
+
+    # Flush remaining DeepSeek scoring batches
+    if run_eval:
+        _eval_flush()
+
     # Save generated cases
     cases_path = output_dir / "generated_cases.json"
     cases_path.write_text(
@@ -638,44 +726,20 @@ def run_batch(
     except Exception as exc:
         print(f"Hard-rule evaluation save failed: {exc}")
 
-    # Run incremental DeepSeek evaluation if requested
+    # Wait for background DeepSeek evaluation and save results
     if run_eval:
         try:
-            from optimization.claude_evaluator import (
-                build_system_prompt, score_batch, save_evaluation,
-                EvalResult, DEFAULT_MODEL as EVAL_DEFAULT_MODEL,
-            )
-
-            system_prompt = build_system_prompt()
+            eval_executor.shutdown(wait=True)
             eval_result = EvalResult(model_used=EVAL_DEFAULT_MODEL)
-            total = len(all_results)
-
-            for idx, entry in enumerate(all_results):
-                try:
-                    scores = score_batch(
-                        [entry], system_prompt,
-                        start_idx=idx, total=total,
-                    )
-                    eval_result.requirements.extend(scores)
-                    if scores:
-                        r = scores[0]
-                        avgs = r.case_dimension_averages
-                        print(
-                            f"  DeepSeek [{idx + 1}/{total}] {entry['requirement_key']}  "
-                            f"w={r.weighted_score}  cov={r.coverage_value}  "
-                            f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
-                            f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
-                            f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
-                            f"ar={avgs['automation_readiness']}"
-                        )
-                except Exception as exc:
-                    print(f"  DeepSeek [{idx + 1}/{total}] {entry['requirement_key']} FAILED: {exc}")
-                    eval_result.errors += 1
-
+            for i in sorted(results_by_idx.keys()):
+                eval_result.requirements.extend(results_by_idx[i])
+            eval_result.errors = _eval_errors[0]
             save_evaluation(eval_result, output_dir, evaluator_name="deepseek")
             print(f"DeepSeek evaluation completed (weighted={eval_result.overall_weighted})")
         except Exception as exc:
             print(f"DeepSeek evaluation failed: {exc}")
+            if eval_executor is not None:
+                eval_executor.shutdown(wait=False)
 
     # Generate unified cases_report.html
     try:
@@ -715,7 +779,8 @@ def main():
     eval_parser = sub.add_parser("evaluate", help="Run AI evaluation against checklist_v2.md")
     eval_parser.add_argument("--round-dir", required=True, help="Path to a round directory containing generated_cases.json")
     eval_parser.add_argument("--model", default=None, help="Model ID (default: from ANTHROPIC_MODEL env or deepseek-v4-flash[1m])")
-    eval_parser.add_argument("--delay", type=float, default=0.5, help="Seconds between API calls (default: 0.5)")
+    eval_parser.add_argument("--delay", type=float, default=0.1, help="Seconds between API submissions (default: 0.1)")
+    eval_parser.add_argument("--concurrency", type=int, default=5, help="Max parallel scoring calls (default: 5)")
     eval_parser.add_argument("--report", action="store_true", help="Regenerate cases_report.html from existing evaluation files")
 
     args = parser.parse_args()
@@ -796,6 +861,7 @@ def main():
                 round_dir,
                 model=args.model or DEFAULT_MODEL,
                 delay=args.delay,
+                max_concurrency=args.concurrency,
             )
 
 
