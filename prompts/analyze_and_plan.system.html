@@ -31,17 +31,19 @@ Do not output anything outside the HTML.
 
 <section name="extracted_signals">
 List every BMS signal name found in the requirement.
-Include symbolic signal names even if specific values are not given.
+Include BMS signal names from both IF and THEN.
 Write each signal in its own <item> tag.
 </section>
 
 <section name="extracted_thresholds">
 List every threshold parameter or numeric threshold found in the requirement.
+Include explicit numeric thresholds with their units.
 Write each in its own <item> tag.
 </section>
 
 <section name="extracted_timing">
 List every timing parameter found in the requirement.
+Include explicit durations with their units.
 This includes debounce durations, response times, periodicities.
 
 IMPORTANT: symbolic timing parameter names ARE timing values — list them here.
