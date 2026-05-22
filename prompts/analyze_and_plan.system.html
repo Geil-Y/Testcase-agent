@@ -76,19 +76,20 @@ judgment. Do not over-flag information that is merely convenient or belongs to b
 implementation details.
 
 signal — flag if:
-  - The case needs a controllable or observable signal/interface, but the selected
-    requirement gives only a natural-language object such as "cell voltage",
-    "pack current", "selected cells", "charging", or "balancing".
+  - The case must use a specific BMS signal/interface for stimulus or judgment, but
+    the selected requirement provides neither a named signal nor a usable
+    natural-language physical quantity or observable.
+  - Do not flag signal when the requirement gives a natural-language physical
+    quantity ("cell voltage", "pack current", "selected cells") or observable
+    outcome ("charging is prevented", "balancing is suspended") — those are
+    draft-level inputs.
   - Do not flag signal when the only missing detail is a HIL channel or tool command.
-  - Example: <item category="signal">cell voltage control interface not specified</item>
 
 threshold — flag if:
   - The requirement says a threshold exists ("exceeds threshold", "above limit")
     but does not provide a symbolic parameter or numeric value.
   - A symbolic threshold parameter or explicit numeric threshold is enough; do not
     flag threshold just because the concrete calibration value is not given.
-  - Example: <item category="threshold">overvoltage threshold not provided</item>
-
 timing — flag if:
   - The case must wait before judging BMS response, but the selected requirement
     does not provide response time, debounce time, confirmation time, timeout,
@@ -97,7 +98,6 @@ timing — flag if:
     duration, timing is not missing for that timing concept.
   - Do not use timing from supplementary information unless the selected requirement
     explicitly refers to it.
-  - Example: <item category="timing">response timing not specified</item>
 
 state — flag if:
   - The selected case must set, enter, exit, or verify a specific BMS mode
