@@ -72,6 +72,7 @@ python -m optimization.cli run `
   --excel requirements.xlsx `
   --sample 20 `
   --seed 42 `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 ```
 
@@ -82,15 +83,17 @@ The set is self-contained — entries have inline `description`,
 `function_name`, and `supplementary_info`, so `--excel` is NOT required.
 
 ```powershell
-# Full 35-entry set
+# Full 35-entry set with incremental DeepSeek scoring
 python -m optimization.cli run `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 
 # First N entries only
 python -m optimization.cli run `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
   --limit 5 `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 ```
 
@@ -133,6 +136,17 @@ It evaluates requirement groups, not isolated flattened cases:
 - `deepseek_evaluation.json` stores both nested `requirements` and flattened `cases`.
 - `overall_weighted` is computed by averaging per-requirement weighted scores.
 
+**Incremental scoring (--eval):** When `--eval` is passed to `run`, each requirement
+group is scored by DeepSeek immediately after its cases are generated — no waiting
+for all requirements to finish. Scores print in real-time:
+
+```
+[3/35] DeepSeek REQ-BMS-003 (weighted=3.8)
+```
+
+The standalone `evaluate` subcommand still batches 20 requirement groups per call,
+suitable for re-scoring existing round directories.
+
 ### Manual Review Scores
 
 If `<round_dir>/manual_review_scores.json` exists, `generate_report()` loads it,
@@ -148,14 +162,24 @@ Format uses the same 8-dimension structure. See `optimization/manual_review.py`.
 
 ## Eval-Only Workflow
 
-1. Generate cases with either random exploration or the full Prompt Evaluation Set.
+1. Generate + evaluate in one pass with `--eval` (DeepSeek scores print in real-time).
 2. Run `generate_round_html()` to produce `cases_report.html`.
 3. Optionally generate `evaluation_report.html`.
-4. Optionally run AI evaluation: `python -m optimization.cli evaluate --round-dir <round_dir>`
-5. Optionally write `manual_review_scores.json` and rerun `generate_round_html()`.
+4. Optionally write `manual_review_scores.json` and rerun `generate_round_html()`.
 
 ```powershell
+# One command: generate cases, hard-rule eval, and incremental DeepSeek scoring
+python -m optimization.cli run `
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --eval `
+  --output-dir optimization_runs/log/<run-name>/round_01
+
+# Generate the unified report
 python -c "from pathlib import Path; from optimization.generate_case_html import generate_round_html; generate_round_html(Path('<round_dir>'), 1)"
+```
+
+If you need to re-score an existing round (e.g. after rubric changes):
+```powershell
 python -m optimization.cli evaluate --round-dir <round_dir>
 ```
 
@@ -167,14 +191,13 @@ Rules:
 
 ### Per-Round Steps
 
-1. Generate cases with the full Prompt Evaluation Set (acceptance signal).
-2. Generate `cases_report.html`.
+1. Generate + evaluate with `--eval` (DeepSeek scores print in real-time as each requirement completes).
+2. Run `generate_round_html()` to produce `cases_report.html`.
 3. Optionally generate `evaluation_report.html`.
-4. Run AI evaluation: `python -m optimization.cli evaluate --round-dir <round_dir>`
-5. If using Manual Review Scores, write `manual_review_scores.json` and rerun `generate_round_html()`.
-6. Diagnose the lowest-quality cases before editing prompts.
-7. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output format.
-8. Repeat for the next round.
+4. If using Manual Review Scores, write `manual_review_scores.json` and rerun `generate_round_html()`.
+5. Diagnose the lowest-quality cases from the report before editing prompts.
+6. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output format.
+7. Repeat for the next round.
 
 ### Optimization Rules
 

@@ -148,6 +148,17 @@ def _build_system_prompt(checklist: str) -> str:
     )
 
 
+def build_system_prompt() -> str:
+    """Build and return the system prompt from checklist_v2.md.
+
+    The result can be reused across multiple score_batch() calls so the
+    checklist and rubrics are loaded only once.
+    """
+    checklist_path = _PROJECT_ROOT / "optimization_runs" / "checklist_v2.md"
+    checklist = checklist_path.read_text(encoding="utf-8")
+    return _build_system_prompt(checklist)
+
+
 def _fmt_list(values: list[Any]) -> str:
     clean = [str(v).strip() for v in values if str(v).strip()]
     return ", ".join(clean) if clean else "none"
@@ -443,6 +454,27 @@ def _parse_requirement_scores(parsed: dict) -> list[RequirementScore]:
     return scores
 
 
+def score_batch(
+    batch: list[dict],
+    system_prompt: str,
+    model: str = DEFAULT_MODEL,
+    start_idx: int = 0,
+    total: int | None = None,
+) -> list[RequirementScore]:
+    """Score a batch of requirement groups in a single LLM call.
+
+    Raises RuntimeError if the LLM response cannot be parsed.
+    """
+    if total is None:
+        total = len(batch)
+    user_prompt = _build_user_prompt(batch, start_idx, total)
+    raw = _call_llm(system_prompt, user_prompt, model)
+    parsed = _extract_json(raw)
+    if parsed is None:
+        raise RuntimeError(f"Failed to parse JSON from LLM response")
+    return _parse_requirement_scores(parsed)
+
+
 def evaluate_round(
     round_dir: Path,
     model: str = DEFAULT_MODEL,
@@ -475,19 +507,11 @@ def evaluate_round(
             f"({batch_start + 1}-{batch_start + len(batch)} of {total}) ..."
         )
 
-        user_prompt = _build_user_prompt(batch, batch_start, total)
-
         try:
-            raw = _call_llm(system_prompt, user_prompt, model)
-            parsed = _extract_json(raw)
-
-            if parsed is None:
-                print("  ERROR: Failed to parse JSON from response")
-                print(f"  Raw (first 500 chars): {raw[:500]}")
-                result.errors += 1
-                continue
-
-            batch_scores = _parse_requirement_scores(parsed)
+            batch_scores = score_batch(
+                batch, system_prompt, model,
+                start_idx=batch_start, total=total,
+            )
             missing_scores = [
                 rs for rs in batch_scores
                 if rs.coverage_value == 0 or any(

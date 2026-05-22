@@ -638,12 +638,42 @@ def run_batch(
     except Exception as exc:
         print(f"Hard-rule evaluation save failed: {exc}")
 
-    # Run DeepSeek evaluation if requested
+    # Run incremental DeepSeek evaluation if requested
     if run_eval:
         try:
-            from optimization.claude_evaluator import run_full_evaluation
-            ws = run_full_evaluation(output_dir)
-            print(f"DeepSeek evaluation completed (weighted={ws})")
+            from optimization.claude_evaluator import (
+                build_system_prompt, score_batch, save_evaluation,
+                EvalResult, DEFAULT_MODEL as EVAL_DEFAULT_MODEL,
+            )
+
+            system_prompt = build_system_prompt()
+            eval_result = EvalResult(model_used=EVAL_DEFAULT_MODEL)
+            total = len(all_results)
+
+            for idx, entry in enumerate(all_results):
+                try:
+                    scores = score_batch(
+                        [entry], system_prompt,
+                        start_idx=idx, total=total,
+                    )
+                    eval_result.requirements.extend(scores)
+                    if scores:
+                        r = scores[0]
+                        avgs = r.case_dimension_averages
+                        print(
+                            f"  DeepSeek [{idx + 1}/{total}] {entry['requirement_key']}  "
+                            f"w={r.weighted_score}  cov={r.coverage_value}  "
+                            f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
+                            f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
+                            f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
+                            f"ar={avgs['automation_readiness']}"
+                        )
+                except Exception as exc:
+                    print(f"  DeepSeek [{idx + 1}/{total}] {entry['requirement_key']} FAILED: {exc}")
+                    eval_result.errors += 1
+
+            save_evaluation(eval_result, output_dir, evaluator_name="deepseek")
+            print(f"DeepSeek evaluation completed (weighted={eval_result.overall_weighted})")
         except Exception as exc:
             print(f"DeepSeek evaluation failed: {exc}")
 
