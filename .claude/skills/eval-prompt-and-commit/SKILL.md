@@ -18,15 +18,11 @@ Use a dated name: `optimization_runs/log/YYYYMMDD_eval/`. If the name already ex
 ```powershell
 python -m optimization.cli run `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
-  --no-retry `
   --eval `
   --output-dir optimization_runs/log/<run-name>
 ```
 
-This generates cases for all 35 requirements without LLM regeneration retries
-and runs DeepSeek 8-dimension scoring concurrently (batched, 5 reqs per API call).
-Use `--no-retry` by default to skip expensive per-case LLM regeneration; only the
-final quality gate and DeepSeek review run.
+This generates cases for all 35 requirements and runs DeepSeek 8-dimension scoring concurrently (batched, 5 reqs per API call).
 
 ### 3. Wait for completion
 
