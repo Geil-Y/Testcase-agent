@@ -93,9 +93,14 @@ threshold — flag if:
   - A symbolic threshold parameter or explicit numeric threshold is enough; do not
     flag threshold just because the concrete calibration value is not given.
 timing — flag if:
-  - The case must wait before judging BMS response, but the selected requirement
-    does not provide response time, debounce time, confirmation time, timeout,
-    or sample timing.
+  - Do not infer missing timing only because the requirement has a cause/effect
+    behavior.
+  - Timing is missing only when the selected case cannot decide when to check the
+    expected result using any timing value, symbolic timing parameter, event point,
+    or ordering already stated in the requirement.
+  - If the requirement provides a duration, deadline, debounce, hold,
+    confirmation, period, or relative ordering that is enough to place the check,
+    do not flag timing as missing for that timing concept.
   - If the selected requirement provides a symbolic timing parameter or explicit
     duration, timing is not missing for that timing concept.
   - Do not use timing from supplementary information unless the selected requirement
@@ -139,6 +144,17 @@ Case count is determined by the requirement structure:
   the "triggers" condition and the "does not trigger" condition are separate cases.
   Use semantic relations such as above threshold, below threshold, at threshold,
   shorter than timing, or longer than timing. Do not invent numeric epsilon values.
+- For negative or boundary cases, derive the expected behavior from whether the
+  full trigger condition is satisfied.
+- If any required trigger condition is not satisfied, the expected requirement
+  response must not occur.
+- For multi-condition triggers, do not enumerate combinations of unsatisfied
+  conditions.
+- Create separate negative cases only for individual requirement-critical
+  conditions. In each negative case, change one trigger condition to not satisfied
+  and keep the other trigger conditions satisfied.
+- Do not create additional negative cases that combine multiple unsatisfied
+  conditions, because they add little diagnostic value.
 - Calibration parameter ranges:
   if a range describes the allowed calibration range for a parameter, do NOT turn
   the range endpoints into generated test cases unless the selected requirement
@@ -154,6 +170,8 @@ Case count is determined by the requirement structure:
   "duration mature" and "duration not mature" are separate cases.
 - Response-time / within-time-bound requirements:
   create a case that verifies the required response occurs within the bound.
+  Do NOT create a negative case from a time just before the deadline; that time
+  is still inside the allowed response window.
   Do NOT create a "duration not mature -> no trigger" case unless the selected
   requirement explicitly defines debounce, confirmation, or hold-time semantics.
 - For a simple threshold condition with timing maturity, the useful case set is
