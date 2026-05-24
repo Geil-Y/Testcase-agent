@@ -1,0 +1,137 @@
+# Pattern tag registry — canonical tag definitions.
+#
+# Each tag has:
+#   tag            — machine key
+#   label          — human-readable display name
+#   description    — what the tag means
+#   groups         — grouping categories
+#   allowed_sources — reason_code | ambiguity_type | missing_category | coverage_dimension | text_detector
+#
+# Only tags defined here may be used. Unknown tags are rejected.
+
+version: "1.0.0"
+
+tags:
+  # ── Signal / threshold ──────────────────────────────────────────────────
+  - tag: missing_signal
+    label: "Missing signal"
+    description: "Requirement does not specify signal names or observable outputs"
+    groups: [information_gap]
+    allowed_sources: [reason_code, ambiguity_type, missing_category, text_detector]
+
+  - tag: missing_threshold
+    label: "Missing threshold"
+    description: "Requirement does not specify numeric thresholds or boundary values"
+    groups: [information_gap]
+    allowed_sources: [reason_code, ambiguity_type, missing_category, text_detector]
+
+  - tag: missing_timing
+    label: "Missing timing"
+    description: "Requirement does not specify timing, duration, or delay constraints"
+    groups: [information_gap]
+    allowed_sources: [reason_code, ambiguity_type, missing_category, text_detector]
+
+  - tag: missing_state
+    label: "Missing state"
+    description: "Requirement does not specify BMS states or transitions"
+    groups: [information_gap]
+    allowed_sources: [reason_code, ambiguity_type, missing_category, text_detector]
+
+  - tag: missing_observation
+    label: "Missing observation"
+    description: "Requirement does not specify how behavior is observed or measured"
+    groups: [information_gap]
+    allowed_sources: [reason_code, ambiguity_type, missing_category, text_detector]
+
+  # ── Behavior ─────────────────────────────────────────────────────────────
+  - tag: response_time_bound
+    label: "Response time bound"
+    description: "Case involves a response-time or latency constraint"
+    groups: [timing]
+    allowed_sources: [reason_code, text_detector]
+
+  - tag: timing_maturity
+    label: "Timing maturity"
+    description: "Requirement has specified timing that enables rigorous verification"
+    groups: [timing]
+    allowed_sources: [reason_code, text_detector]
+
+  - tag: diagnostic_clear
+    label: "Diagnostic clear"
+    description: "Requirement or case involves diagnostic or fault-clear behavior"
+    groups: [diagnostics]
+    allowed_sources: [reason_code, text_detector]
+
+  - tag: persistence
+    label: "Persistence"
+    description: "Behavior involves persistent state, latch, or NVM storage"
+    groups: [state]
+    allowed_sources: [reason_code, text_detector]
+
+  - tag: logging_record
+    label: "Logging / record"
+    description: "Behavior involves logging, event recording, or data storage"
+    groups: [observability]
+    allowed_sources: [reason_code, text_detector]
+
+  # ── Review patterns ──────────────────────────────────────────────────────
+  - tag: invented_behavior
+    label: "Invented behavior"
+    description: "LLM introduced behavior not supported by requirement"
+    groups: [integrity]
+    allowed_sources: [reason_code]
+
+  - tag: duplicate_intent
+    label: "Duplicate intent"
+    description: "Case intent overlaps substantially with another intent"
+    groups: [structure]
+    allowed_sources: [reason_code]
+
+  - tag: over_split
+    label: "Over-split"
+    description: "Condition combination was split into too many narrow intents"
+    groups: [structure]
+    allowed_sources: [reason_code]
+
+  - tag: too_broad
+    label: "Too broad"
+    description: "Intent covers too many scenarios to be meaningfully verified"
+    groups: [structure]
+    allowed_sources: [reason_code]
+
+  - tag: needs_clarification
+    label: "Needs clarification"
+    description: "Requirement is ambiguous and requires human clarification"
+    groups: [ambiguity]
+    allowed_sources: [reason_code, ambiguity_type]
+
+  # ── Coverage dimensions ──────────────────────────────────────────────────
+  - tag: coverage_normal_behavior
+    label: "Normal behavior coverage"
+    description: "Intent covers normal operation behavior"
+    groups: [coverage]
+    allowed_sources: [coverage_dimension]
+
+  - tag: coverage_boundary_threshold
+    label: "Boundary / threshold coverage"
+    description: "Intent covers boundary or threshold behavior"
+    groups: [coverage]
+    allowed_sources: [coverage_dimension]
+
+  - tag: coverage_fault_protection
+    label: "Fault / protection coverage"
+    description: "Intent covers fault or protection behavior"
+    groups: [coverage]
+    allowed_sources: [coverage_dimension]
+
+  - tag: coverage_state_transition
+    label: "State transition coverage"
+    description: "Intent covers state transition behavior"
+    groups: [coverage]
+    allowed_sources: [coverage_dimension]
+
+  - tag: coverage_observability
+    label: "Observability coverage"
+    description: "Intent covers observability of BMS behavior"
+    groups: [coverage]
+    allowed_sources: [coverage_dimension]

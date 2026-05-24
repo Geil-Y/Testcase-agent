@@ -1,0 +1,20 @@
+<user-message>
+## Requirement
+
+**Key:** {{ requirement_key }}
+**Function:** {{ function_name }}
+**Type:** {{ requirement_type }}
+
+### Description
+
+{{ description }}
+
+{% if supplementary_info %}
+### Supplementary Information
+
+{{ supplementary_info }}
+{% endif %}
+
+Please decompose this requirement into facts, ambiguities, clarification
+questions, and a safe generation policy. Output only the JSON.
+</user-message>
