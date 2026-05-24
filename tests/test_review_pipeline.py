@@ -6,6 +6,8 @@ Covers all 15 issues with fake providers (no real LLM calls).
 from __future__ import annotations
 
 import json
+import importlib.util
+import sys
 import tempfile
 from pathlib import Path
 
@@ -62,6 +64,53 @@ class TestArtifactModels:
         assert m.description == "Test desc"
         assert m.function_name == "fn"
         assert m.supplementary_info == "extra"
+
+
+class TestIssue15LegacyPipelineRemoval:
+    def test_old_generation_prompt_files_are_removed(self):
+        project_root = Path(__file__).resolve().parents[1]
+        old_prompts = [
+            project_root / "prompts" / "analyze_and_plan.system.html",
+            project_root / "prompts" / "analyze_and_plan.user.html",
+            project_root / "prompts" / "generate_case.system.html",
+            project_root / "prompts" / "generate_case.user.html",
+        ]
+
+        for path in old_prompts:
+            assert not path.exists(), f"legacy prompt still exists: {path}"
+
+    def test_old_generation_modules_are_removed(self):
+        assert importlib.util.find_spec("testcase_agent.pipeline.generate") is None
+        assert importlib.util.find_spec("testcase_agent.prompts") is None
+
+    def test_review_pipeline_cli_is_generation_entry(self):
+        from review_pipeline.cli import build_parser
+
+        subcommands = build_parser()._subparsers._group_actions[0].choices
+        assert "prepare-clarification-review" in subcommands
+        assert "prepare-intent-review" in subcommands
+        assert "generate-cases" in subcommands
+        assert "import-memory" in subcommands
+
+    def test_legacy_optimization_run_command_is_disabled(self, monkeypatch):
+        from optimization import cli
+
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "cli.py",
+                "run",
+                "--output-dir",
+                "unused",
+                "--requirement-set",
+                "optimization_runs/requirement_sets/prompt_eval_v1.json",
+            ],
+        )
+        with pytest.raises(SystemExit) as exc:
+            cli.main()
+
+        assert exc.value.code == 2
 
     def test_clarification_review_roundtrip(self, run_dir):
         from review_pipeline.artifacts.models import RequirementDecomposition, ClarificationReview, FactItem, AmbiguityItem

@@ -176,6 +176,29 @@ messages, fault records, and observable diagnostic outputs.
 
 ## Prompt and Pipeline Scope
 
+Status as of 2026-05-24: this document describes the legacy prompt optimization
+workflow used before the clarification-first review pipeline. It remains useful
+for interpreting old `optimization_runs` reports, but it is no longer the
+current generation entry point.
+
+Current generation starts with:
+
+```text
+python -m review_pipeline.cli prepare-clarification-review
+```
+
+Current prompts live under `review_pipeline/prompts/`:
+
+- `decompose_requirement.system.html`
+- `decompose_requirement.user.html`
+- `plan_case_intents.system.html`
+- `plan_case_intents.user.html`
+- `write_case.system.html`
+- `write_case.user.html`
+
+The old root prompt files and the old `analyze_and_plan -> generate_case`
+pipeline have been removed. `self_check` is out of scope for phase 1.
+
 LLM#1 remains responsible for requirement analysis and case intent planning.
 It should be extended to extract:
 
@@ -340,12 +363,12 @@ Completed work:
 
 ## Acceptance Criteria
 
-The full optimization workflow is acceptable when:
+For legacy reports, the archived optimization workflow was acceptable when:
 
 - Parser tests cover old and new missing-info formats.
 - Pipeline output carries states and observations from LLM#1 into LLM#2.
-- Prompts keep the two-call architecture: analyze-and-plan first, one-case
-  generation second.
+- Prompts kept the old two-call architecture: analyze-and-plan first, one-case
+  generation second. This is no longer the active generation architecture.
 - Prompt Evaluation Set V1 can be run without random sampling.
 - Prompt Evaluation Set reports severe missing-info failures
   explicitly.
@@ -356,8 +379,9 @@ The full optimization workflow is acceptable when:
 
 ## Out of Scope
 
-- Changing from HTML output to JSON.
-- Replacing the two-step LLM architecture.
+- These legacy out-of-scope items were superseded by ADR-0003. The active
+  pipeline uses JSON artifacts as the source of truth and a three-stage
+  clarification-first LLM flow.
 - Adding HIL bench command generation.
 - Treating tool commands, HIL channels, or bench configuration as
   `[NEEDS REVIEW]` semantics.

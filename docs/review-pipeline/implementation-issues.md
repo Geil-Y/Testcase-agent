@@ -857,17 +857,17 @@ Verify architecture docs and ADRs still reflect the implemented behavior: code o
 
 ### Acceptance Criteria
 
-- [ ] Old generation prompt files are removed rather than merely deprecated.
-- [ ] New prompt files are documented.
-- [ ] `self_check` is removed from new workflow and documented as out of scope.
-- [ ] README and artifact docs match actual implemented CLI commands and artifact names.
-- [ ] ADR-0003 matches implemented behavior.
-- [ ] `CONTEXT.md` glossary remains consistent with implemented terminology.
-- [ ] Existing tests are updated or removed if they only validate deleted old behavior.
-- [ ] New tests pass.
+- [x] Old generation prompt files are removed rather than merely deprecated.
+- [x] New prompt files are documented.
+- [x] `self_check` is removed from new workflow and documented as out of scope.
+- [x] README and artifact docs match actual implemented CLI commands and artifact names.
+- [x] ADR-0003 matches implemented behavior.
+- [x] `CONTEXT.md` glossary remains consistent with implemented terminology.
+- [x] Existing tests are updated or removed if they only validate deleted old behavior.
+- [x] New tests pass.
 
 ### Testing Requirements
 
-- [ ] Full test suite passes except explicitly documented unrelated existing failures.
-- [ ] CLI docs are checked against actual command names.
-- [ ] Regression test confirms the new workflow is the expected generation entry.
+- [x] Full test suite passes except explicitly documented unrelated existing failures.
+- [x] CLI docs are checked against actual command names.
+- [x] Regression test confirms the new workflow is the expected generation entry.

@@ -9,7 +9,7 @@ from optimization.cli import (
     select_by_requirement_set,
     validate_requirement_set,
 )
-from testcase_agent.pipeline.generate import RequirementInput
+from review_pipeline.artifacts.models import RequirementInput
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

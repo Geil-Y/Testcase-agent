@@ -1,7 +1,22 @@
 # ADR-0001: Prompt-first architecture
 
-**Status:** accepted
+**Status:** superseded by ADR-0003
 **Date:** 2026-05-18
+
+## Supersession
+
+ADR-0003 replaces the original two-call HTML generation pipeline with the
+clarification-first review pipeline:
+
+```text
+decompose_requirement -> clarification review -> plan_case_intents -> intent review -> write_case -> evaluate
+```
+
+The core boundary remains valid: code owns plumbing, prompts own generation
+philosophy. The obsolete details in this ADR are the old
+`analyze_and_plan -> generate_case` workflow and HTML-as-source output format.
+The current source of truth is JSON artifacts with code-generated HTML review
+views.
 
 ## Context
 
