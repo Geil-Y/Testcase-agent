@@ -137,59 +137,78 @@ For each test case you plan to generate, produce one case_intent element with a 
 Valid coverage values:
 normal_behavior, boundary_or_threshold, fault_or_protection, state_transition, observability.
 
-Case count is determined by the requirement structure:
-- Each logical OR branch in the condition gets its own case. Do NOT merge branches.
-- Each relevant requirement-defined operational mode gets its own case.
-- Threshold boundary values:
-  the "triggers" condition and the "does not trigger" condition are separate cases.
-  Use semantic relations such as above threshold, below threshold, at threshold,
-  shorter than timing, or longer than timing. Do not invent numeric epsilon values.
-- Do not create case intents that introduce new numeric test points, recovery
-  scenarios, clear/reset actions, timeout behavior, or state transitions unless
-  they are explicitly stated in the selected requirement.
-- A case_intent must not contain any numeric value unless that exact value appears
-  in the selected requirement. Do not derive or choose substitute numeric values.
-- For boundary or negative cases, express the condition using requirement-derived
-  relations such as above threshold, below threshold, equal to threshold, shorter
-  than timing, or longer than timing. Do not choose new concrete values.
-- For negative or boundary cases, derive the expected behavior from whether the
-  full trigger condition is satisfied.
-- If any required trigger condition is not satisfied, the expected requirement
-  response must not occur.
-- For multi-condition triggers, do not enumerate combinations of unsatisfied
-  conditions.
-- Create separate negative cases only for individual requirement-critical
-  conditions. In each negative case, change one trigger condition to not satisfied
-  and keep the other trigger conditions satisfied.
-- Do not create additional negative cases that combine multiple unsatisfied
-  conditions, because they add little diagnostic value.
-- Calibration parameter ranges:
-  if a range describes the allowed calibration range for a parameter, do NOT turn
-  the range endpoints into generated test cases unless the selected requirement
-  is specifically about those endpoints.
-- Requirement behavior ranges:
-  if the selected requirement itself defines a lower/upper behavior range, cover
-  the range by its inclusivity:
-  [L, U]: < L, >= L, midpoint, <= U, > U
-  (L, U): <= L, > L, midpoint, < U, >= U
-  [L, U): < L, >= L, midpoint, < U, >= U
-  (L, U]: <= L, > L, midpoint, <= U, > U
-- Debounce / confirmation / hold-time conditions:
-  "duration mature" and "duration not mature" are separate cases.
-- Response-time / within-time-bound requirements:
-  create a case that verifies the required response occurs within the bound.
-  Do NOT create a negative case from a time just before the deadline; that time
-  is still inside the allowed response window.
-  Do NOT create a "duration not mature -> no trigger" case unless the selected
-  requirement explicitly defines debounce, confirmation, or hold-time semantics.
-- For a simple threshold condition with timing maturity, the useful case set is
-  usually:
-  1. condition meets trigger relation, timing mature -> expected response occurs.
-  2. condition does not meet trigger relation, timing mature -> expected response does not occur.
-  3. condition meets trigger relation, timing not mature -> expected response does not occur.
-  Do not add DTC, CAN, L2/L3, recovery, latch, or mode-transition cases unless
-  the selected requirement explicitly requires them.
-- Simple single-condition requirements may need only 1-2 cases.
+Case count is determined by verification value, not by coverage labels.
+
+Before creating any <case_intent>, apply this gate:
+Create a new case only if changing the tested condition changes at least one of:
+- the requirement-relevant expected behavior,
+- the pass/fail judgment,
+- the evidence needed to prove the requirement.
+
+Do not create a separate case only because:
+- the wording differs,
+- the coverage label differs,
+- the observation method differs,
+- the case restates the same trigger and the same expected behavior,
+- the case checks that an already expected result is observable.
+
+Different observable evidence paths justify separate cases only when they correspond to different requirement-defined behaviors or acceptance criteria.
+
+If a signal/state assignment is the observable evidence for the same required response, keep it in the same case as that response.
+Do not create one case for the response timing and another case for the resulting state update unless the selected requirement gives separate acceptance criteria for them.
+
+Multi-condition triggers:
+- Do not enumerate OR/AND combinations by default.
+- Do not create one case for every satisfied or unsatisfied condition combination.
+- Create a separate case only when that condition change changes expected behavior, pass/fail judgment, or required evidence.
+- For multi-condition negative cases, change one requirement-critical trigger condition to not satisfied and keep the other trigger conditions satisfied.
+- Do not add combined-negative cases unless the selected requirement explicitly defines different behavior for the combined condition.
+
+Threshold boundary values:
+- The "triggers" condition and the "does not trigger" condition are separate cases only when they produce different expected behavior.
+- Use semantic relations such as above threshold, below threshold, at threshold, shorter than timing, or longer than timing.
+- Do not invent numeric epsilon values.
+- A boundary case is not justified if it repeats the same trigger and same expected behavior as another case.
+
+Debounce / confirmation / hold-time conditions:
+- "duration mature" and "duration not mature" are separate cases.
+- If the selected requirement explicitly describes debounce reset, intermittent fault, timer restart, or recovery before maturity, create separate cases for those behaviors.
+- Do not create these cases when the selected requirement does not define those behaviors.
+
+Response-time / within-time-bound requirements:
+- A response-time bound defines an acceptance deadline for the required response.
+- Create positive verification cases that prove the required response occurs within the bound.
+- Do not create late-response, missed-deadline, no-response, or fault-state cases unless the selected requirement explicitly defines expected behavior for those conditions.
+- Do not infer diagnostic behavior, fault state, retry behavior, recovery behavior, or timeout handling from a missed response-time deadline.
+- A response-time bound is not debounce, confirmation, hold-time, or timing maturity.
+- Do not create a "duration not mature -> no trigger" case for response-time-bound requirements.
+- Never create a case whose expected behavior is about what happens after a requirement deadline is missed unless the selected requirement explicitly states that behavior.
+- For chained response-time requirements, create at most one case per distinct response-time acceptance criterion.
+- Include the associated state/signal update as expected evidence in that same case.
+- Do not add extra cases for restating the same state transition.
+
+Explicit requirement-defined behaviors stay separate:
+- diagnostic clear,
+- latch persistence,
+- power-cycle persistence,
+- timeout,
+- reset,
+- recovery,
+- mode transition,
+- different DTC/CAN/log/record acceptance criteria.
+
+Do not create case intents that introduce new numeric test points, recovery scenarios, clear/reset actions, timeout behavior, or state transitions unless they are explicitly stated in the selected requirement.
+
+A case_intent must not contain any numeric value unless that exact value appears in the selected requirement. Do not derive or choose substitute numeric values.
+
+For a simple threshold condition with timing maturity, the useful case set is usually:
+1. condition meets trigger relation, timing mature -> expected response occurs.
+2. condition does not meet trigger relation, timing mature -> expected response does not occur.
+3. condition meets trigger relation, timing not mature -> expected response does not occur.
+
+Do not add DTC, CAN, L2/L3, recovery, latch, observability, or mode-transition cases unless the selected requirement explicitly requires them.
+
+Simple single-condition requirements may need only 1-2 cases.
 
 <case_intent coverage="normal_behavior">
 Describe what this case should test in one sentence. Be specific about the BMS behavior expected.

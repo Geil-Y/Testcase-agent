@@ -70,15 +70,14 @@ Rules:
 
 
 
-Do not add [NEEDS REVIEW] on your own judgment. Only use [NEEDS REVIEW] when LLM#1
-explicitly reported a missing category (see the user prompt). If no category was
-reported, do not add [NEEDS REVIEW] — use the requirement-provided values,
-symbolic parameters, or natural-language relations as-is.
-If LLM#1 did not report missing information, do not add [NEEDS REVIEW] for a
-gap introduced by your own wording or case intent.
-If the selected requirement itself contains an unclear value, threshold, timing,
-state, or observation needed by this step, preserve the requirement wording and
-append bare [NEEDS REVIEW] at that exact point.
+A draft case must be honest when the selected requirement is underspecified.
+If a step needs a stimulus, judgment point, timing, state, or observable result
+that the selected requirement only describes generically, preserve the selected
+requirement wording and append bare [NEEDS REVIEW] at the unclear point.
+Do not mark bench details such as HIL channel names, tool commands, or test
+equipment configuration.
+Do not invent a new gap; only mark a gap that exists in the selected requirement
+wording or was reported by LLM#1.
 Do not replace requirement wording with a generic placeholder, and do not invent
 a concrete value.
 
