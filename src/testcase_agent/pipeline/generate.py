@@ -22,6 +22,7 @@ class GenerationResult:
     analysis: AnalysisResult | None = None
     cases: list[GeneratedCase] = field(default_factory=list)
     error: str = ""
+    generation_failures: list[int] = field(default_factory=list)
 
 
 def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> GenerationResult:
@@ -35,7 +36,14 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
         function_name=requirement.function_name,
         supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
     )
-    html1 = provider.complete(sys1, usr1)
+    for attempt in range(2):
+        try:
+            html1 = provider.complete(sys1, usr1)
+            break
+        except Exception:
+            if attempt == 1:
+                result.error = "LLM#1 failed after retry"
+                return result
     analysis = parse_analysis(html1)
     result.analysis = analysis
 
@@ -56,7 +64,7 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
     # Categorized missing info for the new prompt format
     missing_items_str = _format_missing_items(analysis)
 
-    for intent in analysis.case_intents:
+    for i, intent in enumerate(analysis.case_intents):
         sys2, usr2 = render_prompt(
             "generate_case",
             requirement_key=requirement.requirement_key,
@@ -73,8 +81,17 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
             missing_info=missing_str,
             missing_info_items=missing_items_str,
         )
-        html2 = provider.complete(sys2, usr2)
-        case = parse_generated_case(html2)
+        try:
+            html2 = provider.complete(sys2, usr2)
+            case = parse_generated_case(html2)
+        except Exception:
+            case = GeneratedCase(
+                title=intent.description[:80],
+                objective=intent.description,
+                steps=[],
+                raw_html="",
+            )
+            result.generation_failures.append(i)
         result.cases.append(case)
 
     return result
@@ -113,8 +130,16 @@ def regenerate_case(
         missing_info=missing_str,
         missing_info_items=missing_items_str,
     )
-    html2 = provider.complete(sys2, usr2)
-    return parse_generated_case(html2)
+    try:
+        html2 = provider.complete(sys2, usr2)
+        return parse_generated_case(html2)
+    except Exception:
+        return GeneratedCase(
+            title=case_intent[:80],
+            objective=case_intent,
+            steps=[],
+            raw_html="",
+        )
 
 
 def _format_missing_items(analysis: AnalysisResult) -> str:

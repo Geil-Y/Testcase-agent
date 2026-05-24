@@ -515,6 +515,7 @@ def run_batch(
     for i, req in enumerate(requirements):
         print(f"[{i+1}/{len(requirements)}] Generating: {req.requirement_key} ...")
         result = run_pipeline(req, provider)
+        gen_failures = set(result.generation_failures)
 
         if result.error:
             errors.append({
@@ -560,7 +561,7 @@ def run_batch(
         new_cases: list = []
         for ci, case in enumerate(result.cases):
             intent = intents[ci] if ci < len(intents) else None
-            retry_meta: dict = {"attempts": 0, "exhausted": False, "failures": [], "self_check_changed": False}
+            retry_meta: dict = {"attempts": 0, "exhausted": False, "failures": [], "self_check_changed": False, "generation_timeout": ci in gen_failures}
             sanitize_replacements: list[str] = []
 
             # Step 1: Self-check identifiers, then sanitize invented numeric values.
@@ -574,7 +575,7 @@ def run_batch(
                     break
                 retry_meta["failures"].append(hard_fails)
                 if attempt < 2 and intent:
-                    review = _build_review_comment(hard_fails)
+                    review = "" if retry_meta["generation_timeout"] else _build_review_comment(hard_fails)
                     try:
                         case = regenerate_case(
                             req, intent.description, intent.coverage,
