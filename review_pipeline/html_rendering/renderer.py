@@ -15,7 +15,6 @@ from review_pipeline.artifacts.models import (
     CaseIntentItem,
     AmbiguityItem,
     RequirementDecomposition,
-    ReviewLint,
 )
 from review_pipeline.confidence.engine import routing_for_confidence, routing_label
 
@@ -48,7 +47,6 @@ def render_clarification_review(review: ClarificationReview) -> str:
         <p><strong>Reasons:</strong> {_esc(', '.join(amb.reasons))}</p>
         <p><strong>Confidence drivers:</strong> {_esc(_format_drivers(amb.confidence_drivers))}</p>
         <p><strong>Score:</strong> {score:.2f}</p>
-        {_render_review_lints(_lints_for_item(review, amb.item_id))}
       </div>
     </div>"""
 
@@ -168,28 +166,6 @@ def _decision_color(decision: str) -> str:
 
 def _format_drivers(drivers: dict[str, float]) -> str:
     return ", ".join(f"{k}={v:.2f}" for k, v in drivers.items())
-
-
-def _lints_for_item(review: ClarificationReview, item_id: str) -> list[ReviewLint]:
-    return [lint for lint in review.review_lints if lint.target_item_id == item_id]
-
-
-def _render_review_lints(lints: list[ReviewLint]) -> str:
-    if not lints:
-        return ""
-    items = ""
-    for lint in lints:
-        evidence = "; ".join(lint.evidence)
-        items += (
-            "<li>"
-            f"<strong>{_esc(lint.rule_id)}</strong>: {_esc(lint.message)}"
-            f" <em>{_esc(evidence)}</em>"
-            "</li>"
-        )
-    return f"""<div class="review-lints">
-          <p><strong>Review lint warnings:</strong></p>
-          <ul>{items}</ul>
-        </div>"""
 
 
 def _esc(text: str) -> str:

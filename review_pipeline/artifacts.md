@@ -29,10 +29,6 @@ Decomposes a requirement into facts, ambiguities, clarification questions,
 and safe generation policy. Each ambiguity item has confidence drivers,
 recommended review decision, and routing.
 
-`review_lints` are deterministic warnings added by code after LLM-A output is
-parsed. They are review hints only: they do not remove ambiguities, approve or
-reject items, rewrite facts, or change safe generation policy.
-
 ### `clarified_test_basis.json`
 Produced by: `validate-review` (after human edits).
 Consumed by: `prepare-intent-review` (LLM-B).
