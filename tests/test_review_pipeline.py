@@ -460,6 +460,73 @@ class TestDecomposeRequirement:
         # Decomposition has no case intents
         assert hasattr(review.decomposition, "ambiguities")
 
+    def test_real_provider_json_response_produces_decomposition(self, run_dir, sample_requirement_json):
+        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+
+        class JsonProvider:
+            provider_name = "fake"
+            model_name = "fake-json"
+
+            def complete(self, system_prompt: str, user_prompt: str) -> str:
+                assert "Output only the JSON" in user_prompt
+                return json.dumps({
+                    "requirement_key": "BMS_REQ_001",
+                    "facts": [
+                        {
+                            "item_id": "fact-1",
+                            "fact_text": "The BMS shall detect cell over-voltage.",
+                            "source_text": "The BMS shall detect cell over-voltage.",
+                            "confidence": 0.9,
+                        }
+                    ],
+                    "ambiguities": [],
+                    "clarification_questions": [],
+                    "safe_generation_policy": {
+                        "can_generate": True,
+                        "blocked_dimensions": [],
+                        "requires_markers": [],
+                        "notes": "No blocking ambiguity detected.",
+                    },
+                    "confidence_drivers": {
+                        "trigger_clarity": 0.8,
+                        "expected_behavior_clarity": 0.8,
+                        "known_info_sufficiency": 0.7,
+                        "ambiguity_resolution": 0.7,
+                        "historical_pattern_support": 0.5,
+                    },
+                })
+
+        review = prepare_clarification_review(
+            str(sample_requirement_json),
+            str(run_dir),
+            provider=JsonProvider(),
+        )
+
+        assert review.decomposition.facts[0].fact_text == "The BMS shall detect cell over-voltage."
+        assert review.decomposition.ambiguities == []
+        assert not (run_dir / "llm_a_raw_response.txt").exists()
+
+    def test_real_provider_parse_failure_dumps_raw_response(self, run_dir, sample_requirement_json):
+        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+
+        class BadProvider:
+            provider_name = "fake"
+            model_name = "fake-bad"
+
+            def complete(self, system_prompt: str, user_prompt: str) -> str:
+                return "not json"
+
+        with pytest.raises(ValueError, match="LLM-A response was not valid JSON"):
+            prepare_clarification_review(
+                str(sample_requirement_json),
+                str(run_dir),
+                provider=BadProvider(),
+            )
+
+        raw_path = run_dir / "llm_a_raw_response.txt"
+        assert raw_path.exists()
+        assert raw_path.read_text(encoding="utf-8") == "not json"
+
 
 # ── Issue 7: Clarification validation ──────────────────────────────────────
 
@@ -1208,6 +1275,21 @@ class TestCLI:
         except SystemExit as e:
             ret = e.code if e.code is not None else 0
         assert ret == 0
+
+    def test_prepare_clarification_review_mock_flag(self, run_dir, sample_requirement_json):
+        from review_pipeline.cli import main
+
+        ret = main([
+            "prepare-clarification-review",
+            "--input",
+            str(sample_requirement_json),
+            "--out",
+            str(run_dir),
+            "--mock",
+        ])
+
+        assert ret == 0
+        assert (run_dir / "clarification_review.json").exists()
 
     def test_validate_missing_file(self):
         from review_pipeline.cli import main

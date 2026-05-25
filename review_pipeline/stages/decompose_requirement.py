@@ -6,9 +6,11 @@ analysis, confidence drivers, and human review scaffolding.
 
 from __future__ import annotations
 
+import json
 import uuid
-from datetime import datetime
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from review_pipeline.artifacts.io import read_json, write_json
 from review_pipeline.artifacts.models import (
@@ -20,8 +22,8 @@ from review_pipeline.artifacts.models import (
     ClarificationQuestion,
     SafeGenerationPolicy,
 )
-from review_pipeline.artifacts.validation import ValidationResult
 from review_pipeline.html_rendering.renderer import render_clarification_review
+from review_pipeline.prompts import render_prompt
 
 
 def prepare_clarification_review(
@@ -42,7 +44,7 @@ def prepare_clarification_review(
     if provider is None:
         decomposition = _decompose_placeholder(req)
     else:
-        decomposition = _call_decompose_llm(req, provider)
+        decomposition = _call_decompose_llm(req, provider, run_dir)
 
     review_session_id = f"clarify-{uuid.uuid4().hex[:12]}"
     review = ClarificationReview(
@@ -72,9 +74,53 @@ def _load_requirements(path: str) -> list[RequirementInput]:
     raise ValueError(f"Unsupported input format: {type(data)}")
 
 
-def _call_decompose_llm(req: RequirementInput, provider) -> RequirementDecomposition:
-    """Call LLM-A for real decomposition. Not yet implemented."""
-    raise NotImplementedError("Real LLM provider not wired for decompose stage")
+def _call_decompose_llm(
+    req: RequirementInput,
+    provider,
+    run_dir: Path,
+) -> RequirementDecomposition:
+    """Call LLM-A and parse its JSON response into a decomposition artifact."""
+    system_prompt, user_prompt = render_prompt(
+        "decompose_requirement",
+        requirement_key=req.requirement_key,
+        description=req.description,
+        function_name=req.function_name,
+        requirement_type=req.requirement_type,
+        supplementary_info=req.supplementary_info,
+    )
+    raw_response = provider.complete(system_prompt, user_prompt)
+
+    try:
+        payload = _parse_json_response(raw_response)
+        return RequirementDecomposition(**payload)
+    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+        _dump_raw_response(run_dir, raw_response)
+        raise ValueError(f"LLM-A response was not valid JSON decomposition: {exc}") from exc
+
+
+def _parse_json_response(raw_response: str) -> dict:
+    """Parse raw model output that should contain exactly one JSON object."""
+    text = raw_response.strip()
+    if text.startswith("```"):
+        text = _strip_markdown_fence(text)
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
+    return parsed
+
+
+def _strip_markdown_fence(text: str) -> str:
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _dump_raw_response(run_dir: Path, raw_response: str) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "llm_a_raw_response.txt").write_text(raw_response, encoding="utf-8")
 
 
 def _decompose_placeholder(req: RequirementInput) -> RequirementDecomposition:

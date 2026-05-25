@@ -16,7 +16,12 @@ from review_pipeline.artifacts.validation import ValidationResult
 def _cmd_prepare_clarification_review(args: argparse.Namespace) -> int:
     from review_pipeline.stages.decompose_requirement import prepare_clarification_review
     try:
-        review = prepare_clarification_review(args.input, args.out)
+        provider = None
+        if not args.mock:
+            from testcase_agent.config import get_settings
+            from testcase_agent.provider.factory import create_provider
+            provider = create_provider(get_settings())
+        review = prepare_clarification_review(args.input, args.out, provider=provider)
         print(f"Clarification review written to {args.out}/clarification_review.json")
         print(f"  Items: {len(review.decomposition.ambiguities)} ambiguities")
         return 0
@@ -117,6 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_prep = sub.add_parser("prepare-clarification-review", help="Run LLM-A: decompose requirements into clarification review")
     p_prep.add_argument("--input", required=True, help="Path to requirements JSON file")
     p_prep.add_argument("--out", required=True, help="Output run directory")
+    p_prep.add_argument("--mock", action="store_true", help="Use placeholder decomposition instead of a real LLM provider")
 
     p_val = sub.add_parser("validate-review", help="Validate a human-edited review JSON artifact")
     p_val.add_argument("--file", required=True, help="Path to the review JSON file to validate")
