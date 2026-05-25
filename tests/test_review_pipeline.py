@@ -527,6 +527,123 @@ class TestDecomposeRequirement:
         assert raw_path.exists()
         assert raw_path.read_text(encoding="utf-8") == "not json"
 
+    def test_symbolic_parameter_lint_flags_exact_value_question(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-002",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-002",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="t_CellOV_Debounce is the configured debounce time.",
+                        source_text="If cell OV persists for t_CellOV_Debounce, set BMS_CellOV_Flag.",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="t_CellOV_Debounce",
+                        ambiguity_type="timing",
+                        clarification_question="What exact duration in seconds is t_CellOV_Debounce?",
+                    )
+                ],
+            ),
+        )
+
+        lints = lint_clarification_review(review)
+
+        assert len(lints) == 1
+        assert lints[0].rule_id == "symbolic_parameter_treated_as_missing"
+        assert lints[0].target_item_id == "amb-1"
+        assert lints[0].symbol == "t_CellOV_Debounce"
+
+    def test_symbolic_parameter_lint_ignores_non_value_questions(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-002",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-002",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="t_CellOV_Debounce is the configured debounce time.",
+                        source_text="If cell OV persists for t_CellOV_Debounce, set BMS_CellOV_Flag.",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="t_CellOV_Debounce",
+                        ambiguity_type="timing",
+                        clarification_question="Is debounce required for this requirement?",
+                    )
+                ],
+            ),
+        )
+
+        assert lint_clarification_review(review) == []
+
+    def test_prepare_clarification_review_writes_symbolic_parameter_lints(self, run_dir, sample_requirement_json):
+        from review_pipeline.artifacts.io import read_json
+        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+
+        class SymbolicProvider:
+            provider_name = "fake"
+            model_name = "fake-symbolic"
+
+            def complete(self, system_prompt: str, user_prompt: str) -> str:
+                return json.dumps({
+                    "requirement_key": "BMS_REQ_001",
+                    "facts": [
+                        {
+                            "item_id": "fact-1",
+                            "fact_text": "t_CellOV_Debounce is the debounce parameter.",
+                            "source_text": "If over-voltage persists for t_CellOV_Debounce, set the flag.",
+                            "confidence": 0.9,
+                        }
+                    ],
+                    "ambiguities": [
+                        {
+                            "item_id": "amb-1",
+                            "affected_text": "t_CellOV_Debounce",
+                            "ambiguity_type": "timing",
+                            "clarification_question": "What exact duration in seconds is t_CellOV_Debounce?",
+                        }
+                    ],
+                    "clarification_questions": [],
+                    "safe_generation_policy": {"can_generate": True},
+                })
+
+        review = prepare_clarification_review(
+            str(sample_requirement_json),
+            str(run_dir),
+            provider=SymbolicProvider(),
+        )
+
+        data = read_json(run_dir / "clarification_review.json")
+        html = (run_dir / "clarification_review.html").read_text(encoding="utf-8")
+        assert review.review_lints[0].rule_id == "symbolic_parameter_treated_as_missing"
+        assert data["review_lints"][0]["target_item_id"] == "amb-1"
+        assert "symbolic_parameter_treated_as_missing" in html
+        assert "t_CellOV_Debounce" in html
+
 
 # ── Issue 7: Clarification validation ──────────────────────────────────────
 

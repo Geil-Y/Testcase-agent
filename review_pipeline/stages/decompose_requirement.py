@@ -24,6 +24,7 @@ from review_pipeline.artifacts.models import (
 )
 from review_pipeline.html_rendering.renderer import render_clarification_review
 from review_pipeline.prompts import render_prompt
+from review_pipeline.review_lints import lint_clarification_review
 
 
 def prepare_clarification_review(
@@ -53,6 +54,7 @@ def prepare_clarification_review(
         source_requirement_hash=_hash_text(req.description),
         decomposition=decomposition,
     )
+    review.review_lints = lint_clarification_review(review)
 
     json_path = run_dir / "clarification_review.json"
     write_json(json_path, review.model_dump())
