@@ -223,7 +223,7 @@ function renderTabs(d) {
     <table><thead><tr><th>Coverage</th><th>Case Intent</th></tr></thead><tbody>
       ${a.case_intents.map(i => `<tr><td><span class="badge badge-pass">${i.coverage}</span></td><td>${i.description}</td></tr>`).join('')}
     </tbody></table>
-    <details style="margin-top:12px"><summary>Raw LLM#1 Output</summary><pre>${escapeHtml(a.raw_html)}</pre></details>
+    <details style="margin-top:12px"><summary>Raw legacy analysis output</summary><pre>${escapeHtml(a.raw_html)}</pre></details>
   `;
 
   // Cases tab

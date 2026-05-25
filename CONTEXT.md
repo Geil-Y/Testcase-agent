@@ -26,8 +26,8 @@ from structured requirements.
   or logged value.
 
 - **Case Intent** — a one-sentence description of what a specific test case
-  aims to verify, within its coverage dimension. Used as the per-case prompt
-  input to LLM#2.
+  aims to verify, within its coverage dimension. In the current review
+  pipeline, approved case intents are the direct input to LLM-C case writing.
 
 - **`[NEEDS REVIEW]`** — a marker inserted into test case content when the
   requirement semantics lack signal names, thresholds, timing, states, or
@@ -62,7 +62,8 @@ from structured requirements.
 
 - **Supplementary Info** — a catch-all field holding additional Excel column
   content (signal names, thresholds, timing, etc.) beyond the core requirement
-  fields. Used alongside `description` as input to LLM#1.
+  fields. Used alongside `description` as input to requirement decomposition
+  and downstream review artifacts.
 
 - **Quality Checklist** — a set of 33 evaluation items (6 categories, 28 hard + 5
   warning) derived from current project prompts and CodeX `case_generation`
