@@ -600,6 +600,192 @@ class TestDecomposeRequirement:
 
         assert lint_clarification_review(review) == []
 
+    def test_explicit_expected_behavior_lint_flags_clear_timing_reference_question(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-009",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-009",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        source_text="Upon BMS_CellOV_L3_Flag = 1: Charge contactor shall open within 200 ms",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        ambiguity_type="timing",
+                        clarification_question="Is the time of 200 ms from when BMS_CellOV_L3_Flag becomes 1, or from some other event?",
+                    )
+                ],
+            ),
+        )
+
+        lints = lint_clarification_review(review)
+
+        assert len(lints) == 1
+        assert lints[0].rule_id == "explicit_expected_behavior_treated_as_ambiguity"
+        assert lints[0].target_item_id == "amb-1"
+
+    def test_explicit_expected_behavior_lint_ignores_missing_behavior_target(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-UNKNOWN",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-UNKNOWN",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="A contactor shall open.",
+                        source_text="A contactor shall open.",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="A contactor shall open.",
+                        ambiguity_type="behavior",
+                        clarification_question="Which contactor shall open?",
+                    )
+                ],
+            ),
+        )
+
+        assert lint_clarification_review(review) == []
+
+    def test_explicit_expected_behavior_lint_flags_alternative_reference_question(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-009",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-009",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="Discharge contactor shall open within 100 ms of charge contactor opening.",
+                        source_text="Discharge contactor shall open within 100 ms of charge contactor Open",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-2",
+                        affected_text="Discharge contactor shall open within 100 ms of charge contactor opening.",
+                        ambiguity_type="timing",
+                        clarification_question="Is the 100 ms delay measured from when the charge contactor opens, or is it a fixed time after BMS_CellOV_L3_Flag = 1?",
+                    )
+                ],
+            ),
+        )
+
+        lints = lint_clarification_review(review)
+
+        assert len(lints) == 1
+        assert lints[0].rule_id == "explicit_expected_behavior_treated_as_ambiguity"
+        assert lints[0].target_item_id == "amb-2"
+
+    def test_explicit_expected_behavior_lint_flags_trigger_event_question(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-009",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-009",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        source_text="Upon BMS_CellOV_L3_Flag = 1: Charge contactor shall open within 200 ms",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        ambiguity_type="timing",
+                        clarification_question="What specific event triggers the 200 ms timer for opening the charge contactor?",
+                    )
+                ],
+            ),
+        )
+
+        lints = lint_clarification_review(review)
+
+        assert len(lints) == 1
+        assert lints[0].rule_id == "explicit_expected_behavior_treated_as_ambiguity"
+        assert lints[0].target_item_id == "amb-1"
+
+    def test_explicit_expected_behavior_lint_flags_other_point_in_time_question(self):
+        from review_pipeline.artifacts.models import (
+            AmbiguityItem,
+            ClarificationReview,
+            FactItem,
+            RequirementDecomposition,
+        )
+        from review_pipeline.review_lints.clarification_lints import lint_clarification_review
+
+        review = ClarificationReview(
+            review_session_id="s1",
+            requirement_key="REQ-BMS-OVP-009",
+            decomposition=RequirementDecomposition(
+                requirement_key="REQ-BMS-OVP-009",
+                facts=[
+                    FactItem(
+                        item_id="fact-1",
+                        fact_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        source_text="Upon BMS_CellOV_L3_Flag = 1: Charge contactor shall open within 200 ms",
+                    )
+                ],
+                ambiguities=[
+                    AmbiguityItem(
+                        item_id="amb-1",
+                        affected_text="Charge contactor shall open within 200 ms of BMS_CellOV_L3_Flag = 1.",
+                        ambiguity_type="timing",
+                        clarification_question="Is the 200 ms timing measured from when BMS_CellOV_L3_Flag transitions to 1 or from some other point in time?",
+                    )
+                ],
+            ),
+        )
+
+        lints = lint_clarification_review(review)
+
+        assert len(lints) == 1
+        assert lints[0].rule_id == "explicit_expected_behavior_treated_as_ambiguity"
+        assert lints[0].target_item_id == "amb-1"
+
     def test_prepare_clarification_review_writes_symbolic_parameter_lints(self, run_dir, sample_requirement_json):
         from review_pipeline.artifacts.io import read_json
         from review_pipeline.stages.decompose_requirement import prepare_clarification_review
