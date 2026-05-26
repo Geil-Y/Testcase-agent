@@ -1043,3 +1043,354 @@ class TestWorkbenchAPIs:
 
         job._thread.join(timeout=5)
         runner.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Issue #6: Review Workbench ergonomics and controlled inputs
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReasonCodesAPI:
+    """Tests for the reason codes endpoint."""
+
+    def test_get_reason_codes_clarification(self, client):
+        r = client.get("/api/v1/console/reason-codes?review_type=clarification")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["review_type"] == "clarification"
+        assert "approve" in data["decisions"]
+        assert "block" in data["decisions"]
+        assert "clarify" in data["decisions"]
+        assert "mark_needs_review" in data["decisions"]
+        assert "edit" in data["decisions"]
+        assert len(data["reason_codes"]) > 0
+        assert "approve" in data["decision_requirements"]
+        assert data["decision_requirements"]["block"]["require_reason_text"] is True
+
+    def test_get_reason_codes_case_intent(self, client):
+        r = client.get("/api/v1/console/reason-codes?review_type=case_intent")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["review_type"] == "case_intent"
+        assert "reject" in data["decisions"]
+        assert "defer" in data["decisions"]
+        assert "revise" in data["decisions"]
+
+    def test_get_reason_codes_unknown_type(self, client):
+        r = client.get("/api/v1/console/reason-codes?review_type=invalid")
+        assert r.status_code == 400
+
+
+class TestAcceptRecommendations:
+    """Tests for Accept All Recommendations behavior."""
+
+    def _setup_review_with_ambiguities(self, run_dir: Path) -> None:
+        """Create a run with clarification_review.json for testing."""
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        data = {
+            "review_session_id": "test-session-acc",
+            "requirement_key": "REQ-TEST-001",
+            "decomposition": {
+                "requirement_key": "REQ-TEST-001",
+                "facts": [],
+                "ambiguities": [
+                    {
+                        "item_id": "amb-1",
+                        "affected_text": "voltage threshold",
+                        "ambiguity_type": "missing_threshold",
+                        "recommended_review_decision": "mark_needs_review",
+                        "confidence_drivers": {"overall": 0.80},
+                    },
+                    {
+                        "item_id": "amb-2",
+                        "affected_text": "timing spec missing",
+                        "ambiguity_type": "missing_timing",
+                        "recommended_review_decision": "clarify",
+                        "confidence_drivers": {"overall": 0.50},
+                    },
+                    {
+                        "item_id": "amb-3",
+                        "affected_text": "state unclear",
+                        "ambiguity_type": "ambiguous_state",
+                        "recommended_review_decision": "approve",
+                        "confidence_drivers": {"overall": 0.90},
+                    },
+                ],
+                "clarification_questions": [],
+                "safe_generation_policy": {"can_generate": True},
+            },
+            "decisions": [
+                {"item_id": "amb-1", "decision": "", "reason_codes": [], "reason_text": ""},
+                {"item_id": "amb-2", "decision": "", "reason_codes": [], "reason_text": ""},
+                {"item_id": "amb-3", "decision": "", "reason_codes": [], "reason_text": ""},
+            ],
+        }
+        (run_dir / "clarification_review.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2)
+        )
+
+    def test_accept_recommendations_fills_pending(self, tmp_path):
+        self._setup_review_with_ambiguities(tmp_path)
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
+
+            result = accept_all_recommendations("test-run", {})
+
+            assert result["filled"] >= 1
+            assert result["requires_confirmation"] is True
+            assert result["high_risk_skipped"] >= 1
+            assert "amb-2" in result["high_risk_items"]
+
+    def test_accept_recommendations_force_confirm(self, tmp_path):
+        self._setup_review_with_ambiguities(tmp_path)
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
+
+            result = accept_all_recommendations("test-run", {"confirm_high_risk": True})
+
+            assert result["requires_confirmation"] is False
+            assert result["filled"] == 3
+            assert result["high_risk_accepted"] >= 1
+
+    def test_accept_recommendations_skips_already_decided(self, tmp_path):
+        """Decisions already set should not be overwritten."""
+        self._setup_review_with_ambiguities(tmp_path)
+        # Pre-set amb-1 decision
+        data = json.loads((tmp_path / "clarification_review.json").read_text())
+        data["decisions"][0]["decision"] = "block"
+        (tmp_path / "clarification_review.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2)
+        )
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
+
+            result = accept_all_recommendations("test-run", {"confirm_high_risk": True})
+            assert result["filled"] == 2  # amb-1 already decided, amb-2/3 filled
+
+    def test_accept_recommendations_nonexistent_run(self, client):
+        get_job_runner().clear()
+        r = client.post(
+            "/api/v1/console/runs/nonexistent/clarification/accept-recommendations",
+            json={},
+        )
+        assert r.status_code == 404
+
+    def test_accept_recommendations_blocked_by_job(self, client):
+        runner = get_job_runner()
+        job = runner.create_job("blocking-accept")
+        started = threading.Event()
+
+        def slow_work():
+            started.set()
+            import time
+            time.sleep(2)
+            return "done"
+
+        runner.start_job(job, slow_work)
+        started.wait(timeout=5)
+
+        r = client.post(
+            "/api/v1/console/runs/test-run/clarification/accept-recommendations",
+            json={},
+        )
+        assert r.status_code == 409
+
+        job._thread.join(timeout=5)
+        runner.clear()
+
+
+class TestFilteredClarification:
+    """Tests for filtering, sorting, and search on clarification review."""
+
+    def _setup_filtered_review(self, run_dir: Path) -> None:
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        data = {
+            "review_session_id": "filtered-session",
+            "requirement_key": "REQ-TEST-001",
+            "decomposition": {
+                "requirement_key": "REQ-TEST-001",
+                "facts": [],
+                "ambiguities": [
+                    {
+                        "item_id": "amb-1",
+                        "affected_text": "voltage",
+                        "ambiguity_type": "missing_threshold",
+                        "recommended_review_decision": "mark_needs_review",
+                        "confidence_drivers": {"overall": 0.90},
+                    },
+                    {
+                        "item_id": "amb-2",
+                        "affected_text": "timing",
+                        "ambiguity_type": "missing_timing",
+                        "recommended_review_decision": "clarify",
+                        "confidence_drivers": {"overall": 0.30},
+                    },
+                    {
+                        "item_id": "amb-3",
+                        "affected_text": "signal",
+                        "ambiguity_type": "missing_signal",
+                        "recommended_review_decision": "approve",
+                        "confidence_drivers": {"overall": 0.70},
+                    },
+                ],
+                "clarification_questions": [],
+                "safe_generation_policy": {"can_generate": True},
+            },
+            "decisions": [
+                {"item_id": "amb-1", "decision": "mark_needs_review", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.90},
+                {"item_id": "amb-2", "decision": "", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.30},
+                {"item_id": "amb-3", "decision": "approve", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.70},
+            ],
+        }
+        (run_dir / "clarification_review.json").write_text(
+            json.dumps(data, ensure_ascii=False, indent=2)
+        )
+
+    def test_filtered_endpoint_returns_enriched_data(self, tmp_path):
+        self._setup_filtered_review(tmp_path)
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
+                mock_load.return_value = {
+                    "run": mock_run.return_value,
+                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
+                }
+                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
+
+                result = get_filtered_clarification("test-run")
+                assert result["total"] == 3
+                assert "routing_color" in result["review"]["decisions"][0]
+
+    def test_filtered_by_decision(self, tmp_path):
+        self._setup_filtered_review(tmp_path)
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
+                mock_load.return_value = {
+                    "run": mock_run.return_value,
+                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
+                }
+                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
+
+                result = get_filtered_clarification("test-run", decision_filter="approve")
+                assert result["total"] == 1
+                assert result["review"]["decisions"][0]["item_id"] == "amb-3"
+
+    def test_filtered_by_routing(self, tmp_path):
+        self._setup_filtered_review(tmp_path)
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
+                mock_load.return_value = {
+                    "run": mock_run.return_value,
+                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
+                }
+                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
+
+                result = get_filtered_clarification("test-run", routing_filter="red")
+                assert result["total"] == 1
+                assert result["review"]["decisions"][0]["routing_color"] == "red"
+
+    def test_filtered_by_search(self, tmp_path):
+        self._setup_filtered_review(tmp_path)
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
+                mock_load.return_value = {
+                    "run": mock_run.return_value,
+                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
+                }
+                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
+
+                result = get_filtered_clarification("test-run", search="timing")
+                assert result["total"] >= 1
+
+    def test_priority_sort_pending_first(self, tmp_path):
+        self._setup_filtered_review(tmp_path)
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": str(tmp_path),
+                "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
+                mock_load.return_value = {
+                    "run": mock_run.return_value,
+                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
+                }
+                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
+
+                result = get_filtered_clarification("test-run", sort="priority")
+                decisions = result["review"]["decisions"]
+                assert decisions[0]["item_id"] == "amb-2"
+                assert decisions[0]["decision"] == ""
+
+    def test_filtered_endpoint_nonexistent_run(self, client):
+        get_job_runner().clear()
+        r = client.get("/api/v1/console/runs/nonexistent/clarification/filtered")
+        assert r.status_code == 404
+
+
+class TestMemoryHints:
+    """Tests for advisory Review Memory hints."""
+
+    def test_memory_hints_endpoint_returns_advisory(self, client):
+        get_job_runner().clear()
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": "/tmp/test-run",
+                "requirement_key": "REQ-TEST-001",
+            }
+            r = client.get("/api/v1/console/runs/test-run/memory-hints")
+            assert r.status_code == 200
+            data = r.json()
+            assert data["run"] == "test-run"
+            assert isinstance(data["hints"], list)
+            assert "advisory" in data["advisory_note"].lower()
+
+    def test_memory_hints_nonexistent_run(self, client):
+        get_job_runner().clear()
+        r = client.get("/api/v1/console/runs/nonexistent/memory-hints")
+        assert r.status_code == 404
+
+    def test_memory_hints_are_read_only(self, client):
+        """GET only; hints are advisory and never mutate review artifacts."""
+        r = client.post("/api/v1/console/runs/test-run/memory-hints", json={})
+        assert r.status_code in (404, 405)

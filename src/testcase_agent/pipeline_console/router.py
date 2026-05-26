@@ -301,3 +301,237 @@ def advance_clarification(run_dir_name: str, data: dict):
 
     except JobConflictError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
+
+
+# ── Issue #6: Review Workbench ergonomics ─────────────────────────────────
+
+
+import json as _json
+
+
+# -- Reason Codes ------------------------------------------------------------
+
+
+@router.get("/reason-codes")
+def get_reason_codes(review_type: str = "clarification"):
+    """Return valid decisions, reason codes, and decision requirements for a review type."""
+    from ..review_pipeline.reason_codes import (
+        get_clarification_decisions,
+        get_case_intent_decisions,
+        get_reason_codes_for,
+        get_decision_requirements,
+    )
+
+    if review_type == "clarification":
+        decisions = get_clarification_decisions()
+        item_type = "clarification_item"
+    elif review_type == "case_intent":
+        decisions = get_case_intent_decisions()
+        item_type = "case_intent_item"
+    else:
+        return JSONResponse({"error": f"Unknown review_type: {review_type}"}, status_code=400)
+
+    reason_codes = get_reason_codes_for(item_type)
+    decision_reqs = {d: get_decision_requirements(d) for d in decisions}
+
+    return {
+        "review_type": review_type,
+        "decisions": decisions,
+        "reason_codes": reason_codes,
+        "decision_requirements": decision_reqs,
+    }
+
+
+# -- Accept All Recommendations ----------------------------------------------
+
+
+@router.post("/runs/{run_dir_name}/clarification/accept-recommendations")
+def accept_all_recommendations(run_dir_name: str, data: dict):
+    """Bulk-fill decisions with recommended values. Never saves or advances."""
+    runner = get_job_runner()
+    if runner.is_running():
+        return JSONResponse(
+            {"error": "A job is running. Editing is locked."},
+            status_code=409,
+        )
+
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+    review_path = run_path / "clarification_review.json"
+    if not review_path.exists():
+        return JSONResponse({"error": "Clarification review not found"}, status_code=404)
+
+    review_data = _json.loads(review_path.read_text(encoding="utf-8"))
+    force_confirm = data.get("confirm_high_risk", False)
+
+    ambiguities = review_data.get("decomposition", {}).get("ambiguities", [])
+    amb_by_id = {a.get("item_id"): a for a in ambiguities}
+
+    updated_count = 0
+    high_risk_items: list[str] = []
+
+    for dec in review_data.get("decisions", []):
+        if dec.get("decision", "").strip():
+            continue
+
+        amb = amb_by_id.get(dec.get("item_id"), {})
+        recommended = amb.get("recommended_review_decision", "mark_needs_review")
+
+        drivers = amb.get("confidence_drivers", {})
+        vals = [v for v in drivers.values() if isinstance(v, (int, float))]
+        confidence = (sum(vals) / len(vals)) if vals else 0.5
+        is_high_risk = confidence < 0.65
+
+        if not force_confirm and is_high_risk:
+            high_risk_items.append(dec.get("item_id", "unknown"))
+            continue
+
+        if is_high_risk:
+            high_risk_items.append(dec.get("item_id", "unknown"))
+
+        dec["decision"] = recommended
+        updated_count += 1
+
+    if high_risk_items and not force_confirm:
+        return {
+            "filled": updated_count,
+            "high_risk_skipped": len(high_risk_items),
+            "high_risk_items": high_risk_items,
+            "requires_confirmation": True,
+            "message": (
+                f"{len(high_risk_items)} orange/red items need confirmation. "
+                "Submit with confirm_high_risk=true to accept all."
+            ),
+        }
+
+    (run_path / "clarification_review.json").write_text(
+        _json.dumps(review_data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    return {
+        "filled": updated_count,
+        "high_risk_accepted": len(high_risk_items) if force_confirm else 0,
+        "requires_confirmation": False,
+    }
+
+
+# -- Filtered / sorted clarification review ----------------------------------
+
+
+def _routing_for_confidence(score: float) -> str:
+    if score >= 0.85:
+        return "green"
+    elif score >= 0.65:
+        return "blue"
+    elif score >= 0.40:
+        return "orange"
+    return "red"
+
+
+def _guess_confidence(amb: dict) -> float:
+    drivers = amb.get("confidence_drivers", {})
+    if not drivers:
+        return 0.5
+    vals = [v for v in drivers.values() if isinstance(v, (int, float))]
+    return sum(vals) / len(vals) if vals else 0.5
+
+
+@router.get("/runs/{run_dir_name}/clarification/filtered")
+def get_filtered_clarification(
+    run_dir_name: str,
+    decision_filter: str = "",
+    routing_filter: str = "",
+    search: str = "",
+    sort: str = "priority",
+):
+    """Load clarification review with filtering, sorting, and search."""
+    data = load_clarification_review(run_dir_name)
+    if data is None:
+        return JSONResponse(
+            {"error": f"Clarification review not found for run '{run_dir_name}'"},
+            status_code=404,
+        )
+
+    decisions = data.get("review", {}).get("decisions", [])
+    ambiguities = data.get("review", {}).get("decomposition", {}).get("ambiguities", [])
+
+    amb_by_id = {a.get("item_id"): a for a in ambiguities}
+
+    enriched = []
+    for d in decisions:
+        item_id = d.get("item_id", "")
+        amb = amb_by_id.get(item_id, {})
+        enriched.append({
+            **d,
+            "ambiguity_type": amb.get("ambiguity_type", ""),
+            "recommended_decision": amb.get("recommended_review_decision", ""),
+            "routing_color": _routing_for_confidence(
+                d.get("confidence_before_review") or _guess_confidence(amb)
+            ),
+            "affected_text": amb.get("affected_text", ""),
+            "impact": amb.get("impact", ""),
+            "severity": amb.get("severity", ""),
+            "clarification_question": amb.get("clarification_question", ""),
+        })
+
+    if decision_filter:
+        enriched = [
+            e for e in enriched
+            if e.get("decision") == decision_filter or (not e.get("decision") and decision_filter == "pending")
+        ]
+
+    if routing_filter:
+        enriched = [e for e in enriched if e.get("routing_color") == routing_filter]
+
+    if search:
+        q = search.lower()
+        enriched = [
+            e for e in enriched
+            if q in _json.dumps(e).lower()
+        ]
+
+    if sort == "priority":
+        def _sort_key(e):
+            is_pending = 0 if not e.get("decision") else 1
+            routing_order = {"red": 0, "orange": 1, "blue": 2, "green": 3}
+            routing_rank = routing_order.get(e.get("routing_color", "blue"), 2)
+            return (is_pending, routing_rank, e.get("item_id", ""))
+        enriched.sort(key=_sort_key)
+
+    enriched_review = {**data.get("review", {}), "decisions": enriched}
+
+    return {
+        "run": data.get("run"),
+        "review": enriched_review,
+        "filters": {
+            "decision_filter": decision_filter,
+            "routing_filter": routing_filter,
+            "search": search,
+            "sort": sort,
+        },
+        "total": len(enriched),
+    }
+
+
+# -- Review Memory hints -----------------------------------------------------
+
+
+@router.get("/runs/{run_dir_name}/memory-hints")
+def get_memory_hints(run_dir_name: str):
+    """Return advisory Review Memory hints. Never auto-selects decisions."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    return {
+        "run": run_dir_name,
+        "hints": [],
+        "advisory_note": (
+            "Review Memory hints are advisory only. "
+            "They never auto-select decisions, generate reason text, or mutate review artifacts."
+        ),
+    }
