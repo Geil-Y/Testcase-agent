@@ -7,13 +7,10 @@ and optional Review Memory hints. Produces case_intent_review.json + HTML.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 from review_pipeline.artifacts.io import read_json, write_json
 from review_pipeline.artifacts.models import (
-    RequirementInput,
-    RequirementDecomposition,
     ClarifiedTestBasis,
     CaseIntentPlan,
     CaseIntentReview,
@@ -21,7 +18,6 @@ from review_pipeline.artifacts.models import (
     CaseIntentItem,
     ClarificationReview,
 )
-from review_pipeline.artifacts.validation import ValidationResult
 from review_pipeline.html_rendering.renderer import render_case_intent_review
 
 
@@ -83,8 +79,8 @@ def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None
         for a in basis.resolved_ambiguities
     ) if basis.resolved_ambiguities else ""
 
-    description = ""
-    if review and review.decomposition.facts:
+    description = basis.source_description
+    if not description and review and review.decomposition.facts:
         description = review.decomposition.facts[0].source_text
 
     system_prompt, user_prompt = render_prompt(
@@ -93,7 +89,7 @@ def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None
         description=description,
         facts_summary=facts_summary,
         resolved_ambiguities=amb_summary,
-        supplementary_info="",
+        supplementary_info=basis.supplementary_info,
         memory_hints=str(memory_hints) if memory_hints else "",
     )
     raw_response = provider.complete(system_prompt, user_prompt)

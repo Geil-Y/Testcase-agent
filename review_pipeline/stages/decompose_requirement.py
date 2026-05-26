@@ -52,6 +52,10 @@ def prepare_clarification_review(
     review = ClarificationReview(
         review_session_id=review_session_id,
         requirement_key=req.requirement_key,
+        source_description=req.description,
+        function_name=req.function_name,
+        requirement_type=req.requirement_type,
+        supplementary_info=req.supplementary_info,
         source_requirement_hash=_hash_text(req.description),
         decomposition=decomposition,
         decisions=decisions,

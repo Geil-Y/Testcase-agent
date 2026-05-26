@@ -612,6 +612,27 @@ class TestClarificationValidation:
         assert result.is_valid
         assert any(a["clarified_value"] == "Response time is 100ms" for a in basis.resolved_ambiguities)
 
+    def test_clarified_basis_preserves_source_context(self, run_dir, sample_requirement_json):
+        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from review_pipeline.stages.validate_clarification import validate_clarification_review
+        from review_pipeline.artifacts.io import read_json, write_json
+
+        prepare_clarification_review(str(sample_requirement_json), str(run_dir))
+        data = read_json(run_dir / "clarification_review.json")
+        data["decisions"] = [
+            {"item_id": a["item_id"], "decision": "mark_needs_review", "reason_codes": ["needs_clarification"]}
+            for a in data["decomposition"]["ambiguities"]
+        ]
+        write_json(run_dir / "clarification_review.json", data)
+
+        result, basis = validate_clarification_review(str(run_dir / "clarification_review.json"))
+
+        assert result.is_valid
+        assert basis.source_description == "The BMS shall detect cell over-voltage and open the contactor within 100ms."
+        assert basis.function_name == "Cell Monitoring"
+        assert basis.supplementary_info == "Cell voltage threshold: 4.25V"
+        assert basis.resolved_ambiguities[0]["ambiguity_type"] == "timing"
+
     def test_unknown_decision_rejected(self, run_dir):
         from review_pipeline.stages.validate_clarification import validate_clarification_review
         from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
@@ -903,6 +924,75 @@ class TestCaseWriter:
         assert "post_condition" in case
         assert "requirement_key" in case
         assert "coverage_dimension" in case
+
+    def test_writer_prompt_receives_source_context_and_missing_markers(self, run_dir):
+        from review_pipeline.stages.write_cases import generate_cases
+        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem, ClarifiedTestBasis, FactItem
+        from review_pipeline.artifacts.io import write_json
+
+        plan = ApprovedCasePlan(
+            review_session_id="s1",
+            requirement_key="REQ_CTX",
+            approved_intents=[
+                CaseIntentItem(
+                    intent_id="intent-1",
+                    coverage_dimension="fault_or_protection",
+                    intent_text="Verify over-voltage detection after debounce timing",
+                    confidence_score=0.8,
+                ),
+            ],
+        )
+        basis = ClarifiedTestBasis(
+            requirement_key="REQ_CTX",
+            review_session_id="s1",
+            source_description="The BMS shall set BMS_CellOV_Flag when CellVoltage exceeds r_CellOV_Threshold.",
+            function_name="Overvoltage Protection",
+            supplementary_info="Debounce parameter: t_CellOV_Debounce.",
+            facts=[
+                FactItem(
+                    item_id="fact-1",
+                    fact_text="BMS_CellOV_Flag is set when CellVoltage exceeds r_CellOV_Threshold.",
+                    source_text="The BMS shall set BMS_CellOV_Flag when CellVoltage exceeds r_CellOV_Threshold.",
+                )
+            ],
+            resolved_ambiguities=[
+                {
+                    "item_id": "amb-1",
+                    "decision": "mark_needs_review",
+                    "ambiguity_type": "timing",
+                    "affected_text": "when CellVoltage exceeds r_CellOV_Threshold",
+                    "clarified_value": "",
+                    "reason_codes": ["missing_timing"],
+                }
+            ],
+        )
+        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        write_json(run_dir / "clarified_test_basis.json", basis.model_dump())
+
+        class PromptAssertingProvider:
+            def complete(self, system_prompt: str, user_prompt: str) -> str:
+                assert "The BMS shall set BMS_CellOV_Flag" in user_prompt
+                assert "Debounce parameter: t_CellOV_Debounce." in user_prompt
+                assert "Known Test Basis Facts" in user_prompt
+                assert "Critical Missing Information" in user_prompt
+                assert "timing" in user_prompt
+                assert "Set the condition. Wait required timing. Check observable response." in system_prompt
+                return json.dumps({
+                    "case_id": "case-intent-1",
+                    "title": "Cell over-voltage detection sets flag",
+                    "objective": "Verify over-voltage detection after debounce timing.",
+                    "pre_condition": "BMS initialized, all parameters within normal operating range, no active faults.",
+                    "steps": [
+                        {"step_number": 1, "action": "Set CellVoltage above r_CellOV_Threshold.", "expected_result": "null"},
+                        {"step_number": 2, "action": "Wait [NEEDS REVIEW].", "expected_result": "null"},
+                        {"step_number": 3, "action": "Check over-voltage response.", "expected_result": "BMS_CellOV_Flag == 1"},
+                    ],
+                    "post_condition": "System returned to normal operating state.",
+                })
+
+        case_set = generate_cases(str(run_dir), provider=PromptAssertingProvider())
+
+        assert case_set.cases[0].title == "Cell over-voltage detection sets flag"
 
 
 # ── Issue 11: Review Memory SQLite ─────────────────────────────────────────

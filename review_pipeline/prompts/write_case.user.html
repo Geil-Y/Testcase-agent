@@ -5,7 +5,7 @@
 **Description:** {{ description }}
 
 {% if facts_summary %}
-### Clarified Facts
+### Known Test Basis Facts
 
 {{ facts_summary }}
 {% endif %}
@@ -20,6 +20,14 @@
 ### Supplementary Information
 
 {{ supplementary_info }}
+{% endif %}
+
+{% if missing_info %}
+### Critical Missing Information
+
+Use `[NEEDS REVIEW]` placeholders only where these missing semantics are needed:
+
+{{ missing_info }}
 {% endif %}
 
 Write one test case for this intent. Output only the JSON.

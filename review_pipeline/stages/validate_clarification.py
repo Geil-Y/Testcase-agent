@@ -13,7 +13,6 @@ from review_pipeline.artifacts.models import (
     ClarificationReview,
     ClarificationDecision,
     ClarifiedTestBasis,
-    FactItem,
 )
 from review_pipeline.artifacts.validation import ValidationResult
 from review_pipeline.reason_codes import (
@@ -21,9 +20,7 @@ from review_pipeline.reason_codes import (
     is_reason_code_valid,
     get_decision_requirements,
     requires_reason_text_on_conflict,
-    get_conflict_threshold,
 )
-from review_pipeline.confidence.engine import aggregate_confidence
 
 
 def validate_clarification_review(file_path: str) -> tuple[ValidationResult, ClarifiedTestBasis | None]:
@@ -36,6 +33,7 @@ def validate_clarification_review(file_path: str) -> tuple[ValidationResult, Cla
     has_block = False
     block_reasons: list[str] = []
     resolved_ambiguities: list[dict] = []
+    ambiguity_by_id = {a.item_id: a for a in review.decomposition.ambiguities}
 
     for dec in review.decisions:
         _validate_clarification_decision(dec, review, result)
@@ -44,9 +42,12 @@ def validate_clarification_review(file_path: str) -> tuple[ValidationResult, Cla
             block_reasons.append(dec.reason_text or f"Blocked: {dec.item_id}")
 
         # Collect resolved ambiguity info
+        ambiguity = ambiguity_by_id.get(dec.item_id)
         resolved_ambiguities.append({
             "item_id": dec.item_id,
             "decision": dec.decision,
+            "ambiguity_type": ambiguity.ambiguity_type if ambiguity else "",
+            "affected_text": ambiguity.affected_text if ambiguity else "",
             "clarified_value": dec.clarified_value,
             "reason_codes": dec.reason_codes,
         })
@@ -58,6 +59,10 @@ def validate_clarification_review(file_path: str) -> tuple[ValidationResult, Cla
     basis = ClarifiedTestBasis(
         requirement_key=review.requirement_key,
         review_session_id=review.review_session_id,
+        source_description=review.source_description,
+        function_name=review.function_name,
+        requirement_type=review.requirement_type,
+        supplementary_info=review.supplementary_info,
         test_basis_hash=_hash_basis(review),
         facts=review.decomposition.facts,
         resolved_ambiguities=resolved_ambiguities,
@@ -123,7 +128,7 @@ def _validate_clarification_decision(
 
 def _hash_basis(review: ClarificationReview) -> str:
     import hashlib
-    content = review.requirement_key + "|".join(
+    content = review.requirement_key + review.source_description + "|".join(
         f.item_id for f in review.decomposition.facts
     ) + "|".join(
         d.item_id + d.decision for d in review.decisions

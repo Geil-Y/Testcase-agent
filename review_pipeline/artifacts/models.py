@@ -7,7 +7,6 @@ in the pipeline. Code owns plumbing; prompts own generation philosophy.
 from __future__ import annotations
 
 from datetime import datetime
-from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -88,6 +87,10 @@ class ClarificationReview(BaseModel):
 
     review_session_id: str
     requirement_key: str
+    source_description: str = ""
+    function_name: str = ""
+    requirement_type: str = ""
+    supplementary_info: str = ""
     source_requirement_hash: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     decomposition: RequirementDecomposition = Field(default_factory=RequirementDecomposition)
@@ -101,6 +104,10 @@ class ClarifiedTestBasis(BaseModel):
 
     requirement_key: str
     review_session_id: str
+    source_description: str = ""
+    function_name: str = ""
+    requirement_type: str = ""
+    supplementary_info: str = ""
     test_basis_hash: str = ""
     facts: list[FactItem] = Field(default_factory=list)
     resolved_ambiguities: list[dict[str, Any]] = Field(default_factory=list)

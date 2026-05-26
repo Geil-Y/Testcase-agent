@@ -7,7 +7,6 @@ Does NOT call self_check. Preserves traceability.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 from review_pipeline.artifacts.io import read_json, write_json
@@ -62,18 +61,25 @@ def _call_write_case_llm(plan: ApprovedCasePlan, intent: CaseIntentItem, basis: 
     from review_pipeline.prompts import render_prompt
 
     facts_summary = ""
+    description = plan.requirement_key
+    supplementary_info = ""
+    missing_info = ""
     if basis:
+        description = basis.source_description or plan.requirement_key
+        supplementary_info = basis.supplementary_info
         facts_summary = "\n".join(f"- [{f.item_id}] {f.fact_text}" for f in basis.facts)
+        missing_info = _format_missing_info_for_prompt(basis)
 
     system_prompt, user_prompt = render_prompt(
         "write_case",
         requirement_key=plan.requirement_key,
-        description=plan.requirement_key,
+        description=description,
         facts_summary=facts_summary,
         intent_id=intent.intent_id,
         coverage_dimension=intent.coverage_dimension,
         intent_text=intent.intent_text,
-        supplementary_info="",
+        supplementary_info=supplementary_info,
+        missing_info=missing_info,
     )
     raw_response = provider.complete(system_prompt, user_prompt)
 
@@ -91,6 +97,19 @@ def _call_write_case_llm(plan: ApprovedCasePlan, intent: CaseIntentItem, basis: 
         return GeneratedCase(**payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as exc:
         raise ValueError(f"LLM-C response was not valid JSON: {exc}") from exc
+
+
+def _format_missing_info_for_prompt(basis: ClarifiedTestBasis) -> str:
+    """Summarize unresolved semantic gaps that require NEEDS REVIEW markers."""
+    lines: list[str] = []
+    for item in basis.resolved_ambiguities:
+        decision = item.get("decision", "")
+        clarified_value = item.get("clarified_value", "")
+        if decision == "mark_needs_review" or (decision in {"clarify", "edit"} and not clarified_value):
+            ambiguity_type = item.get("ambiguity_type") or "unspecified"
+            affected_text = item.get("affected_text") or item.get("item_id", "")
+            lines.append(f"- {ambiguity_type}: {affected_text}")
+    return "\n".join(lines)
 
 
 def _parse_json_response(raw_response: str) -> dict:
