@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Console — Testcase Agent</title>
+<style>
+  :root {
+    --bg: #f8f9fa;
+    --surface: #ffffff;
+    --border: #dee2e6;
+    --text: #212529;
+    --text-muted: #6c757d;
+    --primary: #0d6efd;
+    --primary-light: #e7f1ff;
+    --success: #198754;
+    --warning: #ffc107;
+    --danger: #dc3545;
+    --info: #0dcaf0;
+    --radius: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.5rem;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  header h1 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  header .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+  }
+  .mode-badge {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .mode-real { background: #d1e7dd; color: var(--success); }
+  .mode-mock { background: #fff3cd; color: #856404; }
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    margin-bottom: 1.5rem;
+  }
+  .card-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .card-body { padding: 1rem; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.82rem;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .btn:hover { background: #e9ecef; }
+  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary:hover { background: #0b5ed7; }
+  .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.75rem; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  select, input[type="text"], input[type="file"] {
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    background: var(--surface);
+  }
+  select:focus, input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  th, td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #f8f9fa;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+  tr:hover { background: var(--primary-light); }
+  .expand-row {
+    cursor: pointer;
+  }
+  .expand-row:hover { background: #e7f1ff; }
+  .expanded-detail {
+    background: #f8f9fa;
+    padding: 0.75rem 1rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+  }
+  .expanded-detail strong { color: var(--text); }
+  .empty-state {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--text-muted);
+  }
+  .form-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .form-group label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .alert {
+    padding: 0.6rem 1rem;
+    border-radius: var(--radius);
+    font-size: 0.82rem;
+    margin: 0.5rem 0;
+  }
+  .alert-danger { background: #f8d7da; border: 1px solid #f5c2c7; color: #842029; }
+  .alert-success { background: #d1e7dd; border: 1px solid #badbcc; color: #0f5132; }
+  .alert-info { background: #cff4fc; border: 1px solid #b6effb; color: #055160; }
+  .section-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1rem 0;
+  }
+  .batch-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .table-container {
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  .loading { opacity: 0.6; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>&#9881; Pipeline Console</h1>
+  <div class="header-right">
+    <span class="mode-badge mode-real" id="mode-badge">MOCK</span>
+    <span id="mode-label" style="font-size:0.75rem;color:var(--text-muted);">Mode: loading...</span>
+  </div>
+</header>
+
+<main>
+  <!-- Import Card -->
+  <div class="card" id="import-card">
+    <div class="card-header">&#128196; Import Requirements</div>
+    <div class="card-body" id="import-body">
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>Excel File</label>
+          <input type="file" id="import-file" accept=".xlsx,.xls" style="width:100%;">
+        </div>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-primary" id="btn-preview" onclick="doPreview()">Preview</button>
+        <span id="preview-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
+      </div>
+      <!-- Mapping form (hidden until preview) -->
+      <div id="mapping-section" style="display:none; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border);">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Sheet</label>
+            <select id="mapping-sheet"></select>
+          </div>
+          <div class="form-group">
+            <label>Key Column</label>
+            <select id="mapping-key-col"></select>
+          </div>
+          <div class="form-group">
+            <label>Description Column</label>
+            <select id="mapping-desc-col"></select>
+          </div>
+          <div class="form-group">
+            <label>Function Name Column</label>
+            <select id="mapping-func-col"></select>
+          </div>
+          <div class="form-group">
+            <label>Type Column</label>
+            <select id="mapping-type-col"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1;">
+            <label>Supplementary Info Columns (ctrl+click to multi-select)</label>
+            <select id="mapping-supp-cols" multiple style="height:80px;"></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-confirm" onclick="doConfirm()">Confirm &amp; Import</button>
+        <span id="confirm-status" style="font-size:0.78rem;color:var(--text-muted);margin-left:0.5rem;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Selector -->
+  <div class="card">
+    <div class="card-header">
+      &#128203; Requirements
+      <div class="batch-selector">
+        <label for="batch-select" style="font-size:0.78rem;color:var(--text-muted);">Batch:</label>
+        <select id="batch-select" onchange="loadBatch(this.value)" style="font-size:0.78rem;"></select>
+        <span id="batch-count" style="font-size:0.78rem;color:var(--text-muted);"></span>
+      </div>
+    </div>
+    <div class="card-body" id="requirements-body">
+      <div class="empty-state" id="requirements-empty">No requirements loaded. Import an Excel file to begin.</div>
+      <div class="table-container" id="requirements-table-container" style="display:none;">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:24px;"></th>
+              <th>Key</th>
+              <th>Description</th>
+              <th>Function</th>
+              <th>Type</th>
+              <th>Latest Run</th>
+              <th>Run Time</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="requirements-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// -- State --
+const STATE = {
+  previewData: null,   // { filename, sheets, columns, tmp_path }
+  currentBatch: null,  // { id, requirements: [...] }
+};
+
+// -- Init --
+document.addEventListener('DOMContentLoaded', () => {
+  loadMode();
+  loadBatches();
+});
+
+// -- Mode --
+async function loadMode() {
+  try {
+    const r = await fetch('/api/v1/health');
+    const h = await r.json();
+    document.getElementById('mode-label').textContent =
+      `Provider: ${h.llm_provider} | Model: ${h.llm_model}`;
+    const badge = document.getElementById('mode-badge');
+    if (h.llm_provider === 'mock') {
+      badge.textContent = 'MOCK';
+      badge.className = 'mode-badge mode-mock';
+    } else {
+      badge.textContent = h.llm_provider === 'ollama' ? 'LOCAL' : 'REAL';
+      badge.className = 'mode-badge mode-real';
+    }
+  } catch (e) {
+    document.getElementById('mode-label').textContent = 'Mode: unavailable';
+  }
+}
+
+// -- Import --
+async function doPreview() {
+  const fileInput = document.getElementById('import-file');
+  const file = fileInput.files[0];
+  if (!file) { alert('Select an Excel file first.'); return; }
+
+  const status = document.getElementById('preview-status');
+  status.textContent = 'Reading file...';
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const r = await fetch('/api/v1/console/imports/preview', { method: 'POST', body: form });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Preview failed'); }
+    STATE.previewData = await r.json();
+    status.textContent = `Ready: ${STATE.previewData.sheets.length} sheet(s), ${STATE.previewData.columns.length} column(s)`;
+    showMapping(STATE.previewData);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  }
+}
+
+function showMapping(data) {
+  const section = document.getElementById('mapping-section');
+  section.style.display = 'block';
+
+  const populate = (id, options, extra) => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = (extra ? '<option value="">(auto)</option>' : '');
+    options.forEach(o => { const opt = document.createElement('option'); opt.value = o; opt.textContent = o; sel.appendChild(opt); });
+  };
+
+  populate('mapping-sheet', data.sheets);
+  populate('mapping-key-col', data.columns, true);
+  populate('mapping-desc-col', data.columns, true);
+  populate('mapping-func-col', data.columns, true);
+  populate('mapping-type-col', data.columns, true);
+  populate('mapping-supp-cols', data.columns);
+}
+
+async function doConfirm() {
+  if (!STATE.previewData) { alert('Preview the file first.'); return; }
+
+  const status = document.getElementById('confirm-status');
+  status.textContent = 'Importing...';
+  document.getElementById('btn-confirm').disabled = true;
+
+  try {
+    const body = {
+      tmp_path: STATE.previewData.tmp_path,
+      filename: STATE.previewData.filename,
+      sheet: document.getElementById('mapping-sheet').value || null,
+      mapping: {
+        requirement_key_col: document.getElementById('mapping-key-col').value,
+        description_col: document.getElementById('mapping-desc-col').value,
+        function_name_col: document.getElementById('mapping-func-col').value,
+        requirement_type_col: document.getElementById('mapping-type-col').value,
+        supplementary_info_cols: Array.from(document.getElementById('mapping-supp-cols').selectedOptions).map(o => o.value),
+      },
+    };
+
+    const r = await fetch('/api/v1/console/imports/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || 'Import failed'); }
+
+    const batch = await r.json();
+    status.textContent = `Imported ${batch.requirements_count} requirements.`;
+    document.getElementById('mapping-section').style.display = 'none';
+    STATE.previewData = null;
+
+    await loadBatches();
+    renderBatch(batch);
+  } catch (e) {
+    status.textContent = 'Error: ' + e.message;
+  } finally {
+    document.getElementById('btn-confirm').disabled = false;
+  }
+}
+
+// -- Batches --
+async function loadBatches() {
+  try {
+    const r = await fetch('/api/v1/console/imports');
+    const data = await r.json();
+    const sel = document.getElementById('batch-select');
+    sel.innerHTML = '';
+    (data.batches || []).forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b.id;
+      opt.textContent = `${b.id} — ${b.filename} (${b.requirements_count})`;
+      sel.appendChild(opt);
+    });
+
+    if (data.batches && data.batches.length > 0) {
+      // Load latest by default
+      await loadLatestBatch();
+    }
+  } catch (e) {
+    console.error('Failed to load batches', e);
+  }
+}
+
+async function loadLatestBatch() {
+  try {
+    const r = await fetch('/api/v1/console/imports/latest');
+    if (r.ok) {
+      const batch = await r.json();
+      renderBatch(batch);
+    }
+  } catch (e) {
+    console.error('Failed to load latest batch', e);
+  }
+}
+
+async function loadBatch(batchId) {
+  if (!batchId) return;
+  try {
+    const r = await fetch(`/api/v1/console/imports/${batchId}`);
+    if (r.ok) {
+      const batch = await r.json();
+      renderBatch(batch);
+    }
+  } catch (e) {
+    console.error('Failed to load batch', e);
+  }
+}
+
+function renderBatch(batch) {
+  STATE.currentBatch = batch;
+  document.getElementById('batch-count').textContent = `${batch.requirements_count} requirements`;
+
+  const tbody = document.getElementById('requirements-tbody');
+  tbody.innerHTML = '';
+
+  if (!batch.requirements || batch.requirements.length === 0) {
+    document.getElementById('requirements-empty').style.display = 'block';
+    document.getElementById('requirements-table-container').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('requirements-empty').style.display = 'none';
+  document.getElementById('requirements-table-container').style.display = 'block';
+
+  batch.requirements.forEach(req => {
+    const desc = req.description.length > 100 ? req.description.substring(0, 100) + '...' : req.description;
+    const runStatus = req.latest_run_status || '—';
+    const runTime = req.latest_run_time || '—';
+
+    const row = document.createElement('tr');
+    row.className = 'expand-row';
+    row.setAttribute('data-req-id', req.id);
+    row.onclick = () => toggleDetail(req.id);
+    row.innerHTML = `
+      <td>&#9654;</td>
+      <td><code>${esc(req.requirement_key)}</code></td>
+      <td>${esc(desc)}</td>
+      <td>${esc(req.function_name || '—')}</td>
+      <td>${esc(req.requirement_type || '—')}</td>
+      <td><span class="status-badge">${esc(runStatus)}</span></td>
+      <td>${esc(runTime)}</td>
+      <td>
+        <button class="btn btn-sm" onclick="event.stopPropagation();startRun('${esc(req.requirement_key)}')">Start Run</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+
+    const detailRow = document.createElement('tr');
+    detailRow.id = `detail-${req.id}`;
+    detailRow.style.display = 'none';
+    detailRow.innerHTML = `
+      <td colspan="8">
+        <div class="expanded-detail">
+          <strong>Full Description:</strong><br>${esc(req.description)}<br><br>
+          <strong>Supplementary Info:</strong><br>${esc(req.supplementary_info || '(none)')}
+        </div>
+      </td>
+    `;
+    tbody.appendChild(detailRow);
+  });
+}
+
+function toggleDetail(reqId) {
+  const detailRow = document.getElementById(`detail-${reqId}`);
+  if (detailRow) {
+    detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+  }
+}
+
+function startRun(reqKey) {
+  alert('Start Run for ' + reqKey + ' — coming in Issue #5.');
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>

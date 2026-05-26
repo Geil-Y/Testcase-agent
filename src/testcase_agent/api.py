@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import shutil
-import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI, UploadFile
+from fastapi import APIRouter, FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .pipeline.import_requirements import ColumnMapping, list_columns, list_sheets, parse_requirements
+from .pipeline_console.router import console_html, router as console_router
 
-router = APIRouter()
+root_router = APIRouter()
 
 
-@router.get("/health")
+@root_router.get("/health")
 def health():
     settings = get_settings()
     return {
@@ -24,74 +23,21 @@ def health():
     }
 
 
-@router.post("/import/preview")
-async def import_preview(file: UploadFile):
-    """Upload an Excel file and return sheet names + column headers for mapping."""
-    suffix = Path(file.filename or "upload.xlsx").suffix
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    try:
-        shutil.copyfileobj(file.file, tmp)
-        tmp.close()
-        sheets = list_sheets(tmp.name)
-        columns = list_columns(tmp.name, sheets[0] if sheets else None)
-        Path(tmp.name).unlink()
-        return {
-            "filename": file.filename,
-            "sheets": sheets,
-            "columns": columns,
-            "tmp_path": tmp.name,
-        }
-    except Exception:
-        Path(tmp.name).unlink(missing_ok=True)
-        return {"error": "Failed to read Excel file"}
-
-
-@router.post("/import/confirm")
-async def import_confirm(data: dict):
-    """Confirm column mapping and parse requirements from the uploaded Excel."""
-    tmp_path = data.get("tmp_path", "")
-    sheet = data.get("sheet")
-    mapping_data = data.get("mapping", {})
-
-    if not tmp_path or not Path(tmp_path).exists():
-        return {"error": "Uploaded file not found. Re-upload."}
-
-    mapping = ColumnMapping(
-        requirement_key_col=mapping_data.get("requirement_key_col", ""),
-        description_col=mapping_data.get("description_col", ""),
-        function_name_col=mapping_data.get("function_name_col", ""),
-        requirement_type_col=mapping_data.get("requirement_type_col", ""),
-        supplementary_info_cols=mapping_data.get("supplementary_info_cols", []),
-    )
-
-    try:
-        reqs = parse_requirements(tmp_path, mapping, sheet or None)
-        Path(tmp_path).unlink(missing_ok=True)
-        req_list = [
-            {
-                "id": i,
-                "requirement_key": r.requirement_key,
-                "description": r.description[:120],
-                "function_name": r.function_name,
-                "requirement_type": r.requirement_type,
-                "is_heading": r.is_heading,
-                "is_info": r.is_info,
-            }
-            for i, r in enumerate(reqs)
-        ]
-        return {"requirements": req_list, "count": len(req_list)}
-    except Exception as e:
-        Path(tmp_path).unlink(missing_ok=True)
-        return {"error": str(e)}
-
-
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title=settings.app_name)
-    app.include_router(router, prefix=settings.api_v1_prefix)
+
+    app.include_router(root_router, prefix=settings.api_v1_prefix)
+    app.include_router(console_router, prefix=f"{settings.api_v1_prefix}/console")
+
     static_dir = Path(__file__).resolve().parents[2] / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    @app.get("/console", response_class=HTMLResponse)
+    def serve_console():
+        return HTMLResponse(console_html())
+
     return app
 
 
