@@ -548,6 +548,141 @@ def get_memory_hints(run_dir_name: str):
     }
 
 
+# ── Issue #9: Read-only Results, export, and Review Memory import ──────────
+
+
+@router.get("/runs/{run_dir_name}/results")
+def get_results(run_dir_name: str):
+    """Return read-only generated cases and evaluation results."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+    cases_path = run_path / "generated_cases.json"
+    eval_path = run_path / "evaluation_summary.json"
+    eval_detail_path = run_path / "evaluation_results.json"
+
+    cases = None
+    if cases_path.exists():
+        cases = _json.loads(cases_path.read_text(encoding="utf-8"))
+
+    evaluation = None
+    if eval_path.exists():
+        evaluation = _json.loads(eval_path.read_text(encoding="utf-8"))
+
+    eval_detail = None
+    if eval_detail_path.exists():
+        eval_detail = _json.loads(eval_detail_path.read_text(encoding="utf-8"))
+
+    return {
+        "run": run_info,
+        "cases": cases,
+        "evaluation": evaluation,
+        "evaluation_detail": eval_detail,
+        "read_only": True,
+        "note": "Results are read-only. To change cases, revise upstream review decisions and regenerate.",
+    }
+
+
+@router.get("/runs/{run_dir_name}/artifacts/{artifact_name}")
+def download_artifact(run_dir_name: str, artifact_name: str):
+    """Download a single active artifact from a run."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+    artifact_path = run_path / artifact_name
+
+    if not artifact_path.exists():
+        return JSONResponse(
+            {"error": f"Artifact '{artifact_name}' not found"},
+            status_code=404,
+        )
+
+    allowed = {
+        "00_requirements.json", "clarification_review.json",
+        "clarified_test_basis.json", "case_intent_review.json",
+        "approved_case_plan.json", "generated_cases.json",
+        "evaluation_summary.json", "evaluation_results.json",
+    }
+    if artifact_name not in allowed:
+        return JSONResponse(
+            {"error": f"Artifact '{artifact_name}' not available for download"},
+            status_code=400,
+        )
+
+    content = _json.loads(artifact_path.read_text(encoding="utf-8"))
+    return {"artifact": artifact_name, "content": content}
+
+
+@router.get("/runs/{run_dir_name}/export")
+def export_run(run_dir_name: str, include_archived: bool = False):
+    """Export the active run as a bundle. Archived artifacts excluded by default."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+    bundle: dict[str, Any] = {
+        "run": run_info,
+        "active_artifacts": {},
+        "archived_artifacts": [],
+    }
+
+    for f in sorted(run_path.iterdir()):
+        if not f.is_file() or not f.suffix == ".json":
+            continue
+        if f.parent.name == "archived" or "archived" in str(f):
+            continue
+        try:
+            bundle["active_artifacts"][f.name] = _json.loads(f.read_text(encoding="utf-8"))
+        except (_json.JSONDecodeError, OSError):
+            pass
+
+    if include_archived:
+        archive_root = run_path / "archived"
+        if archive_root.exists():
+            for ts_dir in sorted(archive_root.iterdir()):
+                if not ts_dir.is_dir():
+                    continue
+                entry: dict[str, Any] = {"timestamp": ts_dir.name, "artifacts": {}}
+                for f in sorted(ts_dir.iterdir()):
+                    if f.suffix == ".json":
+                        try:
+                            entry["artifacts"][f.name] = _json.loads(f.read_text(encoding="utf-8"))
+                        except (_json.JSONDecodeError, OSError):
+                            pass
+                bundle["archived_artifacts"].append(entry)
+
+    return bundle
+
+
+@router.post("/runs/{run_dir_name}/import-memory")
+def import_review_memory(run_dir_name: str):
+    """Explicitly import Review Memory from a completed run. Never automatic."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+
+    try:
+        from ..review_pipeline.storage import store
+        store.import_memory(str(run_path))
+        return {
+            "imported": True,
+            "run": run_dir_name,
+            "message": "Review Memory imported successfully.",
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Review Memory import failed: {e}"},
+            status_code=500,
+        )
+
+
 # ── Issue #8: Regeneration and downstream artifact reuse ───────────────────
 
 
