@@ -10,6 +10,7 @@ from fastapi import APIRouter, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from ..config import get_settings
+from ..provider.factory import create_provider
 
 from .imports import (
     _unlink_temp,
@@ -169,19 +170,15 @@ def check_job_running():
 
 @router.post("/jobs/retry")
 def retry_job():
-    """Retry the last failed job."""
+    """Retry the last failed job using its stored callable."""
     runner = get_job_runner()
     try:
-        job = runner.get_job()
-        if job is None:
-            return JSONResponse({"error": "No job to retry"}, status_code=400)
-        # Re-run is handled by the caller providing the function
-        return JSONResponse(
-            {"error": "Retry requires a stage-specific endpoint (e.g. retry-clarification)"},
-            status_code=400,
-        )
+        retried = runner.retry_job()
+        return {"status": "retried", "job": retried.to_dict()}
     except JobConflictError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 
 # -- Runs --------------------------------------------------------------------
@@ -381,7 +378,7 @@ def accept_all_recommendations(run_dir_name: str, data: dict):
     ambiguities = review_data.get("decomposition", {}).get("ambiguities", [])
     amb_by_id = {a.get("item_id"): a for a in ambiguities}
 
-    updated_count = 0
+    proposed_decisions: list[dict[str, Any]] = []
     high_risk_items: list[str] = []
 
     for dec in review_data.get("decisions", []):
@@ -399,34 +396,38 @@ def accept_all_recommendations(run_dir_name: str, data: dict):
         if not force_confirm and is_high_risk:
             high_risk_items.append(dec.get("item_id", "unknown"))
             continue
-
         if is_high_risk:
             high_risk_items.append(dec.get("item_id", "unknown"))
 
-        dec["decision"] = recommended
-        updated_count += 1
+        proposed_decisions.append({
+            "item_id": dec.get("item_id"),
+            "decision": recommended,
+        })
 
     if high_risk_items and not force_confirm:
         return {
-            "filled": updated_count,
+            "proposed_decisions": proposed_decisions,
+            "filled": len(proposed_decisions),
             "high_risk_skipped": len(high_risk_items),
             "high_risk_items": high_risk_items,
             "requires_confirmation": True,
+            "saved": False,
             "message": (
                 f"{len(high_risk_items)} orange/red items need confirmation. "
-                "Submit with confirm_high_risk=true to accept all."
+                "Submit with confirm_high_risk=true to accept all. "
+                "Use Save Draft to persist."
             ),
         }
 
-    (run_path / "clarification_review.json").write_text(
-        _json.dumps(review_data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
+    # Return proposed decisions — never mutate the artifact directly.
+    # The frontend applies these locally, then calls Save Draft to persist.
     return {
-        "filled": updated_count,
+        "proposed_decisions": proposed_decisions,
+        "filled": len(proposed_decisions),
         "high_risk_accepted": len(high_risk_items) if force_confirm else 0,
         "requires_confirmation": False,
+        "saved": False,
+        "message": "Proposed decisions returned. Use Save Draft (/clarification/draft) to persist.",
     }
 
 
@@ -538,9 +539,35 @@ def get_memory_hints(run_dir_name: str):
     if run_info is None:
         return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
 
+    run_path = Path(run_info["run_path"])
+    hints: list[str] = []
+    adjustment = 0.0
+
+    # Try to load requirement hash and tags from run artifacts
+    try:
+        from ..review_pipeline.storage.store import compute_historical_support
+        from ..review_pipeline.tag_rules.pattern_tag_rules import derive_all_tags
+
+        review_file = run_path / "clarification_review.json"
+        if review_file.exists():
+            data = _json.loads(review_file.read_text(encoding="utf-8"))
+            source_hash = data.get("source_requirement_hash", "")
+
+            # Derive tags from existing data
+            tags = derive_all_tags(data)
+            tag_names = [t.get("tag", "") for t in tags if isinstance(t, dict)]
+
+            if source_hash or tag_names:
+                support = compute_historical_support(source_hash, tag_names)
+                hints = support.get("hints", [])
+                adjustment = support.get("adjustment", 0.0)
+    except Exception:
+        pass  # Memory DB may not exist; hints remain empty
+
     return {
         "run": run_dir_name,
-        "hints": [],
+        "hints": hints,
+        "adjustment": adjustment,
         "advisory_note": (
             "Review Memory hints are advisory only. "
             "They never auto-select decisions, generate reason text, or mutate review artifacts."

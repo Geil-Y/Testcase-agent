@@ -82,6 +82,7 @@ class JobRunner:
         """Execute fn in a background thread, updating job status."""
         job.status = JobStatus.running
         job.started_at = time.time()
+        self._last_fn = fn  # store for retry
 
         def _run() -> None:
             try:
@@ -110,8 +111,25 @@ class JobRunner:
             return False
         return self._current_job.status == JobStatus.running
 
-    def retry_job(self, fn: Callable[[], Any]) -> Job:
-        """Retry the last failed job. Requires no running job."""
+    def retry_job(self) -> Job:
+        """Retry the last failed job using its stored callable. Requires no running job."""
+        with self._lock:
+            if self._current_job is None or self._current_job.status != JobStatus.failed:
+                raise JobConflictError("No failed job to retry")
+            if self._current_job.status == JobStatus.running:
+                raise JobConflictError("A job is already running")
+            job = self._current_job
+            job.error = None
+            job.error_detail = None
+            job.result = None
+        fn = getattr(self, "_last_fn", None)
+        if fn is None:
+            raise JobConflictError("No stored function to retry")
+        self.start_job(job, fn)
+        return job
+
+    def retry_job_with(self, fn: Callable[[], Any]) -> Job:
+        """Retry with an explicit callable (backward-compatible)."""
         with self._lock:
             if self._current_job is None or self._current_job.status != JobStatus.failed:
                 raise JobConflictError("No failed job to retry")
