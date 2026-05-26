@@ -152,8 +152,8 @@ with a bare `[NEEDS REVIEW]` marker in the generated case.
 
 ### Multi-Branch and Multi-Mode Cases
 
-Purpose: verify that LLM#1 splits case intents without merging independent
-branches, modes, or outcomes.
+Purpose: verify that the legacy analysis stage split case intents without
+merging independent branches, modes, or outcomes.
 
 | Requirement | Function | Expected missing categories |
 | --- | --- | --- |
@@ -176,8 +176,32 @@ messages, fault records, and observable diagnostic outputs.
 
 ## Prompt and Pipeline Scope
 
-LLM#1 remains responsible for requirement analysis and case intent planning.
-It should be extended to extract:
+Status as of 2026-05-24: this document describes the legacy prompt optimization
+workflow used before the clarification-first review pipeline. It remains useful
+for interpreting old `optimization_runs` reports, but it is no longer the
+current generation entry point.
+
+Current generation starts with:
+
+```text
+python -m testcase_agent.review_pipeline.cli prepare-clarification-review
+```
+
+Current prompts live under `src/testcase_agent/review_pipeline/prompts/`:
+
+- `decompose_requirement.system.html`
+- `decompose_requirement.user.html`
+- `plan_case_intents.system.html`
+- `plan_case_intents.user.html`
+- `write_case.system.html`
+- `write_case.user.html`
+
+The old root prompt files and the old `analyze_and_plan -> generate_case`
+pipeline have been removed. `self_check` is out of scope for phase 1.
+
+Legacy note: in the archived two-call optimization workflow, LLM#1 was
+responsible for requirement analysis and case intent planning. That stage was
+extended to extract:
 
 - `extracted_states`
 - `extracted_observations`
@@ -185,24 +209,25 @@ It should be extended to extract:
   `category="threshold"`, `category="timing"`, `category="state"`, or
   `category="observation"`
 
-LLM#2 remains responsible for writing one test case for one case intent. It
-should receive known states and observation points from LLM#1, and it should
-have fallback authority to place `[NEEDS REVIEW]` when it discovers a required
-semantic gap that LLM#1 missed.
+Legacy LLM#2 wrote one test case for one case intent. It received known states
+and observation points from LLM#1, and it had fallback authority to place
+`[NEEDS REVIEW]` when it discovered a required semantic gap that LLM#1 missed.
 
-Generated cases still show only the literal marker `[NEEDS REVIEW]`. Missing
-information categories remain internal analysis metadata.
+In both legacy reports and the current review pipeline, generated cases show
+only the literal marker `[NEEDS REVIEW]`. Missing information categories remain
+internal analysis/review metadata.
 
 Current status: Phase 1 (Data Channel) is complete.
 
-- Parser, pipeline, and prompt templates all carry `extracted_states`,
-  `extracted_observations`, and categorized `missing_critical_info` from LLM#1
-  into LLM#2.
-- `optimization/cli.py` persists all new analysis metadata in
-  `generated_cases.json`.
+- Parser, pipeline, and prompt templates carried `extracted_states`,
+  `extracted_observations`, and categorized `missing_critical_info` from
+  legacy analysis into legacy case writing.
+- Legacy `optimization/cli.py run` persisted all new analysis metadata in
+  `generated_cases.json`. That generation command has now been removed.
 - The legacy `strip_needless_markers()` path that unconditionally stripped
-  `[NEEDS REVIEW]` when LLM#1 reported no missing information has been removed
-  from the CLI; LLM#2 fallback `[NEEDS REVIEW]` markers are preserved.
+  `[NEEDS REVIEW]` when analysis reported no missing information was removed
+  from the old CLI path; case-writer fallback `[NEEDS REVIEW]` markers were
+  preserved.
 
 ## Compatibility Requirements
 
@@ -223,12 +248,12 @@ Target: `optimization_runs/checklist_v2.md`, the automated evaluator, and the
 HTML reports should all treat missing information detection as a hard quality
 gate.
 
-Recommended changes:
+Recommended legacy checklist changes:
 
 - Replace the current broad `[NEEDS REVIEW]` usage rule with checks that
   distinguish omitted markers from unnecessary markers.
-- Require LLM#1 to identify semantic gaps using one of the five canonical
-  categories when the source requirement lacks needed semantics.
+- Require the analysis stage to identify semantic gaps using one of the five
+  canonical categories when the source requirement lacks needed semantics.
 - Require generated action or expected fields to contain a bare
   `[NEEDS REVIEW]` where a missing semantic value is actually needed.
 - Forbid placing `[NEEDS REVIEW]` in unrelated title, objective, precondition,
@@ -237,7 +262,7 @@ Recommended changes:
 Current status: Phase 3 (Hard-Gate Evaluation) is complete. The automated
 evaluator and reports now include v2 Section 3 hard-gate items and a
 Missing Information Hard Gates section that compares Prompt Evaluation Set
-expected categories against LLM#1 actual output.
+expected categories against legacy analysis output.
 
 Remaining gap: automated detection of 3.2.2 (invented semantics) is limited to
 threshold/pattern matching. Full detection of invented signals, states, and
@@ -249,17 +274,19 @@ observations requires semantic review (Phase 4).
 
 Completed 2026-05-19.
 
-Goal: make LLM#1 analysis metadata available to LLM#2 and downstream reports.
+Goal: make legacy analysis metadata available to case writing and downstream
+reports.
 
 Completed work:
 
 - Parse states, observations, and categorized missing information.
-- Pass states, observations, and categorized missing information into LLM#2.
+- Pass states, observations, and categorized missing information into case
+  writing.
 - Persist states, observations, and categorized missing information in
   `generated_cases.json`.
 - Keep old prompt output compatible.
 - Remove unconditional `strip_needless_markers()` path that conflicted with
-  LLM#2 fallback authority.
+  case-writer fallback authority.
 
 ### Phase 2: Prompt Evaluation Set Execution ✅
 
@@ -272,7 +299,8 @@ Completed work:
 
 - Store Prompt Evaluation Set V1 in a machine-readable artifact
   (`optimization_runs/requirement_sets/prompt_eval_v1.json`).
-- Add an executable fixed-set path to `optimization.cli run`.
+- Add an executable fixed-set path to legacy `optimization.cli run`; this
+  command has since been removed from active generation by ADR-0003.
 - Validate that all listed Requirement IDs exist in the source Excel.
 - Validate no duplicate keys, valid expected_missing_categories.
 - Save the set name, path, and entry count in `summary.json`.
@@ -340,12 +368,13 @@ Completed work:
 
 ## Acceptance Criteria
 
-The full optimization workflow is acceptable when:
+For legacy reports, the archived optimization workflow was acceptable when:
 
 - Parser tests cover old and new missing-info formats.
-- Pipeline output carries states and observations from LLM#1 into LLM#2.
-- Prompts keep the two-call architecture: analyze-and-plan first, one-case
-  generation second.
+- Legacy pipeline output carried states and observations from analysis into
+  case writing.
+- Prompts kept the old two-call architecture: analyze-and-plan first, one-case
+  generation second. This is no longer the active generation architecture.
 - Prompt Evaluation Set V1 can be run without random sampling.
 - Prompt Evaluation Set reports severe missing-info failures
   explicitly.
@@ -356,8 +385,9 @@ The full optimization workflow is acceptable when:
 
 ## Out of Scope
 
-- Changing from HTML output to JSON.
-- Replacing the two-step LLM architecture.
+- These legacy out-of-scope items were superseded by ADR-0003. The active
+  pipeline uses JSON artifacts as the source of truth and a three-stage
+  clarification-first LLM flow.
 - Adding HIL bench command generation.
 - Treating tool commands, HIL channels, or bench configuration as
   `[NEEDS REVIEW]` semantics.
