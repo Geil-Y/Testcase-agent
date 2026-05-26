@@ -30,7 +30,15 @@ from .workbench import (
     start_run,
     validate_start_run,
 )
-from .runs import discover_runs, get_run
+from .runs import (
+    archive_artifacts,
+    artifact_hash,
+    artifacts_to_archive,
+    content_hash,
+    discover_runs,
+    get_run,
+    has_changed,
+)
 
 router = APIRouter()
 
@@ -538,6 +546,85 @@ def get_memory_hints(run_dir_name: str):
             "They never auto-select decisions, generate reason text, or mutate review artifacts."
         ),
     }
+
+
+# ── Issue #8: Regeneration and downstream artifact reuse ───────────────────
+
+
+@router.post("/runs/{run_dir_name}/regenerate")
+def regenerate_route(run_dir_name: str, data: dict):
+    """Archive downstream artifacts and regenerate after upstream changes."""
+    runner = get_job_runner()
+    if runner.is_running():
+        return JSONResponse({"error": "A job is already running."}, status_code=409)
+
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    run_path = Path(run_info["run_path"])
+    stage = data.get("stage", "")
+    confirmed = data.get("confirm", False)
+
+    if stage not in ("clarification", "intents", "cases"):
+        return JSONResponse(
+            {"error": f"Unknown stage: {stage}. Use clarification, intents, or cases."},
+            status_code=400,
+        )
+
+    upstream_map = {
+        "clarification": "clarification_review.json",
+        "intents": "clarified_test_basis.json",
+        "cases": "approved_case_plan.json",
+    }
+    upstream_artifact = upstream_map[stage]
+
+    if not (run_path / upstream_artifact).exists():
+        return JSONResponse(
+            {"error": f"Upstream artifact '{upstream_artifact}' not found"},
+            status_code=404,
+        )
+
+    affected = artifacts_to_archive(upstream_artifact, run_path)
+
+    if not confirmed:
+        return {
+            "confirmation_required": True,
+            "stage": stage,
+            "upstream_artifact": upstream_artifact,
+            "affected_artifacts": affected,
+            "message": f"This will archive {len(affected)} downstream artifacts. Submit with confirm=true.",
+        }
+
+    archive_artifacts(run_path, affected)
+
+    try:
+        job = runner.create_job(
+            name=f"regenerate-{stage}-{run_dir_name}",
+            run_dir=run_dir_name,
+        )
+
+        def _run() -> dict:
+            settings = get_settings()
+            provider = create_provider(settings)
+            if stage == "clarification":
+                from ..review_pipeline.stages.plan_case_intents import prepare_intent_review
+                prepare_intent_review(str(run_path), provider=provider, memory_hints=None)
+            elif stage == "intents":
+                from ..review_pipeline.stages.write_cases import generate_cases
+                generate_cases(str(run_path), provider=provider)
+            elif stage == "cases":
+                from ..review_pipeline.stages.write_cases import generate_cases
+                generate_cases(str(run_path), provider=provider)
+                from ..review_pipeline.stages.evaluate import evaluate_run
+                evaluate_run(str(run_path))
+            return {"regenerated": stage, "run": get_run(run_dir_name)}
+
+        runner.start_job(job, _run)
+        return {"status": "started", "job": job.to_dict(), "archived": affected}
+
+    except JobConflictError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)
 
 
 # ── Issue #7: Case Intent Review and case generation ──────────────────────

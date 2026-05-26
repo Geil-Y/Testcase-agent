@@ -1513,3 +1513,99 @@ class TestIntentAPIs:
 
         job._thread.join(timeout=5)
         runner.clear()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Issue #8: Regeneration and downstream artifact reuse
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRegenerate:
+    """Tests for regenerate confirmation, archival, and job execution."""
+
+    def test_regenerate_no_confirmation_lists_artifacts(self, tmp_path):
+        run_dir = tmp_path / "regen-run"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "clarification_review.json").write_text(json.dumps({"review": "test"}))
+        (run_dir / "clarified_test_basis.json").write_text(json.dumps({"blocked": False}))
+        (run_dir / "case_intent_review.json").write_text(json.dumps({"intents": "test"}))
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "regen-run",
+                "run_path": str(run_dir),
+                "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import regenerate_route
+
+            result = regenerate_route("regen-run", {"stage": "clarification"})
+            assert result["confirmation_required"] is True
+            assert "clarified_test_basis.json" in result["affected_artifacts"]
+            assert "case_intent_review.json" in result["affected_artifacts"]
+
+    def test_regenerate_confirm_archives_and_starts_job(self, tmp_path):
+        run_dir = tmp_path / "regen-confirm"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "clarification_review.json").write_text(json.dumps({"review": "test"}))
+        (run_dir / "case_intent_review.json").write_text(json.dumps({"intents": "old"}))
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "regen-confirm",
+                "run_path": str(run_dir),
+                "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import regenerate_route
+
+            result = regenerate_route(
+                "regen-confirm",
+                {"stage": "clarification", "confirm": True},
+            )
+            assert result["status"] == "started"
+            assert "archived" in result
+            assert not (run_dir / "case_intent_review.json").exists()
+
+    def test_regenerate_blocked_by_job(self, client):
+        runner = get_job_runner()
+        job = runner.create_job("blocking-regen")
+        started = threading.Event()
+        def slow_work():
+            started.set()
+            import time
+            time.sleep(2)
+            return "done"
+        runner.start_job(job, slow_work)
+        started.wait(timeout=5)
+
+        r = client.post(
+            "/api/v1/console/runs/test-run/regenerate",
+            json={"stage": "clarification"},
+        )
+        assert r.status_code == 409
+
+        job._thread.join(timeout=5)
+        runner.clear()
+
+    def test_regenerate_unknown_stage(self, client):
+        get_job_runner().clear()
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "test-run",
+                "run_path": "/tmp/test-run",
+                "requirement_key": "REQ-TEST-001",
+            }
+            r = client.post(
+                "/api/v1/console/runs/test-run/regenerate",
+                json={"stage": "invalid"},
+            )
+        assert r.status_code == 400
+
+    def test_regenerate_nonexistent_run(self, client):
+        get_job_runner().clear()
+        r = client.post(
+            "/api/v1/console/runs/nonexistent/regenerate",
+            json={"stage": "clarification"},
+        )
+        assert r.status_code == 404
