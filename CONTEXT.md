@@ -123,6 +123,17 @@ from structured requirements.
   Reviewer approves, rejects, revises, merges, splits, or defers each intent.
   Validated to produce the approved case plan.
 
+- **Review Workbench** — an interactive human review surface for review
+  pipeline artifacts, initially covering Clarification Review and Case Intent
+  Review while keeping JSON artifacts as the source of truth.
+
+- **Pipeline Console** — a local full-flow UI for importing requirements,
+  creating review runs, editing human review decisions, advancing validated
+  pipeline stages, and viewing generated cases and evaluation results.
+
+- **Active Run** — the single selected Requirement's current pipeline run in
+  the Pipeline Console MVP.
+
 - **Approved Case Plan** — final case-writer-ready intents. Only contains
   approved, revised, or split-child intents. Rejected, merged-away, and
   deferred intents are excluded.
@@ -151,6 +162,9 @@ from structured requirements.
   the case-level dimensions of a **Manual Review Score**.
 - A **Hard Gate** can make a **Test Case** unacceptable even when other review
   scores are high.
+- A **Pipeline Console** contains a **Review Workbench** for human review
+  decisions.
+- A **Pipeline Console** MVP advances exactly one **Active Run** at a time.
 
 ## Architecture principles
 

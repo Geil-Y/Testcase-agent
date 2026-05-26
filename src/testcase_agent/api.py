@@ -5,19 +5,12 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, UploadFile
-from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .pipeline.import_requirements import ColumnMapping, list_columns, list_sheets, parse_requirements
 
 router = APIRouter()
-
-# In-memory state for the sandbox session
-_state: dict = {
-    "requirements": [],
-    "results": {},
-}
 
 
 @router.get("/health")
@@ -74,7 +67,6 @@ async def import_confirm(data: dict):
     try:
         reqs = parse_requirements(tmp_path, mapping, sheet or None)
         Path(tmp_path).unlink(missing_ok=True)
-        _state["requirements"] = reqs
         req_list = [
             {
                 "id": i,
@@ -91,46 +83,6 @@ async def import_confirm(data: dict):
     except Exception as e:
         Path(tmp_path).unlink(missing_ok=True)
         return {"error": str(e)}
-
-
-@router.post("/generate/{req_id}")
-def generate(req_id: int):
-    """Legacy sandbox generation endpoint.
-
-    The old in-process generation pipeline was removed in favor of the
-    clarification-first review pipeline exposed by ``testcase_agent.review_pipeline.cli``.
-    """
-    reqs = _state.get("requirements", [])
-    if req_id < 0 or req_id >= len(reqs):
-        return {"error": "Requirement not found"}
-
-    req = reqs[req_id]
-    if req.is_heading or req.is_info:
-        return {"error": f"Cannot generate cases for type '{req.requirement_type}'"}
-
-    return {
-        "error": (
-            "Legacy /generate endpoint removed. Use "
-            "`python -m testcase_agent.review_pipeline.cli prepare-clarification-review` "
-            "to start the clarification-first review pipeline."
-        )
-    }
-
-
-@router.get("/results/{req_id}")
-def get_results(req_id: int):
-    """Get previously generated results for a requirement."""
-    if req_id not in _state.get("results", {}):
-        return {"error": "No results for this requirement"}
-    return _state["results"][req_id]
-
-
-@router.get("/sandbox")
-def sandbox():
-    """Serve the sandbox UI."""
-    static_dir = Path(__file__).resolve().parents[2] / "static"
-    html_path = static_dir / "index.html"
-    return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
 
 def create_app() -> FastAPI:
