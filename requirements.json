@@ -1,0 +1,9 @@
+[
+  {
+    "requirement_key": "BMS_OVP_001",
+    "description": "The BMS shall monitor all cell voltages at 100ms intervals and immediately open the main contactor when any cell voltage exceeds 4.25V, with protection response time less than 50ms from detection to contactor open command.",
+    "function_name": "Over-Voltage Protection",
+    "requirement_type": "safety",
+    "supplementary_info": "Nominal cell voltage: 3.7V. Contactor type: normally-open. System operates on 400V battery pack with 96 cells in series."
+  }
+]

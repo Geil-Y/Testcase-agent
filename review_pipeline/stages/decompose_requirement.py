@@ -17,6 +17,7 @@ from review_pipeline.artifacts.models import (
     RequirementInput,
     RequirementDecomposition,
     ClarificationReview,
+    ClarificationDecision,
     AmbiguityItem,
     FactItem,
     ClarificationQuestion,
@@ -47,11 +48,13 @@ def prepare_clarification_review(
         decomposition = _call_decompose_llm(req, provider, run_dir)
 
     review_session_id = f"clarify-{uuid.uuid4().hex[:12]}"
+    decisions = _build_decisions(decomposition)
     review = ClarificationReview(
         review_session_id=review_session_id,
         requirement_key=req.requirement_key,
         source_requirement_hash=_hash_text(req.description),
         decomposition=decomposition,
+        decisions=decisions,
     )
 
     json_path = run_dir / "clarification_review.json"
@@ -175,3 +178,18 @@ def _decompose_placeholder(req: RequirementInput) -> RequirementDecomposition:
 def _hash_text(text: str) -> str:
     import hashlib
     return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+
+def _build_decisions(decomposition: RequirementDecomposition) -> list[ClarificationDecision]:
+    """Pre-populate review decisions from LLM-A recommendations."""
+    decisions = []
+    for amb in decomposition.ambiguities:
+        score = None
+        if amb.confidence_drivers:
+            score = sum(amb.confidence_drivers.values()) / len(amb.confidence_drivers)
+        decisions.append(ClarificationDecision(
+            item_id=amb.item_id,
+            decision=amb.recommended_review_decision,
+            confidence_before_review=score,
+        ))
+    return decisions

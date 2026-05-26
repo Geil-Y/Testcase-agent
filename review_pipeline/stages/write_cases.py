@@ -56,8 +56,57 @@ def generate_cases(run_dir: str, *, provider=None) -> GeneratedCaseSet:
 
 
 def _call_write_case_llm(plan: ApprovedCasePlan, intent: CaseIntentItem, basis: ClarifiedTestBasis | None, provider) -> GeneratedCase:
-    """Call LLM-C for real case writing. Not yet implemented."""
-    raise NotImplementedError("Real LLM provider not wired for write stage")
+    """Call LLM-C for real case writing."""
+    import json
+    from pydantic import ValidationError
+    from review_pipeline.prompts import render_prompt
+
+    facts_summary = ""
+    if basis:
+        facts_summary = "\n".join(f"- [{f.item_id}] {f.fact_text}" for f in basis.facts)
+
+    system_prompt, user_prompt = render_prompt(
+        "write_case",
+        requirement_key=plan.requirement_key,
+        description=plan.requirement_key,
+        facts_summary=facts_summary,
+        intent_id=intent.intent_id,
+        coverage_dimension=intent.coverage_dimension,
+        intent_text=intent.intent_text,
+        supplementary_info="",
+    )
+    raw_response = provider.complete(system_prompt, user_prompt)
+
+    try:
+        payload = _parse_json_response(raw_response)
+        payload.setdefault("case_id", f"case-{uuid.uuid4().hex[:8]}")
+        payload.setdefault("requirement_key", plan.requirement_key)
+        payload.setdefault("approved_intent_id", intent.intent_id)
+        payload.setdefault("coverage_dimension", intent.coverage_dimension)
+        payload.setdefault("review_session_id", plan.review_session_id)
+        # Coerce step_number to string (LLM may emit int)
+        for step in payload.get("steps", []):
+            if "step_number" in step:
+                step["step_number"] = str(step["step_number"])
+        return GeneratedCase(**payload)
+    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+        raise ValueError(f"LLM-C response was not valid JSON: {exc}") from exc
+
+
+def _parse_json_response(raw_response: str) -> dict:
+    text = raw_response.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    import json
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
+    return parsed
 
 
 def _write_case_placeholder(plan: ApprovedCasePlan, intent: CaseIntentItem, basis: ClarifiedTestBasis | None) -> GeneratedCase:

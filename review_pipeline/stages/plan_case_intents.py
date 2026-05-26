@@ -17,6 +17,7 @@ from review_pipeline.artifacts.models import (
     ClarifiedTestBasis,
     CaseIntentPlan,
     CaseIntentReview,
+    CaseIntentDecision,
     CaseIntentItem,
     ClarificationReview,
 )
@@ -53,12 +54,14 @@ def prepare_intent_review(run_dir: str, *, provider=None, memory_hints: dict | N
     else:
         plan = _call_plan_llm(basis, review, provider, memory_hints)
 
+    decisions = _build_intent_decisions(plan)
     intent_review = CaseIntentReview(
         review_session_id=f"intent-{uuid.uuid4().hex[:12]}",
         requirement_key=basis.requirement_key,
         source_requirement_hash=review.source_requirement_hash if review else "",
         test_basis_hash=basis.test_basis_hash,
         plan=plan,
+        decisions=decisions,
     )
 
     write_json(rdir / "case_intent_review.json", intent_review.model_dump())
@@ -69,8 +72,56 @@ def prepare_intent_review(run_dir: str, *, provider=None, memory_hints: dict | N
 
 
 def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None, provider, memory_hints: dict | None) -> CaseIntentPlan:
-    """Call LLM-B for real intent planning. Not yet implemented."""
-    raise NotImplementedError("Real LLM provider not wired for plan stage")
+    """Call LLM-B for real intent planning."""
+    import json
+    from pydantic import ValidationError
+    from review_pipeline.prompts import render_prompt
+
+    facts_summary = "\n".join(f"- [{f.item_id}] {f.fact_text}" for f in basis.facts)
+    amb_summary = "\n".join(
+        f"- [{a['item_id']}] decision={a['decision']}, value={a.get('clarified_value', '')}"
+        for a in basis.resolved_ambiguities
+    ) if basis.resolved_ambiguities else ""
+
+    description = ""
+    if review and review.decomposition.facts:
+        description = review.decomposition.facts[0].source_text
+
+    system_prompt, user_prompt = render_prompt(
+        "plan_case_intents",
+        requirement_key=basis.requirement_key,
+        description=description,
+        facts_summary=facts_summary,
+        resolved_ambiguities=amb_summary,
+        supplementary_info="",
+        memory_hints=str(memory_hints) if memory_hints else "",
+    )
+    raw_response = provider.complete(system_prompt, user_prompt)
+
+    try:
+        payload = _parse_json_response(raw_response)
+        payload.setdefault("review_session_id", basis.review_session_id)
+        payload.setdefault("source_requirement_hash", review.source_requirement_hash if review else "")
+        payload.setdefault("test_basis_hash", basis.test_basis_hash)
+        return CaseIntentPlan(**payload)
+    except (json.JSONDecodeError, ValidationError, TypeError) as exc:
+        raise ValueError(f"LLM-B response was not valid JSON: {exc}") from exc
+
+
+def _parse_json_response(raw_response: str) -> dict:
+    text = raw_response.strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].strip().startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    import json
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
+    return parsed
 
 
 def _plan_placeholder(basis: ClarifiedTestBasis, review: ClarificationReview | None, memory_hints: dict | None = None) -> CaseIntentPlan:
@@ -117,3 +168,15 @@ def _plan_placeholder(basis: ClarifiedTestBasis, review: ClarificationReview | N
             ),
         ],
     )
+
+
+def _build_intent_decisions(plan: CaseIntentPlan) -> list[CaseIntentDecision]:
+    """Pre-populate review decisions from LLM-B recommendations."""
+    decisions = []
+    for intent in plan.intents:
+        decisions.append(CaseIntentDecision(
+            intent_id=intent.intent_id,
+            decision=intent.recommended_review_decision,
+            confidence_before_review=intent.confidence_score,
+        ))
+    return decisions

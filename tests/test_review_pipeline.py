@@ -1289,7 +1289,10 @@ class TestCLI:
         ])
 
         assert ret == 0
-        assert (run_dir / "clarification_review.json").exists()
+        # Auto-numbered: files land in run_NNN/ subdirectory
+        run_subdirs = [d for d in run_dir.iterdir() if d.is_dir() and d.name.startswith("run_")]
+        assert len(run_subdirs) == 1
+        assert (run_subdirs[0] / "clarification_review.json").exists()
 
     def test_validate_missing_file(self):
         from review_pipeline.cli import main
