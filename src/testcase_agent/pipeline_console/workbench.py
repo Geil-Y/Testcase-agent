@@ -174,6 +174,92 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     }
 
 
+# ── Case Intent Review ────────────────────────────────────────────────────
+
+
+def load_intent_review(run_dir_name: str) -> dict[str, Any] | None:
+    """Load the case intent review artifact for editing."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return None
+    run_path = Path(run_info["run_path"])
+    review_path = run_path / "case_intent_review.json"
+    if not review_path.exists():
+        return None
+    data = read_json(review_path)
+    return {"run": run_info, "review": data}
+
+
+def save_intent_draft(run_dir_name: str, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Save draft case intent decisions without validation."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        raise ValueError(f"Run '{run_dir_name}' not found")
+    run_path = Path(run_info["run_path"])
+    review_path = run_path / "case_intent_review.json"
+    if not review_path.exists():
+        raise ValueError("Case intent review artifact not found")
+
+    data = read_json(review_path)
+    dec_by_id = {d["intent_id"]: d for d in decisions}
+    for existing in data.get("decisions", []):
+        update = dec_by_id.get(existing["intent_id"])
+        if update is not None:
+            existing["decision"] = update.get("decision", existing.get("decision", ""))
+            existing["reason_codes"] = update.get("reason_codes", existing.get("reason_codes", []))
+            existing["reason_text"] = update.get("reason_text", existing.get("reason_text", ""))
+            existing["revised_intent_text"] = update.get("revised_intent_text", existing.get("revised_intent_text", ""))
+            existing["merge_target_id"] = update.get("merge_target_id", existing.get("merge_target_id", ""))
+            existing["split_children"] = update.get("split_children", existing.get("split_children", []))
+
+    write_json(review_path, data)
+    return {"saved": True, "run": get_run(run_dir_name), "hash": content_hash(data)}
+
+
+def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Save intent decisions, validate, produce ApprovedCasePlan,
+    generate cases, evaluate, and return results."""
+    save_result = save_intent_draft(run_dir_name, decisions)
+    run_info = get_run(run_dir_name)
+    assert run_info is not None
+    run_path = Path(run_info["run_path"])
+
+    # Validate intent review
+    from ..review_pipeline.stages.validate_case_intent import validate_case_intent_review
+    review_path = str(run_path / "case_intent_review.json")
+    validation, plan = validate_case_intent_review(review_path)
+
+    if not validation.is_valid:
+        return {
+            "saved": True,
+            "validated": False,
+            "errors": [_validation_error_to_dict(e) for e in validation.errors],
+            "run": run_info,
+        }
+
+    assert plan is not None
+
+    # Generate cases
+    settings = get_settings()
+    provider = create_provider(settings)
+    from ..review_pipeline.stages.write_cases import generate_cases
+    case_set = generate_cases(str(run_path), provider=provider)
+
+    # Evaluate
+    from ..review_pipeline.stages.evaluate import evaluate_run
+    evaluate_run(str(run_path))
+
+    return {
+        "saved": True,
+        "validated": True,
+        "generated": True,
+        "evaluated": True,
+        "case_count": len(case_set.cases),
+        "approved_intent_count": len(plan.approved_intents),
+        "run": get_run(run_dir_name),
+    }
+
+
 def _find_requirement(requirements: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
     for r in requirements:
         if r.get("requirement_key") == key:

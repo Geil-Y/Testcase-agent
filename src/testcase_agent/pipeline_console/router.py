@@ -22,8 +22,11 @@ from .imports import (
 from .jobs import JobConflictError, get_job_runner
 from .workbench import (
     load_clarification_review,
+    load_intent_review,
     save_and_advance_clarification,
+    save_and_generate_cases,
     save_clarification_draft,
+    save_intent_draft,
     start_run,
     validate_start_run,
 )
@@ -535,3 +538,66 @@ def get_memory_hints(run_dir_name: str):
             "They never auto-select decisions, generate reason text, or mutate review artifacts."
         ),
     }
+
+
+# ── Issue #7: Case Intent Review and case generation ──────────────────────
+
+
+@router.get("/runs/{run_dir_name}/intents")
+def get_intent_review(run_dir_name: str):
+    """Load the case intent review for editing."""
+    data = load_intent_review(run_dir_name)
+    if data is None:
+        return JSONResponse(
+            {"error": f"Case intent review not found for run '{run_dir_name}'"},
+            status_code=404,
+        )
+    return data
+
+
+@router.post("/runs/{run_dir_name}/intents/draft")
+def save_intent_draft_route(run_dir_name: str, data: dict):
+    """Save incomplete case intent review decisions without validation."""
+    runner = get_job_runner()
+    if runner.is_running():
+        return JSONResponse({"error": "A job is running. Editing is locked."}, status_code=409)
+
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    decisions = data.get("decisions", [])
+    try:
+        result = save_intent_draft(run_dir_name, decisions)
+        return result
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+
+
+@router.post("/runs/{run_dir_name}/intents/generate")
+def generate_cases_route(run_dir_name: str, data: dict):
+    """Save, validate, generate cases, evaluate (job-backed)."""
+    runner = get_job_runner()
+    if runner.is_running():
+        return JSONResponse({"error": "A job is already running."}, status_code=409)
+
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+
+    decisions = data.get("decisions", [])
+
+    try:
+        job = runner.create_job(
+            name=f"generate-cases-{run_dir_name}",
+            run_dir=run_dir_name,
+        )
+
+        def _run() -> dict:
+            return save_and_generate_cases(run_dir_name, decisions)
+
+        runner.start_job(job, _run)
+        return {"status": "started", "job": job.to_dict()}
+
+    except JobConflictError as e:
+        return JSONResponse({"error": str(e)}, status_code=409)

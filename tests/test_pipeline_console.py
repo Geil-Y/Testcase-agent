@@ -824,8 +824,11 @@ class TestJobAPIEndpoints:
 
 from src.testcase_agent.pipeline_console.workbench import (
     load_clarification_review,
+    load_intent_review,
     save_and_advance_clarification,
+    save_and_generate_cases,
     save_clarification_draft,
+    save_intent_draft,
     start_run,
 )
 
@@ -1394,3 +1397,119 @@ class TestMemoryHints:
         """GET only; hints are advisory and never mutate review artifacts."""
         r = client.post("/api/v1/console/runs/test-run/memory-hints", json={})
         assert r.status_code in (404, 405)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Issue #7: Case Intent Review and case generation flow
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestIntentWorkbench:
+    """Tests for Case Intent Review workbench functions."""
+
+    def _make_intent_review_data(self, run_dir: Path) -> None:
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "case_intent_review.json").write_text(json.dumps({
+            "review_session_id": "intent-session",
+            "requirement_key": "REQ-TEST-001",
+            "plan": {
+                "intents": [
+                    {
+                        "intent_id": "intent-1",
+                        "coverage_dimension": "normal_behavior",
+                        "intent_text": "Verify normal voltage behavior",
+                        "confidence_score": 0.90,
+                        "routing_color": "green",
+                        "recommended_review_decision": "approve",
+                    },
+                    {
+                        "intent_id": "intent-2",
+                        "coverage_dimension": "fault_or_protection",
+                        "intent_text": "Verify over-voltage fault response",
+                        "confidence_score": 0.55,
+                        "routing_color": "orange",
+                        "recommended_review_decision": "revise",
+                    },
+                ],
+            },
+            "decisions": [
+                {"intent_id": "intent-1", "decision": "", "reason_codes": [], "reason_text": "", "revised_intent_text": "", "merge_target_id": "", "split_children": []},
+                {"intent_id": "intent-2", "decision": "", "reason_codes": [], "reason_text": "", "revised_intent_text": "", "merge_target_id": "", "split_children": []},
+            ],
+        }))
+
+    def test_save_intent_draft_persists(self, tmp_path):
+        run_dir = tmp_path / "intent_run"
+        run_dir.mkdir()
+        self._make_intent_review_data(run_dir)
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "intent_run",
+                "run_path": str(run_dir),
+                "requirement_key": "REQ-TEST-001",
+            }
+            result = save_intent_draft("intent_run", [
+                {"intent_id": "intent-1", "decision": "approve", "reason_codes": [], "reason_text": "Good"},
+                {"intent_id": "intent-2", "decision": "reject", "reason_codes": ["too_broad_to_verify"], "reason_text": "Too broad"},
+            ])
+            assert result["saved"] is True
+
+            data = json.loads((run_dir / "case_intent_review.json").read_text())
+            assert data["decisions"][0]["decision"] == "approve"
+            assert data["decisions"][1]["decision"] == "reject"
+
+
+class TestIntentAPIs:
+    """Tests for the Case Intent Review API endpoints."""
+
+    def test_get_intents_not_found(self, client):
+        get_job_runner().clear()
+        r = client.get("/api/v1/console/runs/nonexistent/intents")
+        assert r.status_code == 404
+
+    def test_save_intent_draft_requires_run(self, client):
+        get_job_runner().clear()
+        r = client.post("/api/v1/console/runs/nonexistent/intents/draft", json={"decisions": []})
+        assert r.status_code == 404
+
+    def test_generate_requires_run(self, client):
+        get_job_runner().clear()
+        r = client.post("/api/v1/console/runs/nonexistent/intents/generate", json={"decisions": []})
+        assert r.status_code == 404
+
+    def test_intent_draft_blocked_by_job(self, client):
+        runner = get_job_runner()
+        job = runner.create_job("blocking-intent")
+        started = threading.Event()
+        def slow_work():
+            started.set()
+            import time
+            time.sleep(2)
+            return "done"
+        runner.start_job(job, slow_work)
+        started.wait(timeout=5)
+
+        r = client.post("/api/v1/console/runs/test-run/intents/draft", json={"decisions": []})
+        assert r.status_code == 409
+
+        job._thread.join(timeout=5)
+        runner.clear()
+
+    def test_generate_blocked_by_job(self, client):
+        runner = get_job_runner()
+        job = runner.create_job("blocking-gen")
+        started = threading.Event()
+        def slow_work():
+            started.set()
+            import time
+            time.sleep(2)
+            return "done"
+        runner.start_job(job, slow_work)
+        started.wait(timeout=5)
+
+        r = client.post("/api/v1/console/runs/test-run/intents/generate", json={"decisions": []})
+        assert r.status_code == 409
+
+        job._thread.join(timeout=5)
+        runner.clear()
