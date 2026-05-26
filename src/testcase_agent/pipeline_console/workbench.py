@@ -165,6 +165,7 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
         return {
             "saved": True,
             "validated": False,
+            "status": "validation_failed",
             "errors": [_validation_error_to_dict(e) for e in validation.errors],
             "run": run_info,
         }
@@ -176,6 +177,7 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
             "saved": True,
             "validated": True,
             "blocked": True,
+            "status": "blocked",
             "block_reasons": basis.block_reasons,
             "run": get_run(run_dir_name),
         }
@@ -280,6 +282,7 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
         return {
             "saved": True,
             "validated": False,
+            "status": "validation_failed",
             "errors": [_validation_error_to_dict(e) for e in validation.errors],
             "run": run_info,
         }

@@ -2212,6 +2212,48 @@ class TestJobResultExposure:
         runner.clear()
 
 
+class TestWorkbenchResultShapes:
+    """Workbench returns must have status field matching frontend handleJobResult expectations."""
+
+    def _make_clarification_review(self, run_dir: Path, decisions: list[dict]):
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "clarification_review.json").write_text(json.dumps({
+            "review_session_id": "shape-test", "requirement_key": "REQ-TEST-001",
+            "decomposition": {"requirement_key": "REQ-TEST-001", "facts": [], "ambiguities": [
+                {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
+                 "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}}
+            ], "clarification_questions": [], "safe_generation_policy": {"can_generate": True}},
+            "decisions": decisions,
+        }))
+
+    def test_validation_failure_has_status_field(self, tmp_path):
+        """save_and_advance_clarification validation fail must return status:'validation_failed'"""
+        self._make_clarification_review(tmp_path, [
+            {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
+        ])
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "shape-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_and_advance_clarification("shape-run", [
+                {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
+            ])
+            assert result["validated"] is False
+            assert result["status"] == "validation_failed"
+            assert len(result["errors"]) >= 1
+
+    def test_blocked_has_status_field(self, tmp_path):
+        """save_and_advance_clarification blocked must return status:'blocked'"""
+        self._make_clarification_review(tmp_path, [
+            {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
+        ])
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "shape-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_and_advance_clarification("shape-run", [
+                {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
+            ])
+            assert result["blocked"] is True
+            assert result["status"] == "blocked"
+
+
 class TestUnchangedUpstreamReuse:
     """Save & Advance and Save & Generate should reuse when decisions hash unchanged."""
 
@@ -2313,9 +2355,19 @@ class TestConsoleUIFixes:
         r = client.get("/console")
         assert "j.result" in r.text or "handleJobResult" in r.text
 
+    def test_console_handle_job_result_matches_workbench_shapes(self, client):
+        """handleJobResult must recognize both {status:'validation_failed'} and {validated:false,errors:[...]} shapes."""
+        r = client.get("/console")
+        html = r.text
+        assert 'validated===false' in html or 'r.validated===false' in html
+        assert 'r.blocked===true' in html
+
     def test_console_accept_all_recs_no_auto_save(self, client):
         """Accept All Recommendations must not auto-save or auto-reload from server."""
         r = client.get("/console")
-        # applyProposed should call loadAndRenderClarification (local re-render), not loadRunMeta
         assert "applyProposed" in r.text
         assert "Use Save Draft to persist" in r.text
+        # Must use rebuildClarificationTable (local render only), not loadAndRenderClarification (which fetches)
+        assert "rebuildClarificationTable" in r.text
+        # applyProposed must NOT call loadAndRenderClarification (server fetch would overwrite local state)
+        assert "// Re-render from local STATE.activeReview only" in r.text

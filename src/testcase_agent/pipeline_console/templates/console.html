@@ -80,9 +80,11 @@ function pollJob(jobId, onDone) {
 function handleJobResult(j) {
   if(!j.result) return;
   const r = j.result;
-  if(r.status==='validation_failed'){
+  const isValFail = r.status==='validation_failed' || (r.validated===false && (r.errors||[]).length>0);
+  const isBlocked = r.status==='blocked' || r.blocked===true;
+  if(isValFail){
     alert('Validation failed:\n'+(r.errors||[]).map(e=>e.field_path+': '+e.message).join('\n'));
-  } else if(r.status==='blocked'){
+  } else if(isBlocked){
     alert('Blocked: '+(r.block_reasons||[]).join(', '));
   }
 }
@@ -242,6 +244,7 @@ async function loadAndRenderClarification() {
   let data, reasonCodes;
   try { data = await get(API+'/runs/'+r.run_dir+'/clarification'); reasonCodes = await get(API+'/reason-codes?review_type=clarification'); } catch(e) { return; }
   STATE.activeReview = data;
+  STATE.reasonCodesCache = reasonCodes;  // cache for local re-renders
   const decisions = data.review.decisions||[];
   const amb = data.review.decomposition?.ambiguities||[];
   const ambById={};amb.forEach(a=>ambById[a.item_id]=a);
@@ -284,6 +287,45 @@ function updateReasonCodes(id,v){if(!STATE.activeReview)return;const d=STATE.act
 function updateReasonText(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_text=v;}
 function updateClarifiedValue(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.clarified_value=v;}
 
+function rebuildClarificationTable() {
+  // Re-render the clarification table from STATE.activeReview without any network fetch.
+  // Used by applyProposed and other local-state mutations.
+  const data = STATE.activeReview; if(!data) return;
+  const reasonCodes = STATE.reasonCodesCache || {decisions:[],reason_codes:[]};
+  const decisions = data.review.decisions||[];
+  const amb = data.review.decomposition?.ambiguities||[];
+  const ambById={};amb.forEach(a=>ambById[a.item_id]=a);
+
+  let rows = decisions.map(d => {
+    const a=ambById[d.item_id]||{};
+    const conf=d.confidence_before_review||(a.confidence_drivers?.overall)||0.5;
+    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
+    const decided=!!(d.decision||'').trim();
+    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
+    let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
+    return `<tr class="${decided?'':'pending-row'}">
+      <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.affected_text||'')}">${esc((a.affected_text||'').substring(0,50))}</td>
+      <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
+      <td><select multiple onchange="updateReasonCodes('${esc(d.item_id)}',Array.from(this.selectedOptions).map(o=>o.value))" style="height:40px;width:100px;">${rcOpts}</select></td>
+      <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
+      <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
+    </tr>`;
+  }).join('');
+
+  const cards = document.getElementById('main-content').querySelectorAll('.card');
+  const lastCard = cards[cards.length-1];
+  if(lastCard){
+    lastCard.innerHTML = `<div class="card-header flex-between">&#128221; Clarification Review
+      <span><button class="btn btn-sm" onclick="acceptRecs()">Accept All Recs</button>
+      <button class="btn btn-sm btn-primary" onclick="saveDraft()">Save Draft</button>
+      <button class="btn btn-sm btn-success" onclick="saveAndAdvance()">Save & Prep Intent Review</button></span></div>
+      <div class="card-body"><div id="clarification-msg"></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th></th><th>Type</th><th>Affected</th><th>Decision</th><th>Reason Codes</th><th>Reason Text</th><th>Clarified</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
+}
+
 async function acceptRecs() {
   const msg=document.getElementById('clarification-msg'); if(!msg) return;
   try{
@@ -310,8 +352,8 @@ function applyProposed(proposed) {
     const d=STATE.activeReview.review.decisions.find(d=>d.item_id===p.item_id);
     if(d)d.decision=p.decision;
   });
-  // Re-render the table without reloading from server (preserves other local edits)
-  loadAndRenderClarification();
+  // Re-render from local STATE.activeReview only — never fetch from server.
+  rebuildClarificationTable();
 }
 
 async function saveDraft() {
