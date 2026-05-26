@@ -12,15 +12,13 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from review_pipeline.artifacts.io import read_json
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.io import read_json
+from testcase_agent.review_pipeline.artifacts.models import (
     ClarificationReview,
     CaseIntentReview,
     ApprovedCasePlan,
-    ClarificationDecision,
-    CaseIntentDecision,
 )
-from review_pipeline.tag_rules.pattern_tag_rules import derive_all_tags, reject_unknown_tags
+from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_all_tags, reject_unknown_tags
 
 _DEFAULT_DB_PATH = Path(__file__).resolve().parent / "review_memory.db"
 
@@ -297,7 +295,7 @@ def compute_historical_support(source_hash: str, tags: list[str], db_path: str |
     tag_weight = min(len(tag_matches) * 0.03, 0.3)
     raw_support = 0.5 + same_req_weight + tag_weight
 
-    from review_pipeline.confidence.engine import normalize_historical_adjustment
+    from testcase_agent.review_pipeline.confidence.engine import normalize_historical_adjustment
     adjustment = normalize_historical_adjustment(raw_support - 0.5)
 
     hints: list[str] = []

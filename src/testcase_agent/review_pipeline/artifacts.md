@@ -73,7 +73,7 @@ Hard-rule evaluation results and pass/fail summary.
 `approve` | `reject` | `revise` | `merge` | `split` | `defer`
 
 Non-approve decisions require reason codes. Some require reason text.
-See `review_pipeline/reason_codes.yml` for the full registry.
+See `src/testcase_agent/review_pipeline/reason_codes.yml` for the full registry.
 
 ## Confidence Routing
 

@@ -1,4 +1,4 @@
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.models import (
     RequirementInput,
     RequirementDecomposition,
     FactItem,
@@ -14,8 +14,8 @@ from review_pipeline.artifacts.models import (
     GeneratedCaseSet,
     GeneratedCase,
 )
-from review_pipeline.artifacts.io import read_json, write_json
-from review_pipeline.artifacts.validation import ValidationError, ValidationResult
+from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
+from testcase_agent.review_pipeline.artifacts.validation import ValidationError, ValidationResult
 
 __all__ = [
     "RequirementInput",

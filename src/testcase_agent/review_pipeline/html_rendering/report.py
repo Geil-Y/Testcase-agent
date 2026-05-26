@@ -12,7 +12,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from review_pipeline.confidence.engine import routing_for_confidence, routing_label
+from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence, routing_label
 
 _CLARIFICATION_DECISIONS = ["approve", "clarify", "mark_needs_review", "block", "edit"]
 _INTENT_DECISIONS = ["approve", "reject", "revise", "merge", "split", "defer"]
@@ -445,7 +445,8 @@ def _summary_bar(label: str, total: int, routing: Counter, decisions: Counter) -
         cls = "summary warn"
 
     r_parts = " ".join(
-        f'<span class="kv">{_esc(l)}={c}</span>' for l, c in routing.most_common()
+        f'<span class="kv">{_esc(label)}={count}</span>'
+        for label, count in routing.most_common()
     ) or '<span class="section-empty">none</span>'
     d_parts = " ".join(
         f'<span class="kv {("alert" if k in ("", "pending") else "")}">{_esc(k or "pending")}={c}</span>'

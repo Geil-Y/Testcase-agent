@@ -9,16 +9,14 @@ from __future__ import annotations
 
 from collections import Counter
 
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.models import (
     ClarificationReview,
     ClarificationDecision,
     CaseIntentReview,
     CaseIntentDecision,
-    CaseIntentItem,
-    AmbiguityItem,
     RequirementDecomposition,
 )
-from review_pipeline.confidence.engine import routing_for_confidence, routing_label
+from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence, routing_label
 
 
 def render_clarification_review(review: ClarificationReview) -> str:

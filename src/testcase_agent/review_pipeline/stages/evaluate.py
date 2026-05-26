@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from review_pipeline.artifacts.io import read_json, write_json
+from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
 
 
 def evaluate_run(run_dir: str) -> None:

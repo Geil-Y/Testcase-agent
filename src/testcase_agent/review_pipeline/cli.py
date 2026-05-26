@@ -1,6 +1,6 @@
 """CLI entry point for the review pipeline.
 
-Usage: python -m review_pipeline.cli <command> [options]
+Usage: python -m testcase_agent.review_pipeline.cli <command> [options]
 
 Output convention:
   All review artifacts live under a root output directory (default: reviews/).
@@ -26,8 +26,8 @@ import shutil
 import sys
 from pathlib import Path
 
-from review_pipeline.artifacts.io import read_json, write_json
-from review_pipeline.artifacts.validation import ValidationResult
+from testcase_agent.review_pipeline.artifacts.io import read_json
+from testcase_agent.review_pipeline.artifacts.validation import ValidationResult
 
 
 # ── Run directory management ──────────────────────────────────────────────────
@@ -52,7 +52,7 @@ def _next_run_dir(out_root: str) -> Path:
 # ── Stage handlers ────────────────────────────────────────────────────────────
 
 def _cmd_prepare_clarification_review(args: argparse.Namespace) -> int:
-    from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+    from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
     run_dir = _next_run_dir(args.out)
     try:
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -77,8 +77,8 @@ def _cmd_prepare_clarification_review(args: argparse.Namespace) -> int:
 
 
 def _cmd_validate_review(args: argparse.Namespace) -> int:
-    from review_pipeline.stages.validate_clarification import validate_clarification_review
-    from review_pipeline.stages.validate_case_intent import validate_case_intent_review
+    from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+    from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
 
     path = Path(args.file)
     if not path.exists():
@@ -103,13 +103,13 @@ def _cmd_validate_review(args: argparse.Namespace) -> int:
             print(f"  Output written to {path.parent}")
         return 0
     else:
-        print(f"Validation FAILED:")
+        print("Validation FAILED:")
         print(result.format_errors())
         return 1
 
 
 def _cmd_prepare_intent_review(args: argparse.Namespace) -> int:
-    from review_pipeline.stages.plan_case_intents import prepare_intent_review
+    from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
     try:
         provider = None
         if not args.mock:
@@ -127,7 +127,7 @@ def _cmd_prepare_intent_review(args: argparse.Namespace) -> int:
 
 
 def _cmd_generate_cases(args: argparse.Namespace) -> int:
-    from review_pipeline.stages.write_cases import generate_cases
+    from testcase_agent.review_pipeline.stages.write_cases import generate_cases
     try:
         provider = None
         if not args.mock:
@@ -143,11 +143,10 @@ def _cmd_generate_cases(args: argparse.Namespace) -> int:
 
 
 def _cmd_evaluate(args: argparse.Namespace) -> int:
-    from review_pipeline.stages.evaluate import evaluate_run
-    from review_pipeline.html_rendering.report import render_unified_report
+    from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
     try:
         evaluate_run(args.run_dir)
-        print(f"06_evaluation.json — complete")
+        print("06_evaluation.json — complete")
         _generate_report(Path(args.run_dir))
         return 0
     except Exception as e:
@@ -156,7 +155,6 @@ def _cmd_evaluate(args: argparse.Namespace) -> int:
 
 
 def _cmd_generate_report(args: argparse.Namespace) -> int:
-    from review_pipeline.html_rendering.report import render_unified_report
     try:
         _generate_report(Path(args.run_dir))
         return 0
@@ -166,7 +164,7 @@ def _cmd_generate_report(args: argparse.Namespace) -> int:
 
 
 def _cmd_import_memory(args: argparse.Namespace) -> int:
-    from review_pipeline.storage.store import import_memory
+    from testcase_agent.review_pipeline.storage.store import import_memory
     try:
         import_memory(args.run_dir)
         print(f"Memory imported from {args.run_dir}")
@@ -216,18 +214,18 @@ def _copy_input(input_path: str, run_dir: Path) -> None:
 
 
 def _generate_report(run_dir: Path) -> None:
-    from review_pipeline.html_rendering.report import render_unified_report
+    from testcase_agent.review_pipeline.html_rendering.report import render_unified_report
     html = render_unified_report(run_dir)
     report_path = run_dir / "review_report.html"
     report_path.write_text(html, encoding="utf-8")
-    print(f"  review_report.html — unified report")
+    print("  review_report.html — unified report")
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m review_pipeline.cli",
+        prog="python -m testcase_agent.review_pipeline.cli",
         description="Clarification-first review pipeline for BMS HIL test case generation.",
     )
     sub = parser.add_subparsers(dest="command")

@@ -57,7 +57,7 @@ def sample_requirement_json(run_dir):
 
 class TestArtifactModels:
     def test_requirement_input_roundtrip(self):
-        from review_pipeline.artifacts.models import RequirementInput
+        from testcase_agent.review_pipeline.artifacts.models import RequirementInput
         data = {"requirement_key": "REQ_001", "description": "Test desc", "function_name": "fn", "supplementary_info": "extra"}
         m = RequirementInput(**data)
         assert m.requirement_key == "REQ_001"
@@ -84,7 +84,7 @@ class TestIssue15LegacyPipelineRemoval:
         assert importlib.util.find_spec("testcase_agent.prompts") is None
 
     def test_review_pipeline_cli_is_generation_entry(self):
-        from review_pipeline.cli import build_parser
+        from testcase_agent.review_pipeline.cli import build_parser
 
         subcommands = build_parser()._subparsers._group_actions[0].choices
         assert "prepare-clarification-review" in subcommands
@@ -113,8 +113,8 @@ class TestIssue15LegacyPipelineRemoval:
         assert exc.value.code == 2
 
     def test_clarification_review_roundtrip(self, run_dir):
-        from review_pipeline.artifacts.models import RequirementDecomposition, ClarificationReview, FactItem, AmbiguityItem
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.artifacts.models import RequirementDecomposition, ClarificationReview, FactItem, AmbiguityItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         decomposition = RequirementDecomposition(
             requirement_key="REQ_001",
@@ -138,8 +138,8 @@ class TestIssue15LegacyPipelineRemoval:
         assert len(reloaded.decomposition.ambiguities) == 1
 
     def test_case_intent_review_roundtrip(self, run_dir):
-        from review_pipeline.artifacts.models import CaseIntentPlan, CaseIntentReview, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentPlan, CaseIntentReview, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         plan = CaseIntentPlan(
             review_session_id="s1", requirement_key="REQ_001",
@@ -153,8 +153,8 @@ class TestIssue15LegacyPipelineRemoval:
         assert len(reloaded.plan.intents) == 1
 
     def test_generated_case_set_roundtrip(self, run_dir):
-        from review_pipeline.artifacts.models import GeneratedCaseSet, GeneratedCase
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.artifacts.models import GeneratedCaseSet, GeneratedCase
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         case_set = GeneratedCaseSet(
             review_session_id="s1", requirement_key="REQ_001",
@@ -169,7 +169,7 @@ class TestIssue15LegacyPipelineRemoval:
         assert reloaded[0]["case_id"] == "c1"
 
     def test_invalid_json_returns_error(self, run_dir):
-        from review_pipeline.artifacts.io import read_json
+        from testcase_agent.review_pipeline.artifacts.io import read_json
         import json as _json
         path = run_dir / "bad.json"
         path.write_text("{invalid json", encoding="utf-8")
@@ -181,13 +181,13 @@ class TestIssue15LegacyPipelineRemoval:
 
 class TestValidation:
     def test_validation_result_empty(self):
-        from review_pipeline.artifacts.validation import ValidationResult
+        from testcase_agent.review_pipeline.artifacts.validation import ValidationResult
         r = ValidationResult()
         assert r.is_valid
         assert r.format_errors() == ""
 
     def test_validation_result_with_errors(self):
-        from review_pipeline.artifacts.validation import ValidationResult
+        from testcase_agent.review_pipeline.artifacts.validation import ValidationResult
         r = ValidationResult()
         r.add_error("file.json", "field", "bad value")
         assert not r.is_valid
@@ -199,7 +199,7 @@ class TestValidation:
 
 class TestJsonIO:
     def test_read_write_utf8(self, run_dir):
-        from review_pipeline.artifacts.io import read_json, write_json
+        from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
         data = {"key": "值", "list": [1, 2]}
         path = run_dir / "utf8.json"
         write_json(path, data)
@@ -208,7 +208,7 @@ class TestJsonIO:
         assert result["key"] == "值"
 
     def test_write_creates_parent_dirs(self, run_dir):
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.artifacts.io import write_json
         deep = run_dir / "a" / "b" / "c.json"
         write_json(deep, {"x": 1})
         assert deep.exists()
@@ -218,86 +218,86 @@ class TestJsonIO:
 
 class TestConfidenceAggregation:
     def test_deterministic_average(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         drivers = {"trigger_clarity": 0.8, "expected_behavior_clarity": 0.6}
         result = aggregate_confidence(drivers)
         assert result == pytest.approx(0.7)
 
     def test_missing_driver_defaults_to_half(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         drivers = {"trigger_clarity": 0.8}
         result = aggregate_confidence(drivers)
         assert result == pytest.approx(0.8)
 
     def test_all_missing_defaults_to_half(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         result = aggregate_confidence({})
         assert result == pytest.approx(0.5)
 
     def test_invalid_driver_raises(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         with pytest.raises(ValueError, match="out of range"):
             aggregate_confidence({"trigger_clarity": 1.5})
 
     def test_negative_driver_raises(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         with pytest.raises(ValueError, match="out of range"):
             aggregate_confidence({"trigger_clarity": -0.1})
 
     def test_routing_green(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         r = routing_for_confidence(0.90)
         assert r.color == "green"
 
     def test_routing_blue(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         r = routing_for_confidence(0.70)
         assert r.color == "blue"
 
     def test_routing_orange(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         r = routing_for_confidence(0.50)
         assert r.color == "orange"
 
     def test_routing_red(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         r = routing_for_confidence(0.30)
         assert r.color == "red"
 
     def test_routing_boundary_green_blue(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         assert routing_for_confidence(0.85).color == "green"
         assert routing_for_confidence(0.849999).color == "blue"
 
     def test_routing_boundary_blue_orange(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         assert routing_for_confidence(0.65).color == "blue"
         assert routing_for_confidence(0.649999).color == "orange"
 
     def test_routing_boundary_orange_red(self):
-        from review_pipeline.confidence.engine import routing_for_confidence
+        from testcase_agent.review_pipeline.confidence.engine import routing_for_confidence
         assert routing_for_confidence(0.40).color == "orange"
         assert routing_for_confidence(0.39999).color == "red"
 
     def test_historical_adjustment_bounded_positive(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         result = aggregate_confidence({"trigger_clarity": 0.8}, historical_adjustment=0.20)
         assert result <= 0.90  # 0.8 + 0.10 max
 
     def test_historical_adjustment_bounded_negative(self):
-        from review_pipeline.confidence.engine import aggregate_confidence
+        from testcase_agent.review_pipeline.confidence.engine import aggregate_confidence
         result = aggregate_confidence({"trigger_clarity": 0.8}, historical_adjustment=-0.20)
         assert result >= 0.70  # 0.8 - 0.10 min
 
     def test_clarification_labels(self):
-        from review_pipeline.confidence.engine import routing_label
+        from testcase_agent.review_pipeline.confidence.engine import routing_label
         assert routing_label(0.90, is_clarification=True) == "Clear"
         assert routing_label(0.70, is_clarification=True) == "Minor ambiguity"
         assert routing_label(0.50, is_clarification=True) == "Review required"
         assert routing_label(0.30, is_clarification=True) == "Clarification required"
 
     def test_case_intent_labels(self):
-        from review_pipeline.confidence.engine import routing_label
+        from testcase_agent.review_pipeline.confidence.engine import routing_label
         assert routing_label(0.90, is_clarification=False) == "Strong intent"
         assert routing_label(0.70, is_clarification=False) == "Review recommended"
         assert routing_label(0.50, is_clarification=False) == "Review required"
@@ -308,65 +308,65 @@ class TestConfidenceAggregation:
 
 class TestPatternTags:
     def test_reason_code_derivation_confirmed(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_reason_codes
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_reason_codes
         tags = derive_from_reason_codes(["unsupported_by_requirement"])
         assert len(tags) == 1
         assert tags[0].tag == "invented_behavior"
         assert tags[0].tag_strength == "confirmed"
 
     def test_ambiguity_type_derivation(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_ambiguity_types
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_ambiguity_types
         tags = derive_from_ambiguity_types(["timing", "signal"])
         assert any(t.tag == "missing_timing" for t in tags)
         assert any(t.tag == "missing_signal" for t in tags)
         assert any(t.tag == "needs_clarification" for t in tags)
 
     def test_missing_category_derivation(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_missing_categories
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_missing_categories
         tags = derive_from_missing_categories(["threshold"])
         assert len(tags) == 1
         assert tags[0].tag == "missing_threshold"
 
     def test_coverage_dimension_derivation(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_coverage_dimensions
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_coverage_dimensions
         tags = derive_from_coverage_dimensions(["normal_behavior", "fault_or_protection"])
         assert any(t.tag == "coverage_normal_behavior" for t in tags)
         assert any(t.tag == "coverage_fault_protection" for t in tags)
 
     def test_text_detector_candidate_only(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
         tags = derive_from_text_detectors("The response time must be within 100ms latency")
         assert all(t.tag_strength == "candidate" for t in tags)
         assert any(t.tag == "response_time_bound" for t in tags)
 
     def test_text_detector_persistence(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
         tags = derive_from_text_detectors("Values must persist in NVM across power cycles")
         assert any(t.tag == "persistence" for t in tags)
 
     def test_text_detector_logging(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
         tags = derive_from_text_detectors("The system logs all events")
         assert any(t.tag == "logging_record" for t in tags)
 
     def test_text_detector_diagnostic(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
         tags = derive_from_text_detectors("Fault clear after diagnostic check")
         assert any(t.tag == "diagnostic_clear" for t in tags)
 
     def test_text_detector_timing_maturity(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_from_text_detectors
         tags = derive_from_text_detectors("Timing maturity is specified")
         assert any(t.tag == "timing_maturity" for t in tags)
 
     def test_unknown_tag_rejected(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import DerivedTag, reject_unknown_tags
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import DerivedTag, reject_unknown_tags
         tags = [DerivedTag(tag="nonexistent_tag", tag_strength="confirmed", source="test", rule_id="r1", evidence_text="")]
         result = reject_unknown_tags(tags)
         assert len(result) == 0
 
     def test_derive_all_tags(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import derive_all_tags
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import derive_all_tags
         tags = derive_all_tags(
             reason_codes=["unsupported_by_requirement"],
             ambiguity_types=["timing"],
@@ -377,8 +377,8 @@ class TestPatternTags:
         assert len(tags) >= 5
 
     def test_duplicate_dedup_keeps_highest(self):
-        from review_pipeline.tag_rules.pattern_tag_rules import DerivedTag
-        from review_pipeline.tag_rules.pattern_tag_rules import _deduplicate_tags
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import DerivedTag
+        from testcase_agent.review_pipeline.tag_rules.pattern_tag_rules import _deduplicate_tags
         t1 = DerivedTag(tag="same_tag", tag_strength="confirmed", source="reason_code", rule_id="r1", evidence_text="", confidence=1.0)
         t2 = DerivedTag(tag="same_tag", tag_strength="candidate", source="text_detector", rule_id="r2", evidence_text="", confidence=0.5)
         result = _deduplicate_tags([t1, t2])
@@ -390,37 +390,37 @@ class TestPatternTags:
 
 class TestReasonCodes:
     def test_clarification_decisions_valid(self):
-        from review_pipeline.reason_codes import is_decision_valid
+        from testcase_agent.review_pipeline.reason_codes import is_decision_valid
         assert is_decision_valid("clarification_item", "approve")
         assert is_decision_valid("clarification_item", "clarify")
         assert is_decision_valid("clarification_item", "block")
         assert not is_decision_valid("clarification_item", "invalid_decision")
 
     def test_case_intent_decisions_valid(self):
-        from review_pipeline.reason_codes import is_decision_valid
+        from testcase_agent.review_pipeline.reason_codes import is_decision_valid
         assert is_decision_valid("case_intent_item", "approve")
         assert is_decision_valid("case_intent_item", "reject")
         assert is_decision_valid("case_intent_item", "merge")
         assert not is_decision_valid("case_intent_item", "clarify")
 
     def test_unknown_reason_code_rejected(self):
-        from review_pipeline.reason_codes import is_reason_code_valid
+        from testcase_agent.review_pipeline.reason_codes import is_reason_code_valid
         assert not is_reason_code_valid("clarification_item", "nonexistent_code")
         assert is_reason_code_valid("clarification_item", "needs_clarification")
 
     def test_approve_no_reason_code_required(self):
-        from review_pipeline.reason_codes import get_decision_requirements
+        from testcase_agent.review_pipeline.reason_codes import get_decision_requirements
         reqs = get_decision_requirements("approve")
         assert reqs.get("require_reason_code") is False
 
     def test_block_requires_reason_code_and_text(self):
-        from review_pipeline.reason_codes import get_decision_requirements
+        from testcase_agent.review_pipeline.reason_codes import get_decision_requirements
         reqs = get_decision_requirements("block")
         assert reqs.get("require_reason_code") is True
         assert reqs.get("require_reason_text") is True
 
     def test_positive_vs_negative_codes(self):
-        from review_pipeline.reason_codes import get_positive_reason_codes, get_negative_reason_codes
+        from testcase_agent.review_pipeline.reason_codes import get_positive_reason_codes, get_negative_reason_codes
         positive = get_positive_reason_codes()
         negative = get_negative_reason_codes()
         assert "supported_by_requirement" in positive
@@ -432,7 +432,7 @@ class TestReasonCodes:
 
 class TestDecomposeRequirement:
     def test_produces_clarification_review_json(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
         review = prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         assert (run_dir / "clarification_review.json").exists()
         assert review.requirement_key == "BMS_REQ_001"
@@ -440,7 +440,7 @@ class TestDecomposeRequirement:
         assert len(review.decomposition.clarification_questions) >= 1
 
     def test_produces_clarification_review_html(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         html_path = run_dir / "clarification_review.html"
         assert html_path.exists()
@@ -449,19 +449,19 @@ class TestDecomposeRequirement:
         assert "BMS_REQ_001" in html
 
     def test_html_contains_routing_colors(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         html = (run_dir / "clarification_review.html").read_text(encoding="utf-8")
         assert "border-left: 4px solid" in html
 
     def test_no_case_intents_in_decomposition(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
         review = prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         # Decomposition has no case intents
         assert hasattr(review.decomposition, "ambiguities")
 
     def test_real_provider_json_response_produces_decomposition(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
 
         class JsonProvider:
             provider_name = "fake"
@@ -507,7 +507,7 @@ class TestDecomposeRequirement:
         assert not (run_dir / "llm_a_raw_response.txt").exists()
 
     def test_real_provider_parse_failure_dumps_raw_response(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
 
         class BadProvider:
             provider_name = "fake"
@@ -532,9 +532,9 @@ class TestDecomposeRequirement:
 
 class TestClarificationValidation:
     def test_approve_passes(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -553,9 +553,9 @@ class TestClarificationValidation:
         assert not basis.blocked
 
     def test_block_requires_reason(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -574,9 +574,9 @@ class TestClarificationValidation:
         assert basis.blocked
 
     def test_clarify_requires_clarified_value(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -593,9 +593,9 @@ class TestClarificationValidation:
         assert "clarified value" in result.format_errors()
 
     def test_clarified_value_appears_in_basis(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -613,9 +613,9 @@ class TestClarificationValidation:
         assert any(a["clarified_value"] == "Response time is 100ms" for a in basis.resolved_ambiguities)
 
     def test_clarified_basis_preserves_source_context(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.io import read_json, write_json
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
 
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         data = read_json(run_dir / "clarification_review.json")
@@ -634,9 +634,9 @@ class TestClarificationValidation:
         assert basis.resolved_ambiguities[0]["ambiguity_type"] == "timing"
 
     def test_unknown_decision_rejected(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -650,9 +650,9 @@ class TestClarificationValidation:
         assert not result.is_valid
 
     def test_non_approve_requires_reason(self, run_dir):
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="s1", requirement_key="REQ_001",
@@ -670,13 +670,13 @@ class TestClarificationValidation:
 
 class TestIntentPlanning:
     def test_produces_intent_review(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.stages.plan_case_intents import prepare_intent_review
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
 
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         # Auto-approve
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
         data = read_json(run_dir / "clarification_review.json")
         data["decisions"] = [{"item_id": a["item_id"], "decision": "approve"}
                              for a in data["decomposition"]["ambiguities"]]
@@ -689,10 +689,10 @@ class TestIntentPlanning:
         assert len(review.plan.intents) >= 1
 
     def test_blocked_basis_prevents_planning(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.plan_case_intents import prepare_intent_review
-        from review_pipeline.artifacts.io import write_json
-        from review_pipeline.artifacts.models import ClarifiedTestBasis
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
+        from testcase_agent.review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.artifacts.models import ClarifiedTestBasis
 
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         # Write a blocked test basis
@@ -707,10 +707,10 @@ class TestIntentPlanning:
         assert "Unresolvable" in review.plan.planning_block_reason
 
     def test_html_contains_routing_colors(self, run_dir, sample_requirement_json):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.stages.plan_case_intents import prepare_intent_review
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         prepare_clarification_review(str(sample_requirement_json), str(run_dir))
         data = read_json(run_dir / "clarification_review.json")
@@ -729,9 +729,9 @@ class TestIntentPlanning:
 
 class TestCaseIntentValidation:
     def test_approve_includes_intent(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
@@ -745,9 +745,9 @@ class TestCaseIntentValidation:
         assert len(plan_out.approved_intents) == 1
 
     def test_reject_excludes_intent(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
@@ -762,9 +762,9 @@ class TestCaseIntentValidation:
         assert len(plan_out.approved_intents) == 0
 
     def test_defer_excludes_intent(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
@@ -779,9 +779,9 @@ class TestCaseIntentValidation:
         assert len(plan_out.approved_intents) == 0
 
     def test_merge_requires_target(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="A"),
@@ -797,9 +797,9 @@ class TestCaseIntentValidation:
         assert plan_out.approved_intents[0].intent_id == "i1"
 
     def test_split_requires_children(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         child1 = CaseIntentItem(intent_id="i1-s1", coverage_dimension="boundary_or_threshold",
                                 intent_text="Child 1", confidence_score=0.7)
@@ -817,9 +817,9 @@ class TestCaseIntentValidation:
         assert len(plan_out.approved_intents) == 2
 
     def test_revise_includes_final_text(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="Original")])
@@ -833,9 +833,9 @@ class TestCaseIntentValidation:
         assert plan_out.approved_intents[0].intent_text == "Revised"
 
     def test_traceability_preserved(self, run_dir):
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
@@ -854,9 +854,9 @@ class TestCaseIntentValidation:
 
 class TestCaseWriter:
     def test_generates_one_case_per_intent(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = ApprovedCasePlan(
             review_session_id="s1", requirement_key="REQ_001",
@@ -872,9 +872,9 @@ class TestCaseWriter:
         assert len(case_set.cases) == 2
 
     def test_skips_where_plan_empty(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.artifacts.models import ApprovedCasePlan
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = ApprovedCasePlan(review_session_id="s1", requirement_key="REQ_001", approved_intents=[])
         write_json(run_dir / "approved_case_plan.json", plan.model_dump())
@@ -882,9 +882,9 @@ class TestCaseWriter:
         assert len(case_set.cases) == 0
 
     def test_generated_cases_have_traceability(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = ApprovedCasePlan(
             review_session_id="s1", requirement_key="REQ_001",
@@ -901,9 +901,9 @@ class TestCaseWriter:
         assert case.traceability["requirement_key"] == "REQ_001"
 
     def test_generated_json_has_evaluator_fields(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         plan = ApprovedCasePlan(
             review_session_id="s1", requirement_key="REQ_001",
@@ -926,9 +926,9 @@ class TestCaseWriter:
         assert "coverage_dimension" in case
 
     def test_writer_prompt_receives_source_context_and_missing_markers(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem, ClarifiedTestBasis, FactItem
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem, ClarifiedTestBasis, FactItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = ApprovedCasePlan(
             review_session_id="s1",
@@ -999,7 +999,7 @@ class TestCaseWriter:
 
 class TestReviewMemory:
     def test_schema_creation(self, run_dir):
-        from review_pipeline.storage.store import get_connection
+        from testcase_agent.review_pipeline.storage.store import get_connection
         db_path = str(run_dir / "test.db")
         conn = get_connection(db_path)
         tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").fetchall()
@@ -1011,9 +1011,9 @@ class TestReviewMemory:
         conn.close()
 
     def test_import_clarification(self, run_dir):
-        from review_pipeline.storage.store import import_memory, get_connection
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, get_connection
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="mem-test-1", requirement_key="REQ_001",
@@ -1036,9 +1036,9 @@ class TestReviewMemory:
         conn.close()
 
     def test_pattern_tags_stored_with_evidence(self, run_dir):
-        from review_pipeline.storage.store import import_memory, get_connection
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, get_connection
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="tag-test-1", requirement_key="REQ_001",
@@ -1062,9 +1062,9 @@ class TestReviewMemory:
         conn.close()
 
     def test_duplicate_import_idempotent(self, run_dir):
-        from review_pipeline.storage.store import import_memory, get_connection
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, get_connection
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="dup-test-1", requirement_key="REQ_001",
@@ -1088,9 +1088,9 @@ class TestReviewMemory:
 
 class TestReviewMemoryRetrieval:
     def test_retrieve_by_requirement_hash(self, run_dir):
-        from review_pipeline.storage.store import import_memory, retrieve_by_requirement_hash
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, retrieve_by_requirement_hash
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="retr-test-1", requirement_key="REQ_001",
@@ -1108,9 +1108,9 @@ class TestReviewMemoryRetrieval:
         assert results[0]["requirement_key"] == "REQ_001"
 
     def test_retrieve_by_tags(self, run_dir):
-        from review_pipeline.storage.store import import_memory, retrieve_by_tags
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, retrieve_by_tags
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="tag-retr-1", requirement_key="REQ_001",
@@ -1128,16 +1128,16 @@ class TestReviewMemoryRetrieval:
         assert len(results) >= 1
 
     def test_historical_support_no_memory(self, run_dir):
-        from review_pipeline.storage.store import compute_historical_support
+        from testcase_agent.review_pipeline.storage.store import compute_historical_support
         db_path = str(run_dir / "memory.db")
         result = compute_historical_support("nonexistent", ["tag1"], db_path)
         assert result["adjustment"] == 0.0
         assert result["historical_pattern_support"] == 0.5
 
     def test_historical_support_with_memory(self, run_dir):
-        from review_pipeline.storage.store import import_memory, compute_historical_support
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, compute_historical_support
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="histsup-1", requirement_key="REQ_001",
@@ -1154,9 +1154,9 @@ class TestReviewMemoryRetrieval:
         assert result["same_requirement_sessions"] >= 1
 
     def test_retrieval_does_not_mutate_decisions(self, run_dir):
-        from review_pipeline.storage.store import import_memory, retrieve_by_requirement_hash
-        from review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.storage.store import import_memory, retrieve_by_requirement_hash
+        from testcase_agent.review_pipeline.artifacts.models import ClarificationReview, RequirementDecomposition, AmbiguityItem, ClarificationDecision
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         review = ClarificationReview(
             review_session_id="nomutate-1", requirement_key="REQ_001",
@@ -1179,10 +1179,10 @@ class TestReviewMemoryRetrieval:
 
 class TestEvaluation:
     def test_evaluate_run(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.stages.evaluate import evaluate_run
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         plan = ApprovedCasePlan(
             review_session_id="eval-1", requirement_key="REQ_001",
@@ -1199,15 +1199,15 @@ class TestEvaluation:
         assert (run_dir / "evaluation_summary.json").exists()
 
     def test_missing_generated_cases_error(self, run_dir):
-        from review_pipeline.stages.evaluate import evaluate_run
+        from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
         with pytest.raises(FileNotFoundError, match="generated_cases"):
             evaluate_run(str(run_dir))
 
     def test_evaluation_traceability_preserved(self, run_dir):
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.stages.evaluate import evaluate_run
-        from review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
+        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         plan = ApprovedCasePlan(
             review_session_id="trace-1", requirement_key="REQ_001",
@@ -1230,13 +1230,13 @@ class TestEvaluation:
 class TestEndToEnd:
     def test_full_pipeline_with_fake_providers(self, run_dir):
         """Complete offline fixture: decompose → review → plan → review → write → evaluate."""
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.stages.plan_case_intents import prepare_intent_review
-        from review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from review_pipeline.stages.write_cases import generate_cases
-        from review_pipeline.stages.evaluate import evaluate_run
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
+        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         # 1. Create requirement input
         req_json = run_dir / "requirements.json"
@@ -1248,7 +1248,7 @@ class TestEndToEnd:
         }])
 
         # 2. Prepare clarification review (uses placeholder, no LLM)
-        review = prepare_clarification_review(str(req_json), str(run_dir))
+        prepare_clarification_review(str(req_json), str(run_dir))
         assert (run_dir / "clarification_review.json").exists()
         assert (run_dir / "clarification_review.html").exists()
 
@@ -1264,7 +1264,7 @@ class TestEndToEnd:
         assert (run_dir / "clarified_test_basis.json").exists()
 
         # 5. Prepare intent review
-        intent_review = prepare_intent_review(str(run_dir))
+        prepare_intent_review(str(run_dir))
         assert (run_dir / "case_intent_review.json").exists()
         assert (run_dir / "case_intent_review.html").exists()
 
@@ -1303,8 +1303,8 @@ class TestEndToEnd:
         assert "self_check" not in html2.lower()
 
     def test_confidence_colors_in_html(self, run_dir):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         req_json = run_dir / "req.json"
         write_json(req_json, [{
@@ -1316,10 +1316,10 @@ class TestEndToEnd:
         assert "border-left: 4px solid" in html
 
     def test_import_memory_influences_later_run(self, run_dir):
-        from review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from review_pipeline.stages.validate_clarification import validate_clarification_review
-        from review_pipeline.storage.store import import_memory, compute_historical_support
-        from review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
+        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
+        from testcase_agent.review_pipeline.storage.store import import_memory, compute_historical_support
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         # First run
         run1 = run_dir / "run1"
@@ -1350,8 +1350,7 @@ class TestEndToEnd:
 
 class TestCLI:
     def test_help(self):
-        from review_pipeline.cli import main
-        import sys as _sys
+        from testcase_agent.review_pipeline.cli import main
         try:
             ret = main(["--help"])
         except SystemExit as e:
@@ -1359,7 +1358,7 @@ class TestCLI:
         assert ret == 0
 
     def test_subcommand_help(self):
-        from review_pipeline.cli import main
+        from testcase_agent.review_pipeline.cli import main
         try:
             ret = main(["prepare-clarification-review", "--help"])
         except SystemExit as e:
@@ -1367,7 +1366,7 @@ class TestCLI:
         assert ret == 0
 
     def test_prepare_clarification_review_mock_flag(self, run_dir, sample_requirement_json):
-        from review_pipeline.cli import main
+        from testcase_agent.review_pipeline.cli import main
 
         ret = main([
             "prepare-clarification-review",
@@ -1385,7 +1384,7 @@ class TestCLI:
         assert (run_subdirs[0] / "clarification_review.json").exists()
 
     def test_validate_missing_file(self):
-        from review_pipeline.cli import main
+        from testcase_agent.review_pipeline.cli import main
         ret = main(["validate-review", "--file", "/nonexistent/file.json"])
         assert ret == 1
 
@@ -1394,14 +1393,14 @@ class TestCLI:
 
 class TestBoundedAdjustment:
     def test_positive_bounded(self):
-        from review_pipeline.confidence.engine import normalize_historical_adjustment
+        from testcase_agent.review_pipeline.confidence.engine import normalize_historical_adjustment
         assert normalize_historical_adjustment(0.15) == 0.10
 
     def test_negative_bounded(self):
-        from review_pipeline.confidence.engine import normalize_historical_adjustment
+        from testcase_agent.review_pipeline.confidence.engine import normalize_historical_adjustment
         assert normalize_historical_adjustment(-0.20) == -0.10
 
     def test_within_bounds(self):
-        from review_pipeline.confidence.engine import normalize_historical_adjustment
+        from testcase_agent.review_pipeline.confidence.engine import normalize_historical_adjustment
         assert normalize_historical_adjustment(0.05) == 0.05
         assert normalize_historical_adjustment(-0.03) == -0.03

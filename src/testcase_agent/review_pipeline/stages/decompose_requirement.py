@@ -12,8 +12,8 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from review_pipeline.artifacts.io import read_json, write_json
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
+from testcase_agent.review_pipeline.artifacts.models import (
     RequirementInput,
     RequirementDecomposition,
     ClarificationReview,
@@ -23,8 +23,8 @@ from review_pipeline.artifacts.models import (
     ClarificationQuestion,
     SafeGenerationPolicy,
 )
-from review_pipeline.html_rendering.renderer import render_clarification_review
-from review_pipeline.prompts import render_prompt
+from testcase_agent.review_pipeline.html_rendering.renderer import render_clarification_review
+from testcase_agent.review_pipeline.prompts import render_prompt
 
 
 def prepare_clarification_review(

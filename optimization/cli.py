@@ -1,7 +1,7 @@
 """CLI for evaluation and legacy optimization helpers.
 
 The old batch generation command has been removed. Use
-``python -m review_pipeline.cli`` for new clarification-first generation runs.
+``python -m testcase_agent.review_pipeline.cli`` for new clarification-first generation runs.
 Existing report/evaluation helpers remain for reading completed rounds.
 """
 
@@ -20,7 +20,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from openpyxl import load_workbook  # noqa: E402
 
-from review_pipeline.artifacts.models import RequirementInput  # noqa: E402
+from testcase_agent.review_pipeline.artifacts.models import RequirementInput  # noqa: E402
 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
@@ -260,7 +260,7 @@ def archive_prompts(round_dir: Path) -> None:
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
     project_root = Path(__file__).resolve().parents[1]
-    source_dir = project_root / "review_pipeline" / "prompts"
+    source_dir = project_root / "src" / "testcase_agent" / "review_pipeline" / "prompts"
 
     for src in sorted(source_dir.glob("*.html")):
         # Strip .html extension for the archived copy.
@@ -311,11 +311,11 @@ def run_batch(
     """Legacy batch generation entry point.
 
     Kept only as an importable guard for older helper code. New generation must
-    start from ``python -m review_pipeline.cli prepare-clarification-review``.
+    start from ``python -m testcase_agent.review_pipeline.cli prepare-clarification-review``.
     """
     raise RuntimeError(
         "optimization.cli run_batch was removed with the legacy generation "
-        "pipeline. Use python -m review_pipeline.cli for generation."
+        "pipeline. Use python -m testcase_agent.review_pipeline.cli for generation."
     )
 
 
@@ -350,7 +350,7 @@ def main():
     if args.command == "run":
         parser.error(
             "optimization.cli run was removed with the legacy generation "
-            "pipeline. Use python -m review_pipeline.cli "
+            "pipeline. Use python -m testcase_agent.review_pipeline.cli "
             "prepare-clarification-review instead."
         )
 

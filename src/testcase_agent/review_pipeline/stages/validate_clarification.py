@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from review_pipeline.artifacts.io import read_json, write_json
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
+from testcase_agent.review_pipeline.artifacts.models import (
     ClarificationReview,
     ClarificationDecision,
     ClarifiedTestBasis,
 )
-from review_pipeline.artifacts.validation import ValidationResult
-from review_pipeline.reason_codes import (
+from testcase_agent.review_pipeline.artifacts.validation import ValidationResult
+from testcase_agent.review_pipeline.reason_codes import (
     is_decision_valid,
     is_reason_code_valid,
     get_decision_requirements,

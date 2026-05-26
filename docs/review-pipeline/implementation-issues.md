@@ -11,7 +11,7 @@ remaining compatible with it.
 New main entry point:
 
 ```text
-python -m review_pipeline.cli
+python -m testcase_agent.review_pipeline.cli
 ```
 
 Core flow:
@@ -58,7 +58,7 @@ Design constraints:
 - Review Memory is advisory, not authoritative. It may affect confidence, routing, and reviewer hints, but must not introduce expected behavior, thresholds, timing, signals, recovery behavior, diagnostics, or case intents not supported by the current requirement/test basis.
 - `pattern_tags` are deterministic memory indexes derived by code, never by LLM or direct human editing.
 
-## Issue 1: Create `review_pipeline` Skeleton And Artifact Models
+## Issue 1: Create `testcase_agent.review_pipeline` Skeleton And Artifact Models
 
 Type: AFK
 
@@ -66,13 +66,13 @@ Blocked by: None.
 
 ### What To Build
 
-Create the new `review_pipeline` module as the replacement generation workflow entry point. Add the basic CLI structure, artifact model definitions, JSON read/write helpers, and validation scaffolding shared by later slices.
+Create the new `testcase_agent.review_pipeline` module as the replacement generation workflow entry point. Add the basic CLI structure, artifact model definitions, JSON read/write helpers, and validation scaffolding shared by later slices.
 
 The implementation should not call real LLMs yet. It should establish stable data contracts for the rest of the pipeline.
 
 ### Acceptance Criteria
 
-- [ ] `python -m review_pipeline.cli --help` works.
+- [ ] `python -m testcase_agent.review_pipeline.cli --help` works.
 - [ ] Module includes a clear package boundary for artifacts, CLI commands, confidence, tag rules, storage, HTML rendering, and prompts.
 - [ ] Artifact models exist for:
   - requirement input
@@ -177,8 +177,8 @@ incompatible structures.
 Add or update:
 
 ```text
-review_pipeline/README.md
-review_pipeline/artifacts.md
+src/testcase_agent/review_pipeline/README.md
+src/testcase_agent/review_pipeline/artifacts.md
 docs/adr/0003-clarification-first-review-pipeline.md
 CONTEXT.md
 ```
@@ -198,8 +198,8 @@ The documentation should cover:
 
 ### Acceptance Criteria
 
-- [ ] `review_pipeline/README.md` explains the pipeline flow, command order, and phase 1 scope.
-- [ ] `review_pipeline/artifacts.md` describes each JSON artifact and which command produces/consumes it.
+- [ ] `src/testcase_agent/review_pipeline/README.md` explains the pipeline flow, command order, and phase 1 scope.
+- [ ] `src/testcase_agent/review_pipeline/artifacts.md` describes each JSON artifact and which command produces/consumes it.
 - [ ] ADR-0003 explains why the project is replacing the old generation pipeline with a clarification-first review pipeline.
 - [ ] ADR-0003 preserves the code/prompt boundary: code owns plumbing; prompts own generation philosophy and semantic judgment.
 - [ ] `CONTEXT.md` glossary includes:
@@ -235,8 +235,8 @@ Implement deterministic `pattern_tags` as evidence-backed memory indexes.
 Add:
 
 ```text
-review_pipeline/pattern_tags.yml
-review_pipeline/pattern_tag_rules.py
+src/testcase_agent/review_pipeline/pattern_tags.yml
+src/testcase_agent/review_pipeline/pattern_tag_rules.py
 ```
 
 Each derived tag must include:
@@ -289,7 +289,7 @@ Implement a canonical registry for human review decisions and reason codes.
 Add a versioned registry such as:
 
 ```text
-review_pipeline/reason_codes.yml
+src/testcase_agent/review_pipeline/reason_codes.yml
 ```
 
 The registry must define:
@@ -386,14 +386,14 @@ The LLM must output only the machine-parseable decomposition payload requested b
 Add prompts:
 
 ```text
-review_pipeline/prompts/decompose_requirement.system.html
-review_pipeline/prompts/decompose_requirement.user.html
+src/testcase_agent/review_pipeline/prompts/decompose_requirement.system.html
+src/testcase_agent/review_pipeline/prompts/decompose_requirement.user.html
 ```
 
 CLI command:
 
 ```text
-python -m review_pipeline.cli prepare-clarification-review --input <requirements.json> --out <run_dir>
+python -m testcase_agent.review_pipeline.cli prepare-clarification-review --input <requirements.json> --out <run_dir>
 ```
 
 ### Acceptance Criteria
@@ -448,7 +448,7 @@ edit
 CLI command:
 
 ```text
-python -m review_pipeline.cli validate-review --file <run_dir>/clarification_review.json
+python -m testcase_agent.review_pipeline.cli validate-review --file <run_dir>/clarification_review.json
 ```
 
 The command should validate the artifact and materialize or update:
@@ -498,14 +498,14 @@ It produces case intents with confidence drivers, reasons, and review routing.
 Add prompts:
 
 ```text
-review_pipeline/prompts/plan_case_intents.system.html
-review_pipeline/prompts/plan_case_intents.user.html
+src/testcase_agent/review_pipeline/prompts/plan_case_intents.system.html
+src/testcase_agent/review_pipeline/prompts/plan_case_intents.user.html
 ```
 
 CLI command:
 
 ```text
-python -m review_pipeline.cli prepare-intent-review --run-dir <run_dir>
+python -m testcase_agent.review_pipeline.cli prepare-intent-review --run-dir <run_dir>
 ```
 
 Output:
@@ -565,7 +565,7 @@ defer
 CLI command:
 
 ```text
-python -m review_pipeline.cli validate-review --file <run_dir>/case_intent_review.json
+python -m testcase_agent.review_pipeline.cli validate-review --file <run_dir>/case_intent_review.json
 ```
 
 ### Acceptance Criteria
@@ -603,14 +603,14 @@ This stage reads `approved_case_plan.json` and generates one test case per appro
 Add prompts:
 
 ```text
-review_pipeline/prompts/write_case.system.html
-review_pipeline/prompts/write_case.user.html
+src/testcase_agent/review_pipeline/prompts/write_case.system.html
+src/testcase_agent/review_pipeline/prompts/write_case.user.html
 ```
 
 CLI command:
 
 ```text
-python -m review_pipeline.cli generate-cases --run-dir <run_dir>
+python -m testcase_agent.review_pipeline.cli generate-cases --run-dir <run_dir>
 ```
 
 Output:
@@ -656,8 +656,8 @@ Implement Review Memory storage in SQLite.
 Add:
 
 ```text
-review_pipeline/schema.sql
-review_pipeline/store.py
+src/testcase_agent/review_pipeline/schema.sql
+src/testcase_agent/review_pipeline/store.py
 ```
 
 Core tables:
@@ -672,7 +672,7 @@ memory_item_tags
 CLI command:
 
 ```text
-python -m review_pipeline.cli import-memory --run-dir <run_dir>
+python -m testcase_agent.review_pipeline.cli import-memory --run-dir <run_dir>
 ```
 
 Import only validated, human-reviewed artifacts.
@@ -680,7 +680,7 @@ Import only validated, human-reviewed artifacts.
 ### Acceptance Criteria
 
 - [ ] SQLite database is created on demand.
-- [ ] Default DB path is under `review_pipeline/` or configurable by CLI/env.
+- [ ] Default DB path is under `src/testcase_agent/review_pipeline/` or configurable by CLI/env.
 - [ ] Local DB files are ignored by git.
 - [ ] `review_sessions` records:
   - session id
@@ -767,7 +767,7 @@ Add an evaluation command for generated cases from the new pipeline.
 CLI command:
 
 ```text
-python -m review_pipeline.cli evaluate --run-dir <run_dir>
+python -m testcase_agent.review_pipeline.cli evaluate --run-dir <run_dir>
 ```
 
 Reuse existing evaluator/report code where practical. The new pipeline should produce enough compatibility data for:

@@ -98,7 +98,7 @@ def generate(req_id: int):
     """Legacy sandbox generation endpoint.
 
     The old in-process generation pipeline was removed in favor of the
-    clarification-first review pipeline exposed by ``review_pipeline.cli``.
+    clarification-first review pipeline exposed by ``testcase_agent.review_pipeline.cli``.
     """
     reqs = _state.get("requirements", [])
     if req_id < 0 or req_id >= len(reqs):
@@ -111,7 +111,7 @@ def generate(req_id: int):
     return {
         "error": (
             "Legacy /generate endpoint removed. Use "
-            "`python -m review_pipeline.cli prepare-clarification-review` "
+            "`python -m testcase_agent.review_pipeline.cli prepare-clarification-review` "
             "to start the clarification-first review pipeline."
         )
     }

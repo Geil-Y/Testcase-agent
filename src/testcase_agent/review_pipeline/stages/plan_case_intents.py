@@ -9,8 +9,8 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from review_pipeline.artifacts.io import read_json, write_json
-from review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
+from testcase_agent.review_pipeline.artifacts.models import (
     ClarifiedTestBasis,
     CaseIntentPlan,
     CaseIntentReview,
@@ -18,7 +18,7 @@ from review_pipeline.artifacts.models import (
     CaseIntentItem,
     ClarificationReview,
 )
-from review_pipeline.html_rendering.renderer import render_case_intent_review
+from testcase_agent.review_pipeline.html_rendering.renderer import render_case_intent_review
 
 
 def prepare_intent_review(run_dir: str, *, provider=None, memory_hints: dict | None = None) -> CaseIntentReview:
@@ -71,7 +71,7 @@ def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None
     """Call LLM-B for real intent planning."""
     import json
     from pydantic import ValidationError
-    from review_pipeline.prompts import render_prompt
+    from testcase_agent.review_pipeline.prompts import render_prompt
 
     facts_summary = "\n".join(f"- [{f.item_id}] {f.fact_text}" for f in basis.facts)
     amb_summary = "\n".join(

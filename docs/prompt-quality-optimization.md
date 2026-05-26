@@ -184,10 +184,10 @@ current generation entry point.
 Current generation starts with:
 
 ```text
-python -m review_pipeline.cli prepare-clarification-review
+python -m testcase_agent.review_pipeline.cli prepare-clarification-review
 ```
 
-Current prompts live under `review_pipeline/prompts/`:
+Current prompts live under `src/testcase_agent/review_pipeline/prompts/`:
 
 - `decompose_requirement.system.html`
 - `decompose_requirement.user.html`
