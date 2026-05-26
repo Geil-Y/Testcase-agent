@@ -5,99 +5,97 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Pipeline Console — Testcase Agent</title>
 <style>
-  :root {
-    --bg: #f8f9fa; --surface: #fff; --border: #dee2e6; --text: #212529;
-    --text-muted: #6c757d; --primary: #0d6efd; --primary-light: #e7f1ff;
-    --success: #198754; --warning: #ffc107; --danger: #dc3545; --info: #0dcaf0;
-    --radius: 6px; --shadow: 0 1px 3px rgba(0,0,0,0.08);
-    --orange: #fd7e14;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; }
-  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 52px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow); position: sticky; top: 0; z-index: 10; }
-  header h1 { font-size: 1.1rem; font-weight: 600; cursor: pointer; }
-  .mode-badge { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: 0.7rem; text-transform: uppercase; }
-  .mode-real { background: #d1e7dd; color: var(--success); }
-  .mode-mock { background: #fff3cd; color: #856404; }
-  main { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1rem; }
-  .card-header { padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; justify-content: space-between; }
-  .card-body { padding: 0.75rem 1rem; }
-  .btn { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 0.8rem; cursor: pointer; white-space: nowrap; }
-  .btn:hover { background: #e9ecef; }
-  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .btn-primary:hover { background: #0b5ed7; }
-  .btn-success { background: var(--success); color: #fff; border-color: var(--success); }
-  .btn-danger { background: var(--danger); color: #fff; border-color: var(--danger); }
-  .btn-sm { padding: 0.15rem 0.4rem; font-size: 0.72rem; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  select, input[type="text"], input[type="file"], textarea { padding: 0.3rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.8rem; background: var(--surface); }
-  select:focus, input:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
-  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  th, td { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid var(--border); }
-  th { background: #f8f9fa; font-weight: 600; white-space: nowrap; }
-  tr:hover { background: var(--primary-light); }
-  .empty-state { text-align: center; padding: 2rem 1rem; color: var(--text-muted); }
-  .alert { padding: 0.5rem 0.8rem; border-radius: var(--radius); font-size: 0.8rem; margin: 0.4rem 0; }
-  .alert-danger { background: #f8d7da; border: 1px solid #f5c2c7; color: #842029; }
-  .alert-success { background: #d1e7dd; border: 1px solid #badbcc; color: #0f5132; }
-  .alert-info { background: #cff4fc; border: 1px solid #b6effb; color: #055160; }
-  .form-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.5rem; }
-  .form-group { display: flex; flex-direction: column; gap: 0.2rem; }
-  .form-group label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; }
-  .hidden { display: none !important; }
-  .flex-between { display: flex; justify-content: space-between; align-items: center; }
-  .routing-g { color: var(--success); font-weight: 600; }
-  .routing-b { color: var(--primary); font-weight: 600; }
-  .routing-o { color: var(--orange); font-weight: 600; }
-  .routing-r { color: var(--danger); font-weight: 600; }
-  .stage-nav { display: flex; gap: 0; margin-bottom: 1rem; }
-  .stage-item { padding: 0.4rem 0.8rem; border: 1px solid var(--border); font-size: 0.75rem; cursor: pointer; background: var(--surface); }
-  .stage-item.active { background: var(--primary); color: #fff; border-color: var(--primary); }
-  .stage-item.done { background: #d1e7dd; border-color: #badbcc; }
-  .stage-item:first-child { border-radius: var(--radius) 0 0 var(--radius); }
-  .stage-item:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  :root { --bg:#f8f9fa; --surface:#fff; --border:#dee2e6; --text:#212529; --text-muted:#6c757d; --primary:#0d6efd; --primary-light:#e7f1ff; --success:#198754; --warning:#ffc107; --danger:#dc3545; --info:#0dcaf0; --radius:6px; --shadow:0 1px 3px rgba(0,0,0,0.08); --orange:#fd7e14; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 1.5rem; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:var(--shadow); position:sticky; top:0; z-index:10; }
+  header h1 { font-size:1.1rem; font-weight:600; cursor:pointer; }
+  .mode-badge { padding:2px 8px; border-radius:10px; font-weight:600; font-size:0.7rem; text-transform:uppercase; }
+  .mode-real { background:#d1e7dd; color:var(--success); } .mode-mock { background:#fff3cd; color:#856404; }
+  main { max-width:1280px; margin:0 auto; padding:1.5rem; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:1rem; }
+  .card-header { padding:0.6rem 1rem; border-bottom:1px solid var(--border); font-weight:600; font-size:0.9rem; display:flex; align-items:center; justify-content:space-between; }
+  .card-body { padding:0.75rem 1rem; }
+  .btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.7rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); font-size:0.8rem; cursor:pointer; white-space:nowrap; }
+  .btn:hover { background:#e9ecef; } .btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); } .btn-primary:hover { background:#0b5ed7; }
+  .btn-success { background:var(--success); color:#fff; border-color:var(--success); } .btn-danger { background:var(--danger); color:#fff; border-color:var(--danger); }
+  .btn-sm { padding:0.15rem 0.4rem; font-size:0.72rem; } .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  select, input[type="text"], input[type="file"], textarea { padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.8rem; background:var(--surface); }
+  select:focus, input:focus, textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-light); }
+  table { width:100%; border-collapse:collapse; font-size:0.8rem; } th, td { padding:0.4rem 0.6rem; text-align:left; border-bottom:1px solid var(--border); }
+  th { background:#f8f9fa; font-weight:600; white-space:nowrap; } tr:hover { background:var(--primary-light); }
+  .empty-state { text-align:center; padding:2rem 1rem; color:var(--text-muted); }
+  .alert { padding:0.5rem 0.8rem; border-radius:var(--radius); font-size:0.8rem; margin:0.4rem 0; }
+  .alert-danger { background:#f8d7da; border:1px solid #f5c2c7; color:#842029; } .alert-success { background:#d1e7dd; border:1px solid #badbcc; color:#0f5132; }
+  .alert-info { background:#cff4fc; border:1px solid #b6effb; color:#055160; } .alert-warning { background:#fff3cd; border:1px solid #ffecb5; color:#856404; }
+  .form-row { display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:0.5rem; }
+  .form-group { display:flex; flex-direction:column; gap:0.2rem; } .form-group label { font-size:0.7rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; }
+  .hidden { display:none !important; } .flex-between { display:flex; justify-content:space-between; align-items:center; }
+  .routing-g { color:var(--success); font-weight:600; } .routing-b { color:var(--primary); font-weight:600; } .routing-o { color:var(--orange); font-weight:600; } .routing-r { color:var(--danger); font-weight:600; }
+  .stage-nav { display:flex; gap:0; margin-bottom:1rem; } .stage-item { padding:0.4rem 0.8rem; border:1px solid var(--border); font-size:0.75rem; cursor:pointer; background:var(--surface); }
+  .stage-item.active { background:var(--primary); color:#fff; border-color:var(--primary); } .stage-item.done { background:#d1e7dd; border-color:#badbcc; }
+  .stage-item:first-child { border-radius:var(--radius) 0 0 var(--radius); } .stage-item:last-child { border-radius:0 var(--radius) var(--radius) 0; }
+  .pending-row { background:#fffbe6; }
 </style>
 </head>
 <body>
-<header>
-  <h1 onclick="showHome()">&#9881; Pipeline Console</h1>
-  <div><span class="mode-badge mode-real" id="mode-badge">---</span> <span id="mode-label" style="font-size:0.75rem;color:var(--text-muted);"></span></div>
-</header>
+<header><h1 onclick="showHome()">&#9881; Pipeline Console</h1><div><span class="mode-badge mode-real" id="mode-badge">---</span> <span id="mode-label" style="font-size:0.75rem;color:var(--text-muted);"></span></div></header>
 <main id="main-content"></main>
-
 <script>
-// -- API helpers --
 const API = '/api/v1/console';
 async function get(url) { const r = await fetch(url); return r.ok ? r.json() : Promise.reject(await r.json()); }
 async function post(url, body) { const r = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return r.ok ? r.json() : Promise.reject(await r.json()); }
-function el(id) { return document.getElementById(id); }
 function esc(s) { if(!s) return ''; const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
-let STATE = { preview: null, batch: null, activeRun: null, activeReview: null, activeIntents: null, jobPoll: null };
+// STATE.activeRun is always a string (run_dir name). Metadata loaded separately.
+let STATE = { preview:null, batch:null, activeRun:null, runMeta:null, activeReview:null, activeIntents:null, jobPoll:null };
 
-// -- Init --
 document.addEventListener('DOMContentLoaded', () => { loadMode(); showHome(); });
+async function loadMode() { try { const h=await(await fetch('/api/v1/health')).json(); document.getElementById('mode-label').textContent = `Provider: ${h.llm_provider} | Model: ${h.llm_model}`; const b=document.getElementById('mode-badge'); b.textContent=h.llm_provider==='mock'?'MOCK':h.llm_provider.toUpperCase(); b.className='mode-badge '+(h.llm_provider==='mock'?'mode-mock':'mode-real'); } catch(e){} }
 
-async function loadMode() {
-  try { const h = await (await fetch('/api/v1/health')).json(); el('mode-label').textContent = `Provider: ${h.llm_provider} | Model: ${h.llm_model}`; const b = el('mode-badge'); b.textContent = h.llm_provider === 'mock' ? 'MOCK' : h.llm_provider.toUpperCase(); b.className = 'mode-badge ' + (h.llm_provider === 'mock' ? 'mode-mock' : 'mode-real'); } catch(e) {}
+function showHome() { stopPolling(); STATE.activeRun=null; STATE.runMeta=null; renderHome(); }
+function openRun(runDir) { STATE.activeRun = runDir; loadRunMeta(); }
+function stopPolling() { if(STATE.jobPoll){clearInterval(STATE.jobPoll);STATE.jobPoll=null;} }
+
+// -- Job polling --
+function pollJob(jobId, onDone) {
+  stopPolling();
+  STATE.jobPoll = setInterval(async () => {
+    try {
+      const r = await get(API+'/jobs/current');
+      if(r.status==='idle'){stopPolling();if(onDone)onDone();return;}
+      const j = r.job;
+      if(j.status==='succeeded'){
+        stopPolling();
+        handleJobResult(j);
+        if(onDone)onDone();
+      } else if(j.status==='failed'){
+        stopPolling();
+        alert('Job failed: '+(j.error||'unknown')+(j.error_detail?'\n'+j.error_detail:''));
+      }
+    } catch(e) { stopPolling(); }
+  }, 1000);
 }
 
-// -- Navigation --
-function showHome() { stopPolling(); STATE.activeRun = null; renderHome(); }
-function openRun(runDir) { STATE.activeRun = runDir; renderWorkspace(); }
-
-function stopPolling() { if (STATE.jobPoll) { clearInterval(STATE.jobPoll); STATE.jobPoll = null; } }
+function handleJobResult(j) {
+  if(!j.result) return;
+  const r = j.result;
+  if(r.status==='validation_failed'){
+    alert('Validation failed:\n'+(r.errors||[]).map(e=>e.field_path+': '+e.message).join('\n'));
+  } else if(r.status==='blocked'){
+    alert('Blocked: '+(r.block_reasons||[]).join(', '));
+  }
+}
 
 // ========== HOME ==========
 function renderHome() {
-  el('main-content').innerHTML = `
+  document.getElementById('main-content').innerHTML = `
 <div class="card"><div class="card-header">&#128196; Import Requirements</div><div class="card-body">
   <div class="form-row"><div class="form-group" style="flex:1"><label>Excel File</label><input type="file" id="import-file" accept=".xlsx,.xls"></div></div>
   <div class="form-row"><button class="btn btn-primary" onclick="doPreview()">Preview</button> <span id="preview-status" style="font-size:0.78rem;color:var(--text-muted);"></span></div>
   <div id="mapping-section" class="hidden" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border);">
-    <div class="form-row"><div class="form-group"><label>Sheet</label><select id="mapping-sheet"></select></div><div class="form-group"><label>Key Column</label><select id="mapping-key-col"></select></div><div class="form-group"><label>Description Column</label><select id="mapping-desc-col"></select></div><div class="form-group"><label>Function Column</label><select id="mapping-func-col"></select></div><div class="form-group"><label>Type Column</label><select id="mapping-type-col"></select></div></div>
-    <div class="form-row"><div class="form-group" style="flex:1"><label>Supplementary Columns (ctrl+click)</label><select id="mapping-supp-cols" multiple style="height:60px;"></select></div></div>
+    <div class="form-row"><div class="form-group"><label>Sheet</label><select id="mapping-sheet"></select></div><div class="form-group"><label>Key Column</label><select id="mapping-key-col"></select></div><div class="form-group"><label>Desc Column</label><select id="mapping-desc-col"></select></div><div class="form-group"><label>Func Column</label><select id="mapping-func-col"></select></div><div class="form-group"><label>Type Column</label><select id="mapping-type-col"></select></div></div>
+    <div class="form-row"><div class="form-group" style="flex:1"><label>Suppl Columns (ctrl+click)</label><select id="mapping-supp-cols" multiple style="height:60px;"></select></div></div>
     <button class="btn btn-success" onclick="doConfirm()">Confirm & Import</button> <span id="confirm-status" style="font-size:0.78rem;color:var(--text-muted);"></span>
   </div>
 </div></div>
@@ -108,370 +106,332 @@ function renderHome() {
 }
 
 async function doPreview() {
-  const f = el('import-file').files[0]; if (!f) { alert('Select a file.'); return; }
-  const s = el('preview-status'); s.textContent = 'Reading...';
-  const fd = new FormData(); fd.append('file', f);
-  try {
-    const r = await fetch(API+'/imports/preview', {method:'POST',body:fd}); if(!r.ok) throw new Error((await r.json()).error);
-    STATE.preview = await r.json(); s.textContent = `Ready: ${STATE.preview.sheets.length} sheet(s)`;
-    showMapping(STATE.preview);
-  } catch(e) { s.textContent = 'Error: '+e.message; }
+  const f=document.getElementById('import-file').files[0]; if(!f){alert('Select a file.');return;}
+  const s=document.getElementById('preview-status'); s.textContent='Reading...';
+  const fd=new FormData(); fd.append('file',f);
+  try{ const r=await fetch(API+'/imports/preview',{method:'POST',body:fd}); if(!r.ok)throw new Error((await r.json()).error); STATE.preview=await r.json(); s.textContent=`Ready: ${STATE.preview.sheets.length} sheet(s)`; showMapping(STATE.preview); }catch(e){s.textContent='Error: '+e.message;}
 }
-
 function showMapping(d) {
-  const sec = el('mapping-section'); sec.classList.remove('hidden');
-  const pop = (id, opts, blank) => { const sel = el(id); sel.innerHTML = blank ? '<option value="">(auto)</option>' : ''; opts.forEach(o => { const opt = document.createElement('option'); opt.value = o; opt.textContent = o; sel.appendChild(opt); }); };
-  pop('mapping-sheet', d.sheets); pop('mapping-key-col', d.columns, true); pop('mapping-desc-col', d.columns, true); pop('mapping-func-col', d.columns, true); pop('mapping-type-col', d.columns, true); pop('mapping-supp-cols', d.columns);
+  document.getElementById('mapping-section').classList.remove('hidden');
+  const pop=(id,opts,blank)=>{const sel=document.getElementById(id);sel.innerHTML=blank?'<option value="">(auto)</option>':'';opts.forEach(o=>{const opt=document.createElement('option');opt.value=o;opt.textContent=o;sel.appendChild(opt);});};
+  pop('mapping-sheet',d.sheets);pop('mapping-key-col',d.columns,true);pop('mapping-desc-col',d.columns,true);pop('mapping-func-col',d.columns,true);pop('mapping-type-col',d.columns,true);pop('mapping-supp-cols',d.columns);
 }
-
 async function doConfirm() {
-  if (!STATE.preview) { alert('Preview first.'); return; }
-  const s = el('confirm-status'); s.textContent = 'Importing...';
-  try {
-    const body = { tmp_path: STATE.preview.tmp_path, filename: STATE.preview.filename, sheet: el('mapping-sheet').value || null,
-      mapping: { requirement_key_col: el('mapping-key-col').value, description_col: el('mapping-desc-col').value, function_name_col: el('mapping-func-col').value, requirement_type_col: el('mapping-type-col').value, supplementary_info_cols: Array.from(el('mapping-supp-cols').selectedOptions).map(o=>o.value) } };
-    const batch = await post(API+'/imports/confirm', body);
-    s.textContent = `Imported ${batch.requirements_count} requirements.`; el('mapping-section').classList.add('hidden'); STATE.preview = null;
-    await loadBatches(); renderBatch(batch);
-  } catch(e) { s.textContent = 'Error: '+e.message; }
+  if(!STATE.preview){alert('Preview first.');return;}
+  const s=document.getElementById('confirm-status');s.textContent='Importing...';
+  try{const body={tmp_path:STATE.preview.tmp_path,filename:STATE.preview.filename,sheet:document.getElementById('mapping-sheet').value||null,mapping:{requirement_key_col:document.getElementById('mapping-key-col').value,description_col:document.getElementById('mapping-desc-col').value,function_name_col:document.getElementById('mapping-func-col').value,requirement_type_col:document.getElementById('mapping-type-col').value,supplementary_info_cols:Array.from(document.getElementById('mapping-supp-cols').selectedOptions).map(o=>o.value)}};const batch=await post(API+'/imports/confirm',body);s.textContent=`Imported ${batch.requirements_count} requirements.`;document.getElementById('mapping-section').classList.add('hidden');STATE.preview=null;await loadBatches();renderBatch(batch);}catch(e){s.textContent='Error: '+e.message;}
 }
-
 async function loadBatches() {
-  try {
-    const data = await get(API+'/imports'); const sel = el('batch-select'); sel.innerHTML = '';
-    (data.batches||[]).forEach(b => { const o = document.createElement('option'); o.value = b.id; o.textContent = `${b.id} — ${b.filename} (${b.requirements_count})`; sel.appendChild(o); });
-    if (data.batches && data.batches.length > 0) { try { const b = await get(API+'/imports/latest'); renderBatch(b); } catch(e) {} }
-  } catch(e) {}
+  try{const data=await get(API+'/imports');const sel=document.getElementById('batch-select');sel.innerHTML='';(data.batches||[]).forEach(b=>{const o=document.createElement('option');o.value=b.id;o.textContent=`${b.id} — ${b.filename} (${b.requirements_count})`;sel.appendChild(o);});if(data.batches&&data.batches.length>0){try{const b=await get(API+'/imports/latest');renderBatch(b);}catch(e){}}}catch(e){}
 }
+async function loadBatch(id){if(!id)return;try{renderBatch(await get(API+'/imports/'+id));}catch(e){}}
 
-async function loadBatch(id) { if(!id) return; try { renderBatch(await get(API+'/imports/'+id)); } catch(e) {} }
+async function renderBatch(batch) {
+  STATE.batch=batch; document.getElementById('batch-count').textContent=`${batch.requirements_count} requirements`;
+  const body=document.getElementById('requirements-body');
+  if(!batch.requirements||batch.requirements.length===0){body.innerHTML='<div class="empty-state">No requirements.</div>';return;}
 
-function renderBatch(batch) {
-  STATE.batch = batch; el('batch-count').textContent = `${batch.requirements_count} requirements`;
-  const body = el('requirements-body');
-  if (!batch.requirements || batch.requirements.length === 0) { body.innerHTML = '<div class="empty-state">No requirements.</div>'; return; }
-  let html = '<table><thead><tr><th>Key</th><th>Description</th><th>Function</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+  // Fetch runs to enrich requirement table with latest run status/time
+  let runsByKey = {};
+  try {
+    const runsData = await get(API+'/runs');
+    (runsData.runs||[]).forEach(r => {
+      const k = r.requirement_key;
+      if(!runsByKey[k] || r.created_at > runsByKey[k].created_at) runsByKey[k] = r;
+    });
+  } catch(e) {}
+
+  let html='<table><thead><tr><th>Key</th><th>Description</th><th>Function</th><th>Type</th><th>Latest Run</th><th>Run Time</th><th>Actions</th></tr></thead><tbody>';
   batch.requirements.forEach(req => {
-    html += `<tr><td><code>${esc(req.requirement_key)}</code></td><td title="${esc(req.description)}">${esc((req.description||'').substring(0,80))}${(req.description||'').length>80?'...':''}</td><td>${esc(req.function_name||'—')}</td><td>${esc(req.requirement_type||'—')}</td><td>${esc(req.latest_run_status||'—')}</td><td><button class="btn btn-sm btn-primary" onclick="startRun('${esc(req.requirement_key)}')">Start Run</button></td></tr>`;
+    const run = runsByKey[req.requirement_key];
+    const status = run ? run.status : '—';
+    const runTime = run ? (run.created_at||'').substring(0,16) : '—';
+    html+=`<tr><td><code>${esc(req.requirement_key)}</code></td><td title="${esc(req.description)}">${esc((req.description||'').substring(0,60))}${(req.description||'').length>60?'...':''}</td><td>${esc(req.function_name||'—')}</td><td>${esc(req.requirement_type||'—')}</td><td>${esc(status)}</td><td>${esc(runTime)}</td><td>${run?`<button class="btn btn-sm" onclick="openRun('${esc(run.run_dir)}')">Open Latest Run</button> `:''}<button class="btn btn-sm btn-primary" onclick="startRun('${esc(req.requirement_key)}')">Start New Run</button></td></tr>`;
   });
-  html += '</tbody></table>'; body.innerHTML = html;
+  html+='</tbody></table>'; body.innerHTML=html;
 }
 
 async function startRun(reqKey) {
-  if (!STATE.batch) { alert('No import batch loaded.'); return; }
-  try {
-    const r = await post(API+'/runs/start', {requirement_key: reqKey, batch_id: STATE.batch.id});
-    alert('Start Run job submitted. Polling for completion...');
-    pollJob(r.job.id, () => {
-      // After job completes, find the run and open it
-      fetchRunAndOpen(reqKey);
-    });
-  } catch(e) { alert('Start Run failed: '+(e.error||e.message||'unknown')); }
+  if(!STATE.batch){alert('No import batch loaded.');return;}
+  try{const r=await post(API+'/runs/start',{requirement_key:reqKey,batch_id:STATE.batch.id});alert('Start Run submitted. Polling...');pollJob(r.job.id,()=>{fetchRunAndOpen(reqKey);});}catch(e){alert('Start Run failed: '+(e.error||e.message||'unknown'));}
 }
-
-async function fetchRunAndOpen(reqKey) {
-  try {
-    const data = await get(API+'/runs');
-    const run = (data.runs||[]).find(r => r.requirement_key === reqKey);
-    if (run) { openRun(run.run_dir); }
-    else { alert('Run created but not found in listing. Reload runs list.'); }
-  } catch(e) { alert('Failed to find run: '+e.message); }
-}
-
-// ========== JOB POLLING ==========
-function pollJob(jobId, onSuccess) {
-  stopPolling();
-  STATE.jobPoll = setInterval(async () => {
-    try {
-      const r = await get(API+'/jobs/current');
-      if (r.status === 'idle') { stopPolling(); if (onSuccess) onSuccess(); return; }
-      const j = r.job;
-      if (j.status === 'succeeded') { stopPolling(); if (onSuccess) onSuccess(); }
-      else if (j.status === 'failed') { stopPolling(); alert('Job failed: '+(j.error||'unknown')); }
-      // Update inline status
-      const elm = document.getElementById('job-status-'+j.id);
-      if (elm) elm.textContent = j.status;
-    } catch(e) { stopPolling(); }
-  }, 1000);
+async function fetchRunAndOpen(reqKey){
+  try{const data=await get(API+'/runs');const run=(data.runs||[]).find(r=>r.requirement_key===reqKey);if(run)openRun(run.run_dir);else alert('Run created. Reload to see it.');}catch(e){alert('Failed to find run: '+e.message);}
 }
 
 // ========== WORKSPACE ==========
-function renderWorkspace() {
-  stopPolling(); loadRunWorkspace();
+async function loadRunMeta() {
+  try { STATE.runMeta = await get(API+'/runs/'+STATE.activeRun); } catch(e) { alert('Run not found.'); showHome(); return; }
+  renderWorkspace();
 }
 
-async function loadRunWorkspace() {
-  try { STATE.activeRun = await get(API+'/runs/'+STATE.activeRun); } catch(e) { alert('Run not found.'); showHome(); return; }
-  const r = STATE.activeRun;
+function renderWorkspace() {
+  stopPolling();
+  const r = STATE.runMeta;
+  if(!r){document.getElementById('main-content').innerHTML='<div class="card"><div class="card-body">Loading run...</div></div>';return;}
 
-  let stages = `<div class="stage-nav">
-    <div class="stage-item ${r.status==='new'?'active':''}">New</div>
-    <div class="stage-item ${r.status==='clarification_ready'||r.status==='clarification_blocked'?'active':(r.status!=='new'?'done':'')}">Clarification</div>
-    <div class="stage-item ${r.status==='intent_ready'?'active':(r.status==='cases_ready'||r.status==='evaluated'?'done':'')}">Intent Review</div>
-    <div class="stage-item ${r.status==='cases_ready'?'active':(r.status==='evaluated'?'done':'')}">Cases</div>
-    <div class="stage-item ${r.status==='evaluated'?'active':''}">Results</div>
-  </div>`;
-
-  let actions = `<div class="card-body flex-between">
-    <span>Req: <code>${esc(r.requirement_key)}</code> | Status: <strong>${esc(r.status)}</strong></span>
-    <span>
-      <button class="btn btn-sm" onclick="showHome()">&#8592; Home</button>
-      <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button>
-      <button class="btn btn-sm" onclick="importMemory()">Import Memory</button>
-    </span>
-  </div>`;
+  const statusOrder = ['new','clarification_ready','clarification_blocked','intent_ready','cases_ready','evaluated'];
+  const currentIdx = statusOrder.indexOf(r.status);
+  let stages = '<div class="stage-nav">';
+  ['New','Clarification','Intent Review','Cases','Results'].forEach((label,i) => {
+    const idx = [0,1,2,3,4][i]; // map: new=0, clarification_ready/blocked=1, intent_ready=2, cases_ready=3, evaluated=4
+    const realIdx = i===0?0:i===1?1:i===2?2:i===3?3:4;
+    let cls = '';
+    if(currentIdx>=0){
+      if(currentIdx===realIdx||(i===1&&(r.status==='clarification_ready'||r.status==='clarification_blocked'))) cls='active';
+      else if(currentIdx>realIdx) cls='done';
+    }
+    stages += `<div class="stage-item ${cls}">${label}</div>`;
+  });
+  stages += '</div>';
 
   let body = '';
-  if (r.status === 'new' || r.status === 'clarification_ready') {
-    body = await renderClarificationSection();
-  } else if (r.status === 'clarification_blocked') {
-    body = `<div class="alert alert-danger">Run is blocked. Return to Clarification Review to resolve block decisions.</div>` + await renderClarificationSection();
-  } else if (r.status === 'intent_ready') {
-    body = await renderIntentSection();
-  } else if (r.status === 'cases_ready' || r.status === 'evaluated') {
-    body = await renderResultsSection();
+  if(r.status==='new'||r.status==='clarification_ready'||r.status==='clarification_blocked'){
+    body = renderClarificationSection();
+  } else if(r.status==='intent_ready'){
+    body = renderIntentSection();
+  } else if(r.status==='cases_ready'||r.status==='evaluated'){
+    body = renderResultsSection();
   } else {
-    body = `<div class="card-body"><p>Run status: ${esc(r.status)}</p></div>`;
+    body = `<div class="card"><div class="card-body"><p>Status: ${esc(r.status)}</p></div></div>`;
   }
 
-  el('main-content').innerHTML = `<div class="card"><div class="card-header">Run: ${esc(r.run_dir)}</div>${actions}${stages}</div>${body}`;
+  document.getElementById('main-content').innerHTML = `
+<div class="card"><div class="card-header">Run: ${esc(r.run_dir)}</div>
+  <div class="card-body flex-between">
+    <span>Req: <code>${esc(r.requirement_key)}</code> | Status: <strong>${esc(r.status)}</strong></span>
+    <span><button class="btn btn-sm" onclick="showHome()">&#8592; Home</button>
+    <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button>
+    <button class="btn btn-sm" onclick="importMemory()">Import Memory</button>
+    <button class="btn btn-sm btn-danger" onclick="showRegenerate()">Regenerate</button></span>
+  </div>${stages}</div>${body}`;
 
-  // Also poll for job status
-  try { const jr = await get(API+'/jobs/current'); if (jr.status === 'active' && jr.job.run_dir === r.run_dir) { el('main-content').insertAdjacentHTML('afterbegin', `<div class="alert alert-info" id="job-status-${jr.job.id}">Job: ${jr.job.name} — ${jr.job.status}</div>`); pollJob(jr.job.id, () => loadRunWorkspace()); } } catch(e) {}
+  // Poll for active jobs on this run
+  get(API+'/jobs/current').then(jr=>{if(jr.status==='active'&&jr.job.run_dir===r.run_dir){const el=document.createElement('div');el.className='alert alert-info';el.id='job-status-'+jr.job.id;el.textContent=`Job: ${jr.job.name} — ${jr.job.status}`;document.getElementById('main-content').insertBefore(el,document.getElementById('main-content').firstChild);pollJob(jr.job.id,()=>{loadRunMeta();});}}).catch(()=>{});
+}
+
+// -- Regenerate UI --
+async function showRegenerate() {
+  const r = STATE.runMeta; if(!r) return;
+  const stage = r.status==='clarification_ready'||r.status==='clarification_blocked'?'clarification':r.status==='intent_ready'?'intents':'cases';
+  try {
+    // Call without confirm to get affected artifacts list
+    const info = await post(API+'/runs/'+r.run_dir+'/regenerate', {stage, confirm:false});
+    if(info.confirmation_required){
+      const artifacts = (info.affected_artifacts||[]).join(', ');
+      if(!confirm(`Regenerate will archive these downstream artifacts:\n${artifacts}\n\nProceed?`)) return;
+    }
+    // Now confirm
+    const result = await post(API+'/runs/'+r.run_dir+'/regenerate', {stage, confirm:true});
+    if(result.status==='started'){
+      alert('Regenerate job started. Polling for completion...');
+      pollJob(result.job.id, () => { loadRunMeta(); });
+    }
+  } catch(e) { alert('Regenerate failed: '+(e.error||e.message)); }
 }
 
 // -- Clarification Review --
-async function renderClarificationSection() {
-  let data;
-  try { data = await get(API+'/runs/'+STATE.activeRun.run_dir+'/clarification'); } catch(e) {
-    return '<div class="card"><div class="card-body"><p>No clarification review yet. Start a run first.</p></div></div>';
-  }
+function renderClarificationSection() {
+  // Load data async and re-render
+  loadAndRenderClarification();
+  return '<div class="card"><div class="card-body"><p>Loading clarification review...</p></div></div>';
+}
+
+async function loadAndRenderClarification() {
+  const r = STATE.runMeta; if(!r) return;
+  let data, reasonCodes;
+  try { data = await get(API+'/runs/'+r.run_dir+'/clarification'); reasonCodes = await get(API+'/reason-codes?review_type=clarification'); } catch(e) { return; }
   STATE.activeReview = data;
-
-  // Also fetch reason codes
-  let reasonCodes;
-  try { reasonCodes = await get(API+'/reason-codes?review_type=clarification'); } catch(e) { reasonCodes = {decisions:[],reason_codes:[],decision_requirements:{}}; }
-
-  const decisions = data.review.decisions || [];
-  const amb = data.review.decomposition?.ambiguities || [];
-  const ambById = {}; amb.forEach(a => ambById[a.item_id] = a);
+  const decisions = data.review.decisions||[];
+  const amb = data.review.decomposition?.ambiguities||[];
+  const ambById={};amb.forEach(a=>ambById[a.item_id]=a);
 
   let rows = decisions.map(d => {
-    const a = ambById[d.item_id] || {};
-    const conf = d.confidence_before_review || a.confidence_drivers?.overall || 0.5;
-    const color = conf >= 0.85 ? 'g' : conf >= 0.65 ? 'b' : conf >= 0.40 ? 'o' : 'r';
-    const decided = !!(d.decision||'').trim();
-
-    let decOptions = reasonCodes.decisions.map(dec => `<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
-    let rcOptions = reasonCodes.reason_codes.map(rc => `<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
-
-    return `<tr class="${decided?'':'pending-row'}" style="${decided?'':'background:#fffbe6'}">
-      <td><code>${esc(d.item_id)}</code></td>
-      <td><span class="routing-${color}">&#9679;</span></td>
-      <td>${esc(a.ambiguity_type||'')}</td>
-      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.affected_text||'')}">${esc((a.affected_text||'').substring(0,60))}</td>
-      <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)" class="dec-${esc(d.item_id)}">${decOptions}</select></td>
-      <td><select multiple onchange="updateReasonCodes('${esc(d.item_id)}', Array.from(this.selectedOptions).map(o=>o.value))" style="height:40px;width:120px;" class="rc-${esc(d.item_id)}">${rcOptions}</select></td>
-      <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;" class="rt-${esc(d.item_id)}"></td>
-      <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;" class="cv-${esc(d.item_id)}"></td>
+    const a=ambById[d.item_id]||{};
+    const conf=d.confidence_before_review||(a.confidence_drivers?.overall)||0.5;
+    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
+    const decided=!!(d.decision||'').trim();
+    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
+    let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
+    return `<tr class="${decided?'':'pending-row'}">
+      <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.affected_text||'')}">${esc((a.affected_text||'').substring(0,50))}</td>
+      <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
+      <td><select multiple onchange="updateReasonCodes('${esc(d.item_id)}',Array.from(this.selectedOptions).map(o=>o.value))" style="height:40px;width:100px;">${rcOpts}</select></td>
+      <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
+      <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
     </tr>`;
   }).join('');
 
-  return `<div class="card"><div class="card-header flex-between">&#128221; Clarification Review
-    <span><button class="btn btn-sm" onclick="acceptRecs()">Accept All Recs</button>
-    <button class="btn btn-sm btn-primary" onclick="saveDraft()">Save Draft</button>
-    <button class="btn btn-sm btn-success" onclick="saveAndAdvance()">Save & Prep Intent Review</button></span></div>
-    <div class="card-body">
-    <div id="clarification-msg"></div>
-    <table><thead><tr><th>Item</th><th style="width:20px"></th><th>Type</th><th>Affected Text</th><th>Decision</th><th>Reason Codes</th><th>Reason Text</th><th>Clarified Value</th></tr></thead><tbody>${rows}</tbody></table>
-  </div></div>`;
+  // Find the card-body of the clarification card and replace
+  const main = document.getElementById('main-content');
+  // Find the last card and replace it
+  const cards = main.querySelectorAll('.card');
+  const lastCard = cards[cards.length-1];
+  if(lastCard){
+    lastCard.innerHTML = `<div class="card-header flex-between">&#128221; Clarification Review
+      <span><button class="btn btn-sm" onclick="acceptRecs()">Accept All Recs</button>
+      <button class="btn btn-sm btn-primary" onclick="saveDraft()">Save Draft</button>
+      <button class="btn btn-sm btn-success" onclick="saveAndAdvance()">Save & Prep Intent Review</button></span></div>
+      <div class="card-body"><div id="clarification-msg"></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th></th><th>Type</th><th>Affected</th><th>Decision</th><th>Reason Codes</th><th>Reason Text</th><th>Clarified</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
+  }
 }
 
-function updateDecision(id, value) { if (!STATE.activeReview) return; const d = STATE.activeReview.review.decisions.find(d=>d.item_id===id); if(d) d.decision = value; }
-function updateReasonCodes(id, values) { if (!STATE.activeReview) return; const d = STATE.activeReview.review.decisions.find(d=>d.item_id===id); if(d) d.reason_codes = values; }
-function updateReasonText(id, value) { if (!STATE.activeReview) return; const d = STATE.activeReview.review.decisions.find(d=>d.item_id===id); if(d) d.reason_text = value; }
-function updateClarifiedValue(id, value) { if (!STATE.activeReview) return; const d = STATE.activeReview.review.decisions.find(d=>d.item_id===id); if(d) d.clarified_value = value; }
+function updateDecision(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.decision=v;}
+function updateReasonCodes(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_codes=v;}
+function updateReasonText(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_text=v;}
+function updateClarifiedValue(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.clarified_value=v;}
 
 async function acceptRecs() {
-  const msg = el('clarification-msg');
-  try {
-    const result = await post(API+'/runs/'+STATE.activeRun.run_dir+'/clarification/accept-recommendations', {confirm_high_risk: false});
-    if (result.requires_confirmation) {
-      if (confirm(`${result.message}\n\nClick OK to accept ALL including orange/red items.`)) {
-        const r2 = await post(API+'/runs/'+STATE.activeRun.run_dir+'/clarification/accept-recommendations', {confirm_high_risk: true});
+  const msg=document.getElementById('clarification-msg'); if(!msg) return;
+  try{
+    const result=await post(API+'/runs/'+STATE.activeRun+'/clarification/accept-recommendations',{confirm_high_risk:false});
+    if(result.requires_confirmation){
+      if(confirm(`${result.message}\n\nOK to accept ALL including orange/red items.`)){
+        const r2=await post(API+'/runs/'+STATE.activeRun+'/clarification/accept-recommendations',{confirm_high_risk:true});
         applyProposed(r2.proposed_decisions);
-        msg.innerHTML = `<div class="alert alert-info">${r2.filled} decisions filled (including ${r2.high_risk_accepted} high-risk). Use Save Draft to persist.</div>`;
-      } else {
+        msg.innerHTML=`<div class="alert alert-info">${r2.filled} decisions filled (incl. ${r2.high_risk_accepted} high-risk). <strong>Use Save Draft to persist.</strong></div>`;
+      }else{
         applyProposed(result.proposed_decisions);
-        msg.innerHTML = `<div class="alert alert-info">${result.filled} filled, ${result.high_risk_skipped} high-risk skipped. Use Save Draft to persist.</div>`;
+        msg.innerHTML=`<div class="alert alert-info">${result.filled} filled, ${result.high_risk_skipped} high-risk skipped. <strong>Use Save Draft to persist.</strong></div>`;
       }
-    } else {
+    }else{
       applyProposed(result.proposed_decisions);
-      msg.innerHTML = `<div class="alert alert-info">${result.filled} filled. Use Save Draft to persist.</div>`;
+      msg.innerHTML=`<div class="alert alert-info">${result.filled} filled. <strong>Use Save Draft to persist.</strong></div>`;
     }
-  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">Error: ${e.error||e.message}</div>`; }
+  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
 }
 
 function applyProposed(proposed) {
-  if (!proposed || !STATE.activeReview) return;
-  proposed.forEach(p => {
-    const d = STATE.activeReview.review.decisions.find(d=>d.item_id===p.item_id);
-    if (d) d.decision = p.decision;
+  if(!proposed||!STATE.activeReview)return;
+  proposed.forEach(p=>{
+    const d=STATE.activeReview.review.decisions.find(d=>d.item_id===p.item_id);
+    if(d)d.decision=p.decision;
   });
-  loadRunWorkspace(); // re-render
+  // Re-render the table without reloading from server (preserves other local edits)
+  loadAndRenderClarification();
 }
 
 async function saveDraft() {
-  const msg = el('clarification-msg');
-  try {
-    const decisions = (STATE.activeReview.review.decisions||[]).map(d => ({
-      item_id: d.item_id, decision: d.decision||'', reason_codes: d.reason_codes||[], reason_text: d.reason_text||'',
-      clarified_value: d.clarified_value||'', edited_content: d.edited_content||{}
-    }));
-    const result = await post(API+'/runs/'+STATE.activeRun.run_dir+'/clarification/draft', {decisions});
-    msg.innerHTML = `<div class="alert alert-success">Draft saved.</div>`;
-  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">Error: ${e.error||e.message}</div>`; }
+  const msg=document.getElementById('clarification-msg'); if(!msg) return;
+  try{
+    const decisions=(STATE.activeReview.review.decisions||[]).map(d=>({item_id:d.item_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',clarified_value:d.clarified_value||'',edited_content:d.edited_content||{}}));
+    await post(API+'/runs/'+STATE.activeRun+'/clarification/draft',{decisions});
+    msg.innerHTML='<div class="alert alert-success">Draft saved.</div>';
+  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
 }
 
 async function saveAndAdvance() {
-  const msg = el('clarification-msg'); msg.innerHTML = `<div class="alert alert-info">Saving and advancing...</div>`;
-  try {
-    const decisions = (STATE.activeReview.review.decisions||[]).map(d => ({
-      item_id: d.item_id, decision: d.decision||'', reason_codes: d.reason_codes||[], reason_text: d.reason_text||'',
-      clarified_value: d.clarified_value||'', edited_content: d.edited_content||{}
-    }));
-    const result = await post(API+'/runs/'+STATE.activeRun.run_dir+'/clarification/advance', {decisions});
-    if (result.status === 'started') {
-      msg.innerHTML = `<div class="alert alert-info">Job started. Polling...</div>`;
-      pollJob(result.job.id, () => loadRunWorkspace());
-    } else if (result.blocked) {
-      msg.innerHTML = `<div class="alert alert-danger">Blocked: ${(result.block_reasons||[]).join(', ')}</div>`;
-      loadRunWorkspace();
-    } else if (result.errors) {
-      msg.innerHTML = `<div class="alert alert-danger">${result.errors.map(e => esc(e.field_path+': '+e.message)).join('<br>')}</div>`;
-    } else {
-      msg.innerHTML = `<div class="alert alert-success">Advanced to Case Intent Review.</div>`;
-      loadRunWorkspace();
+  const msg=document.getElementById('clarification-msg'); if(!msg) return;
+  msg.innerHTML='<div class="alert alert-info">Saving and advancing...</div>';
+  try{
+    const decisions=(STATE.activeReview.review.decisions||[]).map(d=>({item_id:d.item_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',clarified_value:d.clarified_value||'',edited_content:d.edited_content||{}}));
+    const result=await post(API+'/runs/'+STATE.activeRun+'/clarification/advance',{decisions});
+    if(result.status==='started'){
+      msg.innerHTML='<div class="alert alert-info">Job started. Polling...</div>';
+      pollJob(result.job.id, ()=>{loadRunMeta();});
+    }else if(result.blocked){
+      msg.innerHTML=`<div class="alert alert-danger">Blocked: ${(result.block_reasons||[]).join(', ')}</div>`;
+      loadRunMeta();
+    }else if(result.errors){
+      msg.innerHTML=`<div class="alert alert-danger">${result.errors.map(e=>esc(e.field_path+': '+e.message)).join('<br>')}</div>`;
+    }else if(result.reused){
+      msg.innerHTML='<div class="alert alert-success">Unchanged — reused existing downstream artifacts.</div>';
+      loadRunMeta();
+    }else{
+      msg.innerHTML='<div class="alert alert-success">Advanced to Case Intent Review.</div>';
+      loadRunMeta();
     }
-  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">Error: ${e.error||e.message}</div>`; }
+  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
 }
 
 // -- Case Intent Review --
-async function renderIntentSection() {
-  let data;
-  try { data = await get(API+'/runs/'+STATE.activeRun.run_dir+'/intents'); } catch(e) {
-    return '<div class="card"><div class="card-body"><p>No intent review yet.</p></div></div>';
-  }
-  STATE.activeIntents = data;
+function renderIntentSection() {
+  loadAndRenderIntents();
+  return '<div class="card"><div class="card-body"><p>Loading intent review...</p></div></div>';
+}
 
-  let reasonCodes;
-  try { reasonCodes = await get(API+'/reason-codes?review_type=case_intent'); } catch(e) { reasonCodes = {decisions:[],reason_codes:[],decision_requirements:{}}; }
+async function loadAndRenderIntents() {
+  const r=STATE.runMeta; if(!r) return;
+  let data,reasonCodes;
+  try{data=await get(API+'/runs/'+r.run_dir+'/intents');reasonCodes=await get(API+'/reason-codes?review_type=case_intent');}catch(e){return;}
+  STATE.activeIntents=data;
+  const decisions=data.review.decisions||[];
+  const intents=data.review.plan?.intents||[];
+  const intentById={};intents.forEach(i=>intentById[i.intent_id]=i);
 
-  const decisions = data.review.decisions || [];
-  const intents = data.review.plan?.intents || [];
-  const intentById = {}; intents.forEach(i => intentById[i.intent_id] = i);
-
-  let rows = decisions.map(d => {
-    const i = intentById[d.intent_id] || {};
-    const conf = d.confidence_before_review || i.confidence_score || 0.5;
-    const color = conf >= 0.85 ? 'g' : conf >= 0.65 ? 'b' : conf >= 0.40 ? 'o' : 'r';
-    const decided = !!(d.decision||'').trim();
-    let decOpts = reasonCodes.decisions.map(dec => `<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
-
-    return `<tr style="${decided?'':'background:#fffbe6'}">
-      <td><code>${esc(d.intent_id)}</code></td>
-      <td><span class="routing-${color}">&#9679;</span></td>
-      <td>${esc(i.coverage_dimension||'')}</td>
-      <td>${esc((i.intent_text||'').substring(0,80))}</td>
-      <td><select onchange="updateIntentDecision('${esc(d.intent_id)}',this.value)">${decOpts}</select></td>
-    </tr>`;
+  let rows=decisions.map(d=>{
+    const i=intentById[d.intent_id]||{};
+    const conf=d.confidence_before_review||i.confidence_score||0.5;
+    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
+    const decided=!!(d.decision||'').trim();
+    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
+    return `<tr class="${decided?'':'pending-row'}"><td><code>${esc(d.intent_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(i.coverage_dimension||'')}</td><td>${esc((i.intent_text||'').substring(0,80))}</td><td><select onchange="updateIntentDecision('${esc(d.intent_id)}',this.value)">${decOpts}</select></td></tr>`;
   }).join('');
 
-  return `<div class="card"><div class="card-header flex-between">&#128221; Case Intent Review
-    <span><button class="btn btn-sm btn-primary" onclick="saveIntentDraft()">Save Draft</button>
-    <button class="btn btn-sm btn-success" onclick="saveAndGenerate()">Save & Generate Cases</button></span></div>
-    <div class="card-body"><div id="intent-msg"></div>
-    <table><thead><tr><th>Intent</th><th style="width:20px"></th><th>Dimension</th><th>Intent Text</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
-  </div></div>`;
+  const cards=document.getElementById('main-content').querySelectorAll('.card');
+  const lastCard=cards[cards.length-1];
+  if(lastCard){
+    lastCard.innerHTML=`<div class="card-header flex-between">&#128221; Case Intent Review
+      <span><button class="btn btn-sm btn-primary" onclick="saveIntentDraft()">Save Draft</button>
+      <button class="btn btn-sm btn-success" onclick="saveAndGenerate()">Save & Generate Cases</button></span></div>
+      <div class="card-body"><div id="intent-msg"></div>
+      <table><thead><tr><th>Intent</th><th></th><th>Dimension</th><th>Intent Text</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  }
 }
 
-function updateIntentDecision(id, value) { if (!STATE.activeIntents) return; const d = STATE.activeIntents.review.decisions.find(d=>d.intent_id===id); if(d) d.decision = value; }
+function updateIntentDecision(id,v){if(!STATE.activeIntents)return;const d=STATE.activeIntents.review.decisions.find(d=>d.intent_id===id);if(d)d.decision=v;}
 
-async function saveIntentDraft() {
-  const msg = el('intent-msg');
-  try {
-    const decisions = (STATE.activeIntents.review.decisions||[]).map(d => ({
-      intent_id: d.intent_id, decision: d.decision||'', reason_codes: d.reason_codes||[], reason_text: d.reason_text||'',
-      revised_intent_text: d.revised_intent_text||'', merge_target_id: d.merge_target_id||'', split_children: d.split_children||[]
-    }));
-    await post(API+'/runs/'+STATE.activeRun.run_dir+'/intents/draft', {decisions});
-    msg.innerHTML = `<div class="alert alert-success">Draft saved.</div>`;
-  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">${e.error||e.message}</div>`; }
+async function saveIntentDraft(){
+  const msg=document.getElementById('intent-msg');if(!msg)return;
+  try{const decisions=(STATE.activeIntents.review.decisions||[]).map(d=>({intent_id:d.intent_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',revised_intent_text:d.revised_intent_text||'',merge_target_id:d.merge_target_id||'',split_children:d.split_children||[]}));await post(API+'/runs/'+STATE.activeRun+'/intents/draft',{decisions});msg.innerHTML='<div class="alert alert-success">Draft saved.</div>';}catch(e){msg.innerHTML=`<div class="alert alert-danger">${e.error||e.message}</div>`;}
 }
 
-async function saveAndGenerate() {
-  const msg = el('intent-msg'); msg.innerHTML = `<div class="alert alert-info">Generating cases...</div>`;
-  try {
-    const decisions = (STATE.activeIntents.review.decisions||[]).map(d => ({
-      intent_id: d.intent_id, decision: d.decision||'', reason_codes: d.reason_codes||[], reason_text: d.reason_text||'',
-      revised_intent_text: d.revised_intent_text||'', merge_target_id: d.merge_target_id||'', split_children: d.split_children||[]
-    }));
-    const result = await post(API+'/runs/'+STATE.activeRun.run_dir+'/intents/generate', {decisions});
-    if (result.status === 'started') {
-      msg.innerHTML = `<div class="alert alert-info">Job started. Polling...</div>`;
-      pollJob(result.job.id, () => loadRunWorkspace());
-    } else if (result.errors) {
-      msg.innerHTML = `<div class="alert alert-danger">${result.errors.map(e => esc(e.field_path+': '+e.message)).join('<br>')}</div>`;
-    }
-  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">${e.error||e.message}</div>`; }
+async function saveAndGenerate(){
+  const msg=document.getElementById('intent-msg');if(!msg)return;
+  msg.innerHTML='<div class="alert alert-info">Generating cases...</div>';
+  try{const decisions=(STATE.activeIntents.review.decisions||[]).map(d=>({intent_id:d.intent_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',revised_intent_text:d.revised_intent_text||'',merge_target_id:d.merge_target_id||'',split_children:d.split_children||[]}));const result=await post(API+'/runs/'+STATE.activeRun+'/intents/generate',{decisions});
+    if(result.status==='started'){msg.innerHTML='<div class="alert alert-info">Job started. Polling...</div>';pollJob(result.job.id,()=>{loadRunMeta();});}
+    else if(result.reused){msg.innerHTML='<div class="alert alert-success">Unchanged — reused existing downstream artifacts.</div>';loadRunMeta();}
+    else if(result.errors){msg.innerHTML=`<div class="alert alert-danger">${result.errors.map(e=>esc(e.field_path+': '+e.message)).join('<br>')}</div>`;}
+  }catch(e){msg.innerHTML=`<div class="alert alert-danger">${e.error||e.message}</div>`;}
 }
 
 // -- Results --
-async function renderResultsSection() {
-  let results;
-  try { results = await get(API+'/runs/'+STATE.activeRun.run_dir+'/results'); } catch(e) {
-    return `<div class="card"><div class="card-body">No results available.</div></div>`;
+function renderResultsSection() {
+  loadAndRenderResults();
+  return '<div class="card"><div class="card-body"><p>Loading results...</p></div></div>';
+}
+
+async function loadAndRenderResults() {
+  const r=STATE.runMeta;if(!r)return;
+  let results; try{results=await get(API+'/runs/'+r.run_dir+'/results');}catch(e){return;}
+  const cases=results.cases||[];
+  const eval_=results.evaluation||{};
+  let caseRows=cases.map(c=>`<tr><td><code>${esc(c.case_id)}</code></td><td>${esc(c.title||'')}</td><td>${esc(c.coverage_dimension||'')}</td><td>${esc((c.objective||'').substring(0,60))}</td><td>${(c.steps||[]).length} steps</td></tr>`).join('');
+  let evalHtml=eval_.passed!==undefined?`<div class="alert ${eval_.failed>0?'alert-danger':'alert-success'}">Evaluation: ${eval_.passed||0} passed, ${eval_.failed||0} failed</div>`:'';
+  const cards=document.getElementById('main-content').querySelectorAll('.card');
+  const lastCard=cards[cards.length-1];
+  if(lastCard){
+    lastCard.innerHTML=`<div class="card-header">&#128202; Results <span style="font-size:0.75rem;color:var(--text-muted);">Read-only</span></div>
+      <div class="card-body">${evalHtml}<p style="font-size:0.75rem;color:var(--text-muted);">${results.note||''}</p>
+      <table><thead><tr><th>Case ID</th><th>Title</th><th>Dimension</th><th>Objective</th><th>Steps</th></tr></thead><tbody>${caseRows||'<tr><td colspan="5">No cases generated.</td></tr>'}</tbody></table>
+    </div>`;
   }
-  const cases = results.cases || [];
-  const eval = results.evaluation || {};
-
-  let caseRows = cases.map(c => `<tr>
-    <td><code>${esc(c.case_id)}</code></td>
-    <td>${esc(c.title||'')}</td>
-    <td>${esc(c.coverage_dimension||'')}</td>
-    <td>${esc((c.objective||'').substring(0,60))}</td>
-    <td>${(c.steps||[]).length} steps</td>
-  </tr>`).join('');
-
-  let evalHtml = '';
-  if (eval.passed !== undefined) {
-    evalHtml = `<div class="alert ${eval.failed>0?'alert-danger':'alert-success'}">Evaluation: ${eval.passed||0} passed, ${eval.failed||0} failed</div>`;
-  }
-
-  return `<div class="card"><div class="card-header">&#128202; Results <span style="font-size:0.75rem;color:var(--text-muted);">Read-only</span></div>
-    <div class="card-body">
-    ${evalHtml}
-    <p style="font-size:0.75rem;color:var(--text-muted);">${results.note||''}</p>
-    <table><thead><tr><th>Case ID</th><th>Title</th><th>Dimension</th><th>Objective</th><th>Steps</th></tr></thead><tbody>${caseRows||'<tr><td colspan="5">No cases generated.</td></tr>'}</tbody></table>
-  </div></div>`;
 }
 
 async function exportRun() {
-  try {
-    const r = await get(API+'/runs/'+STATE.activeRun.run_dir+'/export');
-    const blob = new Blob([JSON.stringify(r, null, 2)], {type:'application/json'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = STATE.activeRun.run_dir+'_export.json'; a.click();
-    URL.revokeObjectURL(url);
-  } catch(e) { alert('Export failed: '+e.message); }
+  const r=STATE.runMeta;if(!r)return;
+  try{const data=await get(API+'/runs/'+r.run_dir+'/export');const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=r.run_dir+'_export.json';a.click();URL.revokeObjectURL(url);}catch(e){alert('Export failed: '+e.message);}
 }
 
 async function importMemory() {
-  if (!confirm('Import Review Memory for this run? This is explicit and never automatic.')) return;
-  try {
-    const r = await post(API+'/runs/'+STATE.activeRun.run_dir+'/import-memory');
-    alert('Memory imported: '+(r.message||'success'));
-  } catch(e) { alert('Import failed: '+(e.error||e.message)); }
+  const r=STATE.runMeta;if(!r)return;
+  if(!confirm('Import Review Memory for this run? This is explicit and never automatic.'))return;
+  try{const result=await post(API+'/runs/'+r.run_dir+'/import-memory');alert('Memory imported: '+(result.message||'success'));}catch(e){alert('Import failed: '+(e.error||e.message));}
 }
 </script>
 </body>

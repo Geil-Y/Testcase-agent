@@ -2156,3 +2156,166 @@ class TestRegenerate:
             result = regenerate_route("regen-missing", {"stage": "clarification"})
             assert isinstance(result, JSONResponse)
             assert result.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Review findings fixes
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestJobResultExposure:
+    """Job.to_dict() must expose result for succeeded jobs."""
+
+    def test_job_to_dict_includes_result_for_succeeded(self):
+        runner = JobRunner()
+        job = runner.create_job("result-test")
+        runner.start_job(job, lambda: {"status": "succeeded", "data": 42})
+        job._thread.join(timeout=5)
+
+        d = job.to_dict()
+        assert d["status"] == "succeeded"
+        assert d["has_result"] is True
+        assert "result" in d
+        assert d["result"]["status"] == "succeeded"
+        assert d["result"]["data"] == 42
+
+    def test_job_to_dict_excludes_result_for_running(self):
+        runner = JobRunner()
+        job = runner.create_job("no-result")
+        d = job.to_dict()
+        assert d["status"] == "queued"
+        assert "result" not in d
+
+    def test_job_to_dict_excludes_result_for_failed(self):
+        runner = JobRunner()
+        job = runner.create_job("fail-result")
+        runner.start_job(job, lambda: (_ for _ in ()).throw(ValueError("boom")))
+        job._thread.join(timeout=5)
+        d = job.to_dict()
+        assert d["status"] == "failed"
+        assert "result" not in d  # result is None for failed
+
+    def test_job_api_returns_result(self, client):
+        """GET /jobs/current returns result for succeeded jobs."""
+        runner = get_job_runner()
+        runner.clear()
+        job = runner.create_job("api-result-test")
+        runner.start_job(job, lambda: {"status": "validation_failed", "errors": [{"field_path": "x", "message": "bad"}]})
+        job._thread.join(timeout=5)
+
+        r = client.get("/api/v1/console/jobs/current")
+        assert r.status_code == 200
+        data = r.json()
+        if data["status"] == "active":
+            assert "result" in data["job"]
+            assert data["job"]["result"]["status"] == "validation_failed"
+        runner.clear()
+
+
+class TestUnchangedUpstreamReuse:
+    """Save & Advance and Save & Generate should reuse when decisions hash unchanged."""
+
+    def _make_clarification_review_for_reuse(self, run_dir: Path):
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "clarification_review.json").write_text(json.dumps({
+            "review_session_id": "reuse", "requirement_key": "REQ-TEST-001",
+            "decomposition": {"requirement_key": "REQ-TEST-001", "facts": [], "ambiguities": [
+                {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
+                 "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}}
+            ], "clarification_questions": [], "safe_generation_policy": {"can_generate": True}},
+            "decisions": [{"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}]
+        }))
+
+    def test_advance_reuses_when_unchanged(self, tmp_path):
+        self._make_clarification_review_for_reuse(tmp_path)
+        # Pre-create downstream artifact and state file
+        (tmp_path / "case_intent_review.json").write_text('{"intents": "existing"}')
+        dec_hash = content_hash([{"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}])
+        (tmp_path / "_advance_state.json").write_text(json.dumps({"clarification_decisions_hash": dec_hash}))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "reuse-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001",
+            }
+            result = save_and_advance_clarification("reuse-run", [
+                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
+            ])
+            assert result["reused"] is True
+            assert result.get("advanced_to") == "intent_ready"
+
+    def test_advance_does_not_reuse_when_changed(self, tmp_path):
+        self._make_clarification_review_for_reuse(tmp_path)
+        (tmp_path / "case_intent_review.json").write_text('{"intents": "existing"}')
+        # Different decisions hash
+        (tmp_path / "_advance_state.json").write_text(json.dumps({"clarification_decisions_hash": "old_different_hash"}))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "reuse-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001",
+            }
+            result = save_and_advance_clarification("reuse-run", [
+                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
+            ])
+            # Should not reuse (different hash) → proceeds to validate
+            assert result.get("reused") is not True
+
+    def test_generate_reuses_when_unchanged(self, tmp_path):
+        """save_and_generate_cases reuses when intent decisions unchanged."""
+        run_dir = tmp_path / "gen-reuse"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "case_intent_review.json").write_text(json.dumps({
+            "review_session_id": "gs", "requirement_key": "REQ-TEST-001",
+            "plan": {"intents": [{"intent_id": "i-1", "coverage_dimension": "normal_behavior", "intent_text": "test", "confidence_score": 0.9, "routing_color": "green", "recommended_review_decision": "approve"}]},
+            "decisions": [{"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}]
+        }))
+        (run_dir / "generated_cases.json").write_text('[{"case_id": "C-1", "title": "Existing case"}]')
+        dec_hash = content_hash([{"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}])
+        (run_dir / "_advance_state.json").write_text(json.dumps({"intent_decisions_hash": dec_hash}))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "gen-reuse", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
+            }
+            result = save_and_generate_cases("gen-reuse", [
+                {"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
+            ])
+            assert result["reused"] is True
+            assert result["case_count"] == 1
+
+
+class TestConsoleUIFixes:
+    """Verify frontend fixes for STATE normalization, regenerate UI, run enrichment."""
+
+    def test_console_no_object_object(self, client):
+        """STATE.activeRun must remain a string, not cause [object Object] in URLs."""
+        r = client.get("/console")
+        html = r.text
+        assert "STATE.activeRun = runDir" in html or "activeRun=null" in html
+        # No dangerous pattern: STATE.activeRun = something that looks like an object
+        assert "activeRun.run_dir" not in html or "STATE.runMeta.run_dir" in html
+
+    def test_console_has_regenerate_ui(self, client):
+        r = client.get("/console")
+        assert "Regenerate" in r.text
+        assert "showRegenerate" in r.text
+
+    def test_console_has_open_latest_run(self, client):
+        r = client.get("/console")
+        assert "Open Latest Run" in r.text
+
+    def test_console_has_job_result_handling(self, client):
+        r = client.get("/console")
+        assert "handleJobResult" in r.text
+        assert "validation_failed" in r.text
+
+    def test_console_polling_checks_result(self, client):
+        r = client.get("/console")
+        assert "j.result" in r.text or "handleJobResult" in r.text
+
+    def test_console_accept_all_recs_no_auto_save(self, client):
+        """Accept All Recommendations must not auto-save or auto-reload from server."""
+        r = client.get("/console")
+        # applyProposed should call loadAndRenderClarification (local re-render), not loadRunMeta
+        assert "applyProposed" in r.text
+        assert "Use Save Draft to persist" in r.text

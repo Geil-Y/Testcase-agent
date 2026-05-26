@@ -128,6 +128,8 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     """Save clarification decisions, validate, produce clarified test basis,
     and prepare case intent review.
 
+    If the decisions hash is unchanged and the downstream artifact already
+    exists, reuses it instead of rerunning LLM stages.
     Returns validation errors or success with updated run info.
     """
     # First save
@@ -135,6 +137,25 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     run_info = get_run(run_dir_name)
     assert run_info is not None
     run_path = Path(run_info["run_path"])
+
+    # Unchanged-upstream reuse: if decisions hash matches and downstream exists, skip
+    dec_hash = content_hash(decisions if isinstance(decisions, list) else [])
+    state_path = run_path / "_advance_state.json"
+    downstream = run_path / "case_intent_review.json"
+    if state_path.exists() and downstream.exists():
+        try:
+            state = read_json(state_path)
+            if state.get("clarification_decisions_hash") == dec_hash:
+                return {
+                    "saved": True,
+                    "reused": True,
+                    "validated": True,
+                    "blocked": False,
+                    "advanced_to": "intent_ready",
+                    "run": get_run(run_dir_name),
+                }
+        except Exception:
+            pass
 
     # Validate
     review_path = str(run_path / "clarification_review.json")
@@ -164,6 +185,9 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     provider = create_provider(settings)
     from ..review_pipeline.stages.plan_case_intents import prepare_intent_review
     prepare_intent_review(str(run_path), provider=provider, memory_hints=None)
+
+    # Persist decisions hash for future reuse checks
+    _persist_advance_state(run_path, "clarification_decisions_hash", dec_hash)
 
     return {
         "saved": True,
@@ -218,11 +242,34 @@ def save_intent_draft(run_dir_name: str, decisions: list[dict[str, Any]]) -> dic
 
 def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) -> dict[str, Any]:
     """Save intent decisions, validate, produce ApprovedCasePlan,
-    generate cases, evaluate, and return results."""
+    generate cases, evaluate, and return results.
+
+    If decisions hash is unchanged and generated_cases.json exists, reuses it.
+    """
     save_result = save_intent_draft(run_dir_name, decisions)
     run_info = get_run(run_dir_name)
     assert run_info is not None
     run_path = Path(run_info["run_path"])
+
+    # Unchanged-upstream reuse
+    dec_hash = content_hash(decisions if isinstance(decisions, list) else [])
+    state_path = run_path / "_advance_state.json"
+    downstream = run_path / "generated_cases.json"
+    if state_path.exists() and downstream.exists():
+        try:
+            state = read_json(state_path)
+            if state.get("intent_decisions_hash") == dec_hash:
+                return {
+                    "saved": True,
+                    "reused": True,
+                    "validated": True,
+                    "generated": True,
+                    "evaluated": True,
+                    "case_count": len(read_json(downstream)),
+                    "run": get_run(run_dir_name),
+                }
+        except Exception:
+            pass
 
     # Validate intent review
     from ..review_pipeline.stages.validate_case_intent import validate_case_intent_review
@@ -249,6 +296,9 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
     from ..review_pipeline.stages.evaluate import evaluate_run
     evaluate_run(str(run_path))
 
+    # Persist decisions hash for future reuse checks
+    _persist_advance_state(run_path, "intent_decisions_hash", dec_hash)
+
     return {
         "saved": True,
         "validated": True,
@@ -258,6 +308,18 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
         "approved_intent_count": len(plan.approved_intents),
         "run": get_run(run_dir_name),
     }
+
+
+def _persist_advance_state(run_path: Path, key: str, hash_value: str) -> None:
+    state_path = run_path / "_advance_state.json"
+    state: dict[str, Any] = {}
+    if state_path.exists():
+        try:
+            state = read_json(state_path)
+        except Exception:
+            pass
+    state[key] = hash_value
+    write_json(state_path, state)
 
 
 def _find_requirement(requirements: list[dict[str, Any]], key: str) -> dict[str, Any] | None:

@@ -33,7 +33,7 @@ class Job:
     _thread: threading.Thread | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "status": self.status.value,
@@ -45,6 +45,9 @@ class Job:
             "error_detail": self.error_detail,
             "run_dir": self.run_dir,
         }
+        if self.status == JobStatus.succeeded and self.result is not None:
+            d["result"] = self.result
+        return d
 
 
 class JobRunner:
