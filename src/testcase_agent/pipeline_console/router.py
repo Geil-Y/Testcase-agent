@@ -767,26 +767,122 @@ def regenerate_route(run_dir_name: str, data: dict):
         )
 
         def _run() -> dict:
-            settings = get_settings()
-            provider = create_provider(settings)
             if stage == "clarification":
-                from ..review_pipeline.stages.plan_case_intents import prepare_intent_review
-                prepare_intent_review(str(run_path), provider=provider, memory_hints=None)
+                return _regenerate_clarification(run_path)
             elif stage == "intents":
-                from ..review_pipeline.stages.write_cases import generate_cases
-                generate_cases(str(run_path), provider=provider)
+                return _regenerate_intents(run_path)
             elif stage == "cases":
-                from ..review_pipeline.stages.write_cases import generate_cases
-                generate_cases(str(run_path), provider=provider)
-                from ..review_pipeline.stages.evaluate import evaluate_run
-                evaluate_run(str(run_path))
-            return {"regenerated": stage, "run": get_run(run_dir_name)}
+                return _regenerate_cases(run_path)
+            return {"error": f"Unknown stage: {stage}"}
 
         runner.start_job(job, _run)
         return {"status": "started", "job": job.to_dict(), "archived": affected}
 
     except JobConflictError as e:
         return JSONResponse({"error": str(e)}, status_code=409)
+
+
+def _regenerate_clarification(run_path: Path) -> dict:
+    """Re-validate clarification_review.json, produce clarified_test_basis,
+    then prepare intent review. Handles validation failure and blocked state."""
+    from ..review_pipeline.stages.validate_clarification import validate_clarification_review
+    from ..review_pipeline.stages.plan_case_intents import prepare_intent_review
+
+    review_path = str(run_path / "clarification_review.json")
+    validation, basis = validate_clarification_review(review_path)
+
+    if not validation.is_valid:
+        return {
+            "regenerated": "clarification",
+            "status": "validation_failed",
+            "errors": [
+                {"artifact_path": e.artifact_path, "field_path": e.field_path, "message": e.message}
+                for e in validation.errors
+            ],
+        }
+
+    if basis is None:
+        return {"regenerated": "clarification", "status": "failed", "error": "No clarified test basis produced"}
+
+    if basis.blocked:
+        return {
+            "regenerated": "clarification",
+            "status": "blocked",
+            "block_reasons": basis.block_reasons,
+        }
+
+    # clarified_test_basis.json was written by validate_clarification_review
+    settings = get_settings()
+    provider = create_provider(settings)
+    prepare_intent_review(str(run_path), provider=provider, memory_hints=None)
+
+    return {
+        "regenerated": "clarification",
+        "status": "succeeded",
+        "artifacts": _list_active(run_path),
+        "run_dir": run_path.name,
+    }
+
+
+def _regenerate_intents(run_path: Path) -> dict:
+    """Re-validate case_intent_review.json, produce approved_case_plan,
+    then generate cases."""
+    from ..review_pipeline.stages.validate_case_intent import validate_case_intent_review
+    from ..review_pipeline.stages.write_cases import generate_cases
+
+    review_path = str(run_path / "case_intent_review.json")
+    validation, plan = validate_case_intent_review(review_path)
+
+    if not validation.is_valid:
+        return {
+            "regenerated": "intents",
+            "status": "validation_failed",
+            "errors": [
+                {"artifact_path": e.artifact_path, "field_path": e.field_path, "message": e.message}
+                for e in validation.errors
+            ],
+        }
+
+    if plan is None:
+        return {"regenerated": "intents", "status": "failed", "error": "No approved plan produced"}
+
+    settings = get_settings()
+    provider = create_provider(settings)
+    case_set = generate_cases(str(run_path), provider=provider)
+
+    return {
+        "regenerated": "intents",
+        "status": "succeeded",
+        "case_count": len(case_set.cases),
+        "artifacts": _list_active(run_path),
+        "run_dir": run_path.name,
+    }
+
+
+def _regenerate_cases(run_path: Path) -> dict:
+    """Re-generate cases and evaluate."""
+    from ..review_pipeline.stages.write_cases import generate_cases
+    from ..review_pipeline.stages.evaluate import evaluate_run
+
+    settings = get_settings()
+    provider = create_provider(settings)
+    case_set = generate_cases(str(run_path), provider=provider)
+    evaluate_run(str(run_path))
+
+    return {
+        "regenerated": "cases",
+        "status": "succeeded",
+        "case_count": len(case_set.cases),
+        "artifacts": _list_active(run_path),
+        "run_dir": run_path.name,
+    }
+
+
+def _list_active(run_path: Path) -> list[str]:
+    return sorted(
+        f.name for f in run_path.iterdir()
+        if f.is_file() and f.suffix == ".json" and "archived" not in str(f)
+    )
 
 
 # ── Issue #7: Case Intent Review and case generation ──────────────────────

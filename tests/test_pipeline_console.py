@@ -2008,49 +2008,137 @@ class TestRegenerate:
         )
         assert r.status_code == 404
 
-    def test_regenerate_job_reaches_succeeded(self, tmp_path):
-        """Regenerate job must reach succeeded, not just start."""
+    def _make_valid_clarification_review(self, run_dir: Path, decisions: list[dict] | None = None) -> None:
+        """Write a clarification_review.json with valid approve decisions."""
+        if decisions is None:
+            decisions = [
+                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""},
+            ]
+        data = {
+            "review_session_id": "regen-session",
+            "requirement_key": "REQ-TEST-001",
+            "decomposition": {
+                "requirement_key": "REQ-TEST-001",
+                "facts": [{"item_id": "f-1", "fact_text": "Fact", "confidence": 1.0}],
+                "ambiguities": [
+                    {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
+                     "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}},
+                ],
+                "clarification_questions": [],
+                "safe_generation_policy": {"can_generate": True},
+            },
+            "decisions": decisions,
+        }
+        (run_dir / "clarification_review.json").write_text(json.dumps(data))
+
+    def test_regenerate_clarification_succeeds(self, tmp_path):
+        """Regenerate clarification must reach succeeded, produce artifacts, archive old ones."""
         run_dir = tmp_path / "regen-success"
         run_dir.mkdir()
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        # Write clarification_review so regenerate has something to archive from
-        (run_dir / "clarification_review.json").write_text(json.dumps({
-            "review_session_id": "regen", "requirement_key": "REQ-TEST-001",
-            "decomposition": {"requirement_key": "REQ-TEST-001", "facts": [], "ambiguities": [], "clarification_questions": [], "safe_generation_policy": {"can_generate": True}},
-            "decisions": []
-        }))
-        (run_dir / "case_intent_review.json").write_text(json.dumps({"intents": "old"}))
-        # Also write a clarified_test_basis so plan_case_intents doesn't fail
-        (run_dir / "clarified_test_basis.json").write_text(json.dumps({
-            "requirement_key": "REQ-TEST-001", "review_session_id": "regen",
-            "facts": [], "resolved_ambiguities": [], "blocked": False,
-            "test_basis_hash": "abc123",
-        }))
+        self._make_valid_clarification_review(run_dir)
+        (run_dir / "case_intent_review.json").write_text(json.dumps({"old": True}))
+
+        runner = get_job_runner()
+        runner.clear()
+
+        def fake_prepare(run_dir_str, **kwargs):
+            Path(run_dir_str, "case_intent_review.json").write_text('{"intents":"regenerated"}')
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "regen-success", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
+            }
+            with patch("src.testcase_agent.review_pipeline.stages.plan_case_intents.prepare_intent_review", side_effect=fake_prepare):
+                from src.testcase_agent.pipeline_console.router import regenerate_route
+                result = regenerate_route("regen-success", {"stage": "clarification", "confirm": True})
+                assert result["status"] == "started"
+
+                import time as _t
+                for _ in range(20):
+                    j = runner.get_job()
+                    if j and j["status"] in ("succeeded", "failed"):
+                        break
+                    _t.sleep(0.3)
+
+        final = runner.get_job()
+        assert final is not None
+        assert final["status"] == "succeeded", f"Job failed: {final.get('error', '')}"
+
+        assert (run_dir / "clarified_test_basis.json").exists(), "clarified_test_basis.json should exist"
+        assert (run_dir / "case_intent_review.json").exists(), "case_intent_review.json should exist"
+
+        archived_dir = run_dir / "archived"
+        assert archived_dir.exists()
+        ts_dirs = list(archived_dir.iterdir())
+        assert len(ts_dirs) >= 1
+        archived_files = [f.name for f in ts_dirs[0].iterdir() if f.is_file()]
+        assert "case_intent_review.json" in archived_files
+
+        runner.clear()
+
+    def test_regenerate_clarification_validation_failure(self, tmp_path):
+        """Regenerate with invalid decisions: job succeeds but result is validation_failed."""
+        run_dir = tmp_path / "regen-valfail"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        self._make_valid_clarification_review(run_dir, decisions=[
+            {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
+        ])
 
         runner = get_job_runner()
         runner.clear()
 
         with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
             mock_run.return_value = {
-                "run_dir": "regen-success",
-                "run_path": str(run_dir),
-                "requirement_key": "REQ-TEST-001",
+                "run_dir": "regen-valfail", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
             }
             from src.testcase_agent.pipeline_console.router import regenerate_route
 
-            result = regenerate_route("regen-success", {"stage": "clarification", "confirm": True})
-            assert result["status"] == "started"
-
-            # Poll job until done
-            job_info = runner.get_job()
-            assert job_info is not None
-            # Wait for job thread
+            result = regenerate_route("regen-valfail", {"stage": "clarification", "confirm": True})
             import time as _t
-            current = runner.get_job()
-            # get_job returns a Job but from_dict it's a dict... actually get_job returns dict
-            _t.sleep(2)  # give the mock provider time
-            final = runner.get_job()
-            assert final["status"] in ("succeeded", "failed")
+            for _ in range(20):
+                j = runner.get_job()
+                if j and j["status"] in ("succeeded", "failed"):
+                    break
+                _t.sleep(0.3)
+
+        final = runner.get_job()
+        assert final["status"] == "succeeded"  # job completed
+        # The result dict is stored in the Job's result field
+        assert final.get("has_result") is True
+        runner.clear()
+
+    def test_regenerate_clarification_blocked(self, tmp_path):
+        """Regenerate with block decision: job succeeds but result status is blocked."""
+        run_dir = tmp_path / "regen-blocked"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        self._make_valid_clarification_review(run_dir, decisions=[
+            {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Block reason here"},
+        ])
+
+        runner = get_job_runner()
+        runner.clear()
+
+        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "regen-blocked", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
+            }
+            from src.testcase_agent.pipeline_console.router import regenerate_route
+
+            result = regenerate_route("regen-blocked", {"stage": "clarification", "confirm": True})
+            import time as _t
+            for _ in range(20):
+                j = runner.get_job()
+                if j and j["status"] in ("succeeded", "failed"):
+                    break
+                _t.sleep(0.3)
+
+        final = runner.get_job()
+        assert final["status"] == "succeeded"
+        assert final.get("has_result") is True
+        runner.clear()
 
     def test_regenerate_missing_upstream_artifact(self, tmp_path):
         """Regenerate with missing upstream artifact returns 404."""
@@ -2060,14 +2148,11 @@ class TestRegenerate:
 
         with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
             mock_run.return_value = {
-                "run_dir": "regen-missing",
-                "run_path": str(run_dir),
-                "requirement_key": "REQ-TEST-001",
+                "run_dir": "regen-missing", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
             }
             from src.testcase_agent.pipeline_console.router import regenerate_route
-
-            # No clarification_review.json → route returns JSONResponse with 404
             from fastapi.responses import JSONResponse
+
             result = regenerate_route("regen-missing", {"stage": "clarification"})
             assert isinstance(result, JSONResponse)
             assert result.status_code == 404
