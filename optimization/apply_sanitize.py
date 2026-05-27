@@ -60,6 +60,7 @@ def apply_sanitize(src_dir: str, dest_dir: str) -> None:
                 extracted_signals=signals,
                 extracted_thresholds=thresholds,
                 extracted_timing=timing,
+                accepted_test_basis=req.get("accepted_test_basis", ""),
             )
 
             if reps:

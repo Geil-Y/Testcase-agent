@@ -1,3 +1,4 @@
+import httpx
 from openai import OpenAI
 
 
@@ -18,7 +19,7 @@ class OpenAICompatibleProvider:
         self.provider_name = provider_name
         self._temperature = temperature
         self._max_tokens = max_tokens
-        self._client = OpenAI(api_key=api_key or "ollama", base_url=base_url)
+        self._client = OpenAI(api_key=api_key or "ollama", base_url=base_url, timeout=httpx.Timeout(120.0, connect=10.0))
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         response = self._client.chat.completions.create(

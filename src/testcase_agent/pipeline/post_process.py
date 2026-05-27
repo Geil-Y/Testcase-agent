@@ -11,12 +11,11 @@ _NEEDS_REVIEW_RE = re.compile(r"\s*\[NEEDS REVIEW\]\s*", re.IGNORECASE)
 
 
 def strip_needless_markers(case: GeneratedCase, *, has_missing: bool) -> GeneratedCase:
-    """Remove [NEEDS REVIEW] markers for legacy optimization reports.
+    """Remove [NEEDS REVIEW] markers when LLM#1 says nothing is missing.
 
-    When has_missing is False, the markers are inconsistent: either the legacy
-    case writer added them unnecessarily or the numeric sanitizer injected
-    them. Strip them so checklist items 3.1.1 and 3.2.1 treat the case
-    consistently.
+    When has_missing is False, the markers are inconsistent — either LLM#2
+    added them unnecessarily or the numeric sanitizer injected them.  Strip
+    them so that checklist items 3.2.1 and 3.2.3 treat the case consistently.
     """
     if has_missing:
         return case
@@ -55,23 +54,19 @@ def sanitize_numeric_values(
     extracted_signals: list[str],
     extracted_thresholds: list[str],
     extracted_timing: list[str],
+    accepted_test_basis: str = "",
 ) -> tuple[GeneratedCase, list[str]]:
     """Replace invented numeric values with [NEEDS REVIEW].
 
-    Scans action and expected fields only. A numeric value is considered
-    "known" if it appears (case-insensitive) in the combined text of the
-    requirement description, supplementary info, signals, thresholds, and
-    timing parameters.
+    Scans action and expected fields only. A numeric value is considered known
+    only when it is supported by the selected requirement or an explicitly
+    accepted test basis. Supplementary context and LLM-extracted analysis are
+    retained in the signature for compatibility, but are not generation
+    authority.
 
     Returns (sanitized_case, list_of_replacements).
     """
-    known_text = (
-        requirement_description
-        + " "
-        + supplementary_info
-        + " "
-        + " ".join(extracted_timing + extracted_thresholds + extracted_signals)
-    ).lower()
+    known_text = f"{requirement_description} {accepted_test_basis}".lower()
 
     sanitized = deepcopy(case)
     replacements: list[str] = []

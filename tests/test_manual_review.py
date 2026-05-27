@@ -173,13 +173,12 @@ class TestHardGates:
         assert g.unacceptable is True
         assert any("invent" in r.lower() for r in g.reasons)
 
-    def test_unnecessary_nr_is_warning_not_severe(self):
+    def test_unnecessary_nr_is_hard_fail(self):
         entry = _review_case(information_integrity=5)
         case = _case(steps=[_step("Set [NEEDS REVIEW] value", "OK")])
         g = apply_hard_gates(entry, case, expected_missing_categories=[])
-        assert g.unacceptable is False
-        assert len(g.warnings) >= 1
-        assert any("unnecessary" in w.lower() or "penalized" in w.lower() for w in g.warnings)
+        assert g.unacceptable is True
+        assert any("unnecessary" in r.lower() for r in g.reasons)
 
 
 # -- Load and validate review file ----------------------------------------

@@ -12,3 +12,4 @@ reviews/
 .superpowers/
 node_modules/
 console-ui/dist/
+backend-8002.log

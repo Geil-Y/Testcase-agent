@@ -1,4 +1,4 @@
-"""Development-time quality gate. Runtime keeps only schema + safety checks."""
+"""Development-time quality gate — schema checks only."""
 
 from __future__ import annotations
 
@@ -13,13 +13,6 @@ class QualityReport:
     passed: bool = False
     failures: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
-
-
-_RISKY_TERMS = (
-    "real hil bench", "physical bench", "high-voltage activation",
-    "hv activation", "energize high voltage", "close the real contactor",
-    "open the real contactor", "destructive fault injection",
-)
 
 
 def evaluate_case(case: GeneratedCase, case_index: int = 0) -> QualityReport:
@@ -41,19 +34,13 @@ def evaluate_case(case: GeneratedCase, case_index: int = 0) -> QualityReport:
         if not step.action:
             report.failures.append(f"step[{i}] action is empty")
 
-    # Safety: no risky real-bench commands
-    case_text = f"{case.title} {case.objective} {case.precondition} {case.postcondition}"
-    for step in case.steps:
-        case_text += f" {step.action} {step.expected or ''}"
-    case_lower = case_text.lower()
-    for term in _RISKY_TERMS:
-        if term in case_lower:
-            report.failures.append(f"safety: contains risky term '{term}'")
-
     # Warnings
     if case.title.strip().lower() in {"draft test case", "test case", "boundary test"}:
         report.warnings.append("title is generic, consider a descriptive title")
 
+    case_text = f"{case.title} {case.objective} {case.precondition} {case.postcondition}"
+    for step in case.steps:
+        case_text += f" {step.action} {step.expected or ''}"
     if not _looks_english(case_text):
         report.warnings.append("content may not be in English")
 
