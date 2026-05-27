@@ -8,3 +8,7 @@ local_testdata/
 .pytest_cache/
 .ruff_cache/
 optimization_runs/log/
+reviews/
+.superpowers/
+node_modules/
+console-ui/dist/

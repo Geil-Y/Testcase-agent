@@ -1,0 +1,107 @@
+# Canonical reason code registry for human review decisions.
+# Versioned; loaded deterministically by the validation and memory subsystems.
+version: "1.0.0"
+
+clarification_decisions:
+  - approve
+  - clarify
+  - mark_needs_review
+  - block
+  - edit
+
+case_intent_decisions:
+  - approve
+  - reject
+  - revise
+  - merge
+  - split
+  - defer
+
+positive_reason_codes:
+  - supported_by_requirement
+  - safe_to_generate_with_marker
+  - valid_timing_maturity_case
+  - matches_prior_review_pattern
+
+negative_reason_codes:
+  - unsupported_by_requirement
+  - duplicate_expected_behavior
+  - same_acceptance_evidence
+  - over_split_condition_combination
+  - invented_recovery_or_fault_behavior
+  - invalid_response_time_negative_case
+  - too_broad_to_verify
+  - needs_clarification
+
+# Which reason codes apply to which review item type.
+reason_code_applicability:
+  clarification_item:
+    - supported_by_requirement
+    - safe_to_generate_with_marker
+    - valid_timing_maturity_case
+    - matches_prior_review_pattern
+    - unsupported_by_requirement
+    - duplicate_expected_behavior
+    - too_broad_to_verify
+    - needs_clarification
+
+  case_intent_item:
+    - supported_by_requirement
+    - safe_to_generate_with_marker
+    - valid_timing_maturity_case
+    - matches_prior_review_pattern
+    - unsupported_by_requirement
+    - duplicate_expected_behavior
+    - same_acceptance_evidence
+    - over_split_condition_combination
+    - invented_recovery_or_fault_behavior
+    - invalid_response_time_negative_case
+    - too_broad_to_verify
+    - needs_clarification
+
+# Decisions requiring reason codes / reason text.
+decision_requirements:
+  approve:
+    require_reason_code: false
+    require_reason_text: false
+
+  clarify:
+    require_reason_code: true
+    require_reason_text: false
+
+  mark_needs_review:
+    require_reason_code: true
+    require_reason_text: false
+
+  block:
+    require_reason_code: true
+    require_reason_text: true
+
+  edit:
+    require_reason_code: false
+    require_reason_text: false
+
+  reject:
+    require_reason_code: true
+    require_reason_text: true
+
+  revise:
+    require_reason_code: true
+    require_reason_text: false
+
+  merge:
+    require_reason_code: true
+    require_reason_text: false
+
+  split:
+    require_reason_code: false
+    require_reason_text: false
+
+  defer:
+    require_reason_code: true
+    require_reason_text: true
+
+# When agent confidence and human decision conflict, reason text is required.
+confidence_decision_conflict:
+  require_reason_text: true
+  conflict_threshold: 0.25  # confidence difference >= this triggers conflict

@@ -11,11 +11,12 @@ _NEEDS_REVIEW_RE = re.compile(r"\s*\[NEEDS REVIEW\]\s*", re.IGNORECASE)
 
 
 def strip_needless_markers(case: GeneratedCase, *, has_missing: bool) -> GeneratedCase:
-    """Remove [NEEDS REVIEW] markers when LLM#1 says nothing is missing.
+    """Remove [NEEDS REVIEW] markers for legacy optimization reports.
 
-    When has_missing is False, the markers are inconsistent — either LLM#2
-    added them unnecessarily or the numeric sanitizer injected them.  Strip
-    them so that checklist items 3.2.1 and 3.2.3 treat the case consistently.
+    When has_missing is False, the markers are inconsistent: either the legacy
+    case writer added them unnecessarily or the numeric sanitizer injected
+    them. Strip them so checklist items 3.1.1 and 3.2.1 treat the case
+    consistently.
     """
     if has_missing:
         return case

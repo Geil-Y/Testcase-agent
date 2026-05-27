@@ -1,0 +1,32 @@
+<user-message>
+## Requirement
+
+**Key:** {{ requirement_key }}
+**Description:** {{ description }}
+
+{% if facts_summary %}
+### Clarified Facts
+
+{{ facts_summary }}
+{% endif %}
+
+{% if resolved_ambiguities %}
+### Resolved Ambiguities
+
+{{ resolved_ambiguities }}
+{% endif %}
+
+{% if supplementary_info %}
+### Supplementary Information
+
+{{ supplementary_info }}
+{% endif %}
+
+{% if memory_hints %}
+### Historical Review Hints (Advisory Only)
+
+{{ memory_hints }}
+{% endif %}
+
+Propose case intents for this requirement. Output only the JSON.
+</user-message>

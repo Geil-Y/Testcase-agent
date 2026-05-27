@@ -1,23 +1,8 @@
-"""CLI for batch generation and optimization loop support.
+"""CLI for evaluation and legacy optimization helpers.
 
-Usage:
-    python -m optimization.cli run \
-        --excel path/to/requirements.xlsx \
-        --sample 20 \
-        --output-dir optimization_runs/run_20260518_140000/round_01
-
-    python -m optimization.cli run \
-        --excel path/to/requirements.xlsx \
-        --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
-        --output-dir optimization_runs/run_20260519_eval/round_01
-
-The script:
-1. Reads the Excel, separating heading/info rows (kept as context) from requirement rows.
-2. Selects requirements via random --sample or a fixed --requirement-set.
-3. Injects preceding heading/info as supplementary context.
-4. Saves current prompt files to <round_dir>/prompts/ for archival.
-5. Runs the pipeline for each requirement.
-6. Saves generated_cases.json in the round directory.
+The old batch generation command has been removed. Use
+``python -m testcase_agent.review_pipeline.cli`` for new clarification-first generation runs.
+Existing report/evaluation helpers remain for reading completed rounds.
 """
 
 from __future__ import annotations
@@ -35,14 +20,7 @@ sys.path.insert(0, str(_PROJECT_ROOT))
 
 from openpyxl import load_workbook  # noqa: E402
 
-from testcase_agent.config import get_settings  # noqa: E402
-from testcase_agent.parser.html_parser import parse_generated_case  # noqa: E402
-from testcase_agent.pipeline.generate import RequirementInput, regenerate_case, run_pipeline  # noqa: E402
-from testcase_agent.pipeline.post_process import sanitize_numeric_values  # noqa: E402
-from testcase_agent.prompts import render_prompt  # noqa: E402
-from testcase_agent.provider.factory import create_provider  # noqa: E402
-from testcase_agent.quality.gate import evaluate_cases  # noqa: E402
-from optimization.evaluator import CHECKLIST, evaluate_case  # noqa: E402
+from testcase_agent.review_pipeline.artifacts.models import RequirementInput  # noqa: E402
 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
@@ -361,15 +339,15 @@ def select_by_requirement_set(
 
 
 def archive_prompts(round_dir: Path) -> None:
-    """Copy current prompt files into round_dir/prompts/ for archival."""
+    """Copy current review-pipeline prompt files into round_dir/prompts/."""
     prompts_dir = round_dir / "prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
     project_root = Path(__file__).resolve().parents[1]
-    source_dir = project_root / "prompts"
+    source_dir = project_root / "src" / "testcase_agent" / "review_pipeline" / "prompts"
 
     for src in sorted(source_dir.glob("*.html")):
-        # Strip .html extension for the archived copy (e.g. generate_case.system.html -> generate_case.system.md)
+        # Strip .html extension for the archived copy.
         dest_name = src.stem + ".md"
         shutil.copy2(src, prompts_dir / dest_name)
         print(f"  Archived prompt: {src.name} -> {dest_name}")
@@ -419,335 +397,15 @@ def run_batch(
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
-    """Run pipeline for all requirements and save results.
+    """Legacy batch generation entry point.
 
-    When requirement_set_data is provided, each requirement entry in
-    generated_cases.json is enriched with evaluation_bucket,
-    expected_missing_categories, and requirement_set_note from the set.
+    Kept only as an importable guard for older helper code. New generation must
+    start from ``python -m testcase_agent.review_pipeline.cli prepare-clarification-review``.
     """
-    settings = get_settings()
-    provider = create_provider(settings)
-
-    output_dir.mkdir(parents=True, exist_ok=True)
-    archive_prompts(output_dir)
-
-    # Build per-key lookup from the set if provided
-    set_lookup: dict[str, dict] = {}
-    if requirement_set_data:
-        for entry in requirement_set_data["entries"]:
-            set_lookup[entry["requirement_key"]] = entry
-
-    all_results: list[dict] = []
-    total_cases = 0
-    errors: list[dict] = []
-
-    # ── Background DeepSeek evaluator setup ──────────────────────────
-    eval_executor = None
-    eval_futures: dict = {}
-    results_by_idx: dict[int, list] = {}
-    _eval_errors: list[int] = [0]
-    _eval_buffer: list[tuple[int, dict]] = []
-    _eval_flush = None  # type: ignore[assignment]
-    if run_eval:
-        from concurrent.futures import ThreadPoolExecutor
-        from optimization.claude_evaluator import (
-            build_system_prompt, score_batch, save_evaluation,
-            _print_requirement_score,
-            EvalResult, DEFAULT_MODEL as EVAL_DEFAULT_MODEL,
-        )
-
-        eval_system_prompt = build_system_prompt()
-        _BATCH_SIZE = 5
-        eval_executor = ThreadPoolExecutor(max_workers=3)
-        eval_total = len(requirements)
-
-        def _submit_batch(batch_entries: list[tuple[int, dict]]):
-            entries = [e for _, e in batch_entries]
-            indices = [i for i, _ in batch_entries]
-
-            def _score_batch_entries():
-                try:
-                    scores = score_batch(
-                        entries, eval_system_prompt, EVAL_DEFAULT_MODEL,
-                        start_idx=indices[0] + 1, total=eval_total,
-                    )
-                    return indices, scores, None
-                except Exception as exc:
-                    return indices, [], exc
-
-            future = eval_executor.submit(_score_batch_entries)
-            future.add_done_callback(_on_batch_done)
-            eval_futures[future] = indices
-
-        def _on_batch_done(future):
-            indices = eval_futures[future]
-            try:
-                _, scores, exc = future.result()
-                if exc:
-                    for idx in indices:
-                        req_key = all_results[idx].get("requirement_key", f"#{idx}")
-                        print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} FAILED: {exc}")
-                        _eval_errors[0] += 1
-                else:
-                    score_by_key = {s.requirement_key: s for s in scores}
-                    for idx in indices:
-                        entry = all_results[idx]
-                        req_key = entry.get("requirement_key", f"#{idx}")
-                        s = score_by_key.get(req_key)
-                        if s:
-                            results_by_idx[idx] = [s]
-                            _print_requirement_score(idx, eval_total, req_key, s)
-                        else:
-                            _print_requirement_score(idx, eval_total, req_key, None)
-                            _eval_errors[0] += 1
-            except Exception as exc:
-                for idx in indices:
-                    req_key = all_results[idx].get("requirement_key", f"#{idx}")
-                    print(f"  DeepSeek [{idx + 1}/{eval_total}] {req_key} FAILED: {exc}")
-                    _eval_errors[0] += 1
-            sys.stdout.flush()
-
-        def _eval_flush():
-            if _eval_buffer:
-                _submit_batch(list(_eval_buffer))
-                _eval_buffer.clear()
-
-    for i, req in enumerate(requirements):
-        print(f"[{i+1}/{len(requirements)}] Generating: {req.requirement_key} ...")
-        result = run_pipeline(req, provider)
-        gen_failures = set(result.generation_failures)
-
-        if result.error:
-            errors.append({
-                "requirement_key": req.requirement_key,
-                "error": result.error,
-            })
-            print(f"  ERROR: {result.error}")
-            continue
-
-        # ── Retry + self-check ───────────────────────────────────────
-        set_meta = set_lookup.get(req.requirement_key)
-        req_info = _build_req_info_for_eval(req, result.analysis, set_meta)
-        intents = result.analysis.case_intents if result.analysis else []
-        sanitize_enabled_for_case = bool(sanitize and result.analysis)
-        sigs = result.analysis.signals if result.analysis else []
-        thr = result.analysis.thresholds if result.analysis else []
-        tim = [
-            t for t in (result.analysis.timing if result.analysis else [])
-            if t.strip().lower() != "none found"
-        ]
-
-        def _post_process_case(case, retry_meta: dict) -> tuple:
-            corrected, sc_changed = _self_check_case(case, result.analysis, provider)
-            if sc_changed:
-                case = corrected
-                retry_meta["self_check_changed"] = True
-
-            replacements: list[str] = []
-            if sanitize_enabled_for_case:
-                case, replacements = sanitize_numeric_values(
-                    case,
-                    requirement_description=req.description,
-                    supplementary_info=req.supplementary_info,
-                    extracted_signals=sigs,
-                    extracted_thresholds=thr,
-                    extracted_timing=tim,
-                    accepted_test_basis=req_info.get("accepted_test_basis", ""),
-                )
-            return case, replacements
-
-        retry_metas: list[dict] = []
-        sanitize_replacements_by_case: list[list[str]] = []
-        new_cases: list = []
-        for ci, case in enumerate(result.cases):
-            intent = intents[ci] if ci < len(intents) else None
-            retry_meta: dict = {"attempts": 0, "exhausted": False, "failures": [], "self_check_changed": False, "generation_timeout": ci in gen_failures}
-            sanitize_replacements: list[str] = []
-
-            # Step 1: Self-check identifiers, then sanitize invented numeric values.
-            case, replacements = _post_process_case(case, retry_meta)
-            sanitize_replacements.extend(replacements)
-
-            # Step 2: Retry loop (max 2 retries + initial = 3 attempts)
-            for attempt in range(3):
-                hard_fails, _ = evaluate_case(_case_to_dict(case), req_info, {})
-                if not hard_fails:
-                    break
-                retry_meta["failures"].append(hard_fails)
-                if attempt < 2 and intent:
-                    review = "" if retry_meta["generation_timeout"] else _build_review_comment(hard_fails)
-                    try:
-                        case = regenerate_case(
-                            req, intent.description, intent.coverage,
-                            review, provider, analysis=result.analysis,
-                        )
-                        retry_meta["attempts"] = attempt + 1
-                        case, replacements = _post_process_case(case, retry_meta)
-                        sanitize_replacements.extend(replacements)
-                    except Exception:
-                        retry_meta["exhausted"] = True
-                        break
-                else:
-                    retry_meta["exhausted"] = True
-
-            new_cases.append(case)
-            retry_metas.append(retry_meta)
-            sanitize_replacements_by_case.append(sanitize_replacements)
-
-        result.cases = new_cases
-        total_sanitize_replacements = sum(len(reps) for reps in sanitize_replacements_by_case)
-        if total_sanitize_replacements:
-            print(f"  sanitize: {total_sanitize_replacements} value(s) replaced with [NEEDS REVIEW]")
-
-        # ── Quality gate (runtime schema) ────────────────────────────
-        quality_reports = evaluate_cases(result.cases)
-
-        analysis_data = None
-        if result.analysis:
-            analysis_data = {
-                "signals": result.analysis.signals,
-                "thresholds": result.analysis.thresholds,
-                "timing": result.analysis.timing,
-                "states": result.analysis.states,
-                "observations": result.analysis.observations,
-                "direction": result.analysis.direction,
-                "missing_critical_info": result.analysis.missing_critical_info,
-                "missing_info_items": [
-                    {"category": mi.category, "description": mi.description}
-                    for mi in result.analysis.missing_info_items
-                ],
-                "case_intents": [
-                    {"coverage": ci.coverage, "description": ci.description}
-                    for ci in result.analysis.case_intents
-                ],
-            }
-
-        cases_data = []
-        for case, report, retry_meta, replacements in zip(
-            result.cases,
-            quality_reports,
-            retry_metas,
-            sanitize_replacements_by_case,
-        ):
-            cases_data.append(_serialize_case_for_output(
-                case,
-                report,
-                retry_meta=retry_meta,
-                sanitize_enabled=sanitize_enabled_for_case,
-                sanitize_replacements=replacements,
-            ))
-
-        entry: dict = {
-            "requirement_key": req.requirement_key,
-            "function_name": req.function_name,
-            "description": req.description,
-            "supplementary_info": req.supplementary_info,
-            "analysis": analysis_data,
-            "cases": cases_data,
-        }
-        # Enrich with requirement set metadata when available
-        if set_meta:
-            entry["evaluation_bucket"] = set_meta["evaluation_bucket"]
-            entry["expected_missing_categories"] = set_meta["expected_missing_categories"]
-            entry["requirement_set_note"] = set_meta.get("rationale", "")
-        all_results.append(entry)
-        total_cases += len(cases_data)
-
-        passed_count = sum(1 for r in quality_reports if r.passed)
-        retried = sum(1 for rm in retry_metas if rm["attempts"] > 0)
-        print(f"  {len(cases_data)} cases, quality: {passed_count}/{len(cases_data)} passed, {retried} retried")
-
-        # ── Buffer entries for batched DeepSeek scoring ────────────────
-        if eval_executor is not None:
-            _eval_buffer.append((i, entry))
-            if len(_eval_buffer) >= _BATCH_SIZE:
-                _eval_flush()
-
-    # Flush remaining DeepSeek scoring batches
-    if run_eval:
-        _eval_flush()
-
-    # Save generated cases
-    cases_path = output_dir / "generated_cases.json"
-    cases_path.write_text(
-        json.dumps(all_results, ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    raise RuntimeError(
+        "optimization.cli run_batch was removed with the legacy generation "
+        "pipeline. Use python -m testcase_agent.review_pipeline.cli for generation."
     )
-
-    # Save sampled requirements list
-    req_list = [
-        {
-            "requirement_key": r.requirement_key,
-            "description": r.description,
-            "function_name": r.function_name,
-        }
-        for r in requirements
-    ]
-    req_path = output_dir / "sampled_requirements.json"
-    req_path.write_text(
-        json.dumps(req_list, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    summary: dict = {
-        "total_requirements": len(requirements),
-        "total_cases": total_cases,
-        "errors": len(errors),
-        "error_details": errors,
-    }
-    if requirement_set_data:
-        summary["requirement_set_name"] = requirement_set_data.get("name", "")
-        summary["requirement_set_path"] = str(
-            requirement_set_data.get("_source_path", "")
-        )
-        summary["total_requirement_set_entries"] = len(
-            requirement_set_data.get("entries", [])
-        )
-    summary_path = output_dir / "summary.json"
-    summary_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    # Save hard-rule evaluation
-    try:
-        from optimization.evaluator import evaluate_generated_cases, save_evaluation_result
-        with open(cases_path, encoding="utf-8") as f:
-            gen_data = json.load(f)
-        hr_result = evaluate_generated_cases(gen_data)
-        save_evaluation_result(hr_result, "hardrule", output_dir)
-        print(f"Hard-rule evaluation saved ({hr_result.case_pass_rate}%)")
-    except Exception as exc:
-        print(f"Hard-rule evaluation save failed: {exc}")
-
-    # Wait for background DeepSeek evaluation and save results
-    if run_eval:
-        try:
-            eval_executor.shutdown(wait=True)
-            eval_result = EvalResult(model_used=EVAL_DEFAULT_MODEL)
-            for i in sorted(results_by_idx.keys()):
-                eval_result.requirements.extend(results_by_idx[i])
-            eval_result.errors = _eval_errors[0]
-            save_evaluation(eval_result, output_dir, evaluator_name="deepseek")
-            print(f"DeepSeek evaluation completed (weighted={eval_result.overall_weighted})")
-        except Exception as exc:
-            print(f"DeepSeek evaluation failed: {exc}")
-            if eval_executor is not None:
-                eval_executor.shutdown(wait=False)
-
-    # Generate unified cases_report.html
-    try:
-        from optimization.generate_case_html import generate_round_html
-        generate_round_html(output_dir, 1)
-        report_path = output_dir / "cases_report.html"
-        print(f"Report: {report_path}")
-    except Exception as exc:
-        print(f"Report generation failed: {exc}")
-
-    print(f"\nDone. {len(requirements)} requirements → {total_cases} cases, {len(errors)} errors")
-    print(f"Output: {output_dir}")
-
-    return summary
 
 
 def main():
@@ -780,65 +438,10 @@ def main():
     args = parser.parse_args()
 
     if args.command == "run":
-        requirement_set_data: dict | None = None
-
-        if args.requirement_set:
-            set_path = args.requirement_set
-            if not Path(set_path).is_absolute():
-                set_path = str(_PROJECT_ROOT / set_path)
-            requirement_set_data = load_requirement_set(set_path)
-            requirement_set_data["_source_path"] = set_path
-            name = requirement_set_data["name"]
-            count = len(requirement_set_data["entries"])
-            print(f"Using requirement set: {name} ({count} entries)")
-
-            # Prefer inline content from self-contained sets
-            if requirement_set_data["entries"][0].get("description", "").strip():
-                selected = build_requirements_from_set(requirement_set_data)
-                if args.limit is not None and args.limit < len(selected):
-                    selected = selected[:args.limit]
-                    print(f"Loaded {len(selected)}/{count} requirements from set (limited)")
-                else:
-                    print(f"Loaded {len(selected)} requirements from set (inline content)")
-            elif args.excel:
-                # Fallback: match by key from Excel
-                rows = read_excel(
-                    args.excel,
-                    requirement_key_col=args.key_col,
-                    description_col=args.desc_col,
-                    type_col=args.type_col,
-                    function_name_col=args.func_col,
-                )
-                all_inputs = build_requirement_inputs(rows)
-                selected = select_by_requirement_set(all_inputs, requirement_set_data)
-                print(f"Matched {len(selected)}/{count} requirements from Excel")
-            else:
-                parser.error(
-                    "Requirement set entries lack inline 'description'. "
-                    "Provide --excel to pull requirement content from an Excel file."
-                )
-        elif args.excel:
-            print(f"Reading: {args.excel}")
-            rows = read_excel(
-                args.excel,
-                requirement_key_col=args.key_col,
-                description_col=args.desc_col,
-                type_col=args.type_col,
-                function_name_col=args.func_col,
-            )
-            all_inputs = build_requirement_inputs(rows)
-            print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
-            selected = sample_requirements(all_inputs, args.sample, args.seed)
-            print(f"Sampled {len(selected)} requirements (seed={args.seed})")
-        else:
-            parser.error("Either --excel or --requirement-set must be provided.")
-
-        run_batch(
-            selected,
-            Path(args.output_dir),
-            sanitize=not args.no_sanitize,
-            requirement_set_data=requirement_set_data,
-            run_eval=args.eval,
+        parser.error(
+            "optimization.cli run was removed with the legacy generation "
+            "pipeline. Use python -m testcase_agent.review_pipeline.cli "
+            "prepare-clarification-review instead."
         )
 
     elif args.command == "evaluate":
