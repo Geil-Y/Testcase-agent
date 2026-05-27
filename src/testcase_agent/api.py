@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, FastAPI
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
@@ -41,16 +41,8 @@ def create_app() -> FastAPI:
     if _CONSOLE_UI_DIST.exists():
         assets_dir = _CONSOLE_UI_DIST / "assets"
         if assets_dir.exists():
-            # /assets covers ./assets/ when page URL is /console (no trailing slash)
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="console_assets")
-
-        @app.get("/console/assets/{file_path:path}")
-        def serve_console_asset(file_path: str):
-            """Serve Vite-built assets referenced by the React shell."""
-            asset = _CONSOLE_UI_DIST / "assets" / file_path
-            if asset.exists() and asset.is_file():
-                return FileResponse(str(asset))
-            return HTMLResponse("Not found", status_code=404)
+            # StaticFiles handles path resolution and rejects traversal internally
+            app.mount("/console/assets", StaticFiles(directory=str(assets_dir)), name="console_assets")
 
         @app.get("/console", response_class=HTMLResponse)
         @app.get("/console/{rest_path:path}", response_class=HTMLResponse)
@@ -59,6 +51,9 @@ def create_app() -> FastAPI:
 
             If the Vite build exists at console-ui/dist/index.html, serve it.
             Otherwise fall back to the legacy single-file console.html template.
+
+            Routes defined AFTER the /console/assets mount, so asset requests
+            are handled by StaticFiles before the catch-all.
             """
             index_path = _CONSOLE_UI_DIST / "index.html"
             if index_path.exists():
@@ -68,7 +63,8 @@ def create_app() -> FastAPI:
 
     else:
         @app.get("/console", response_class=HTMLResponse)
-        def serve_console_legacy():
+        @app.get("/console/{rest_path:path}", response_class=HTMLResponse)
+        def serve_console_legacy(rest_path: str = ""):
             return HTMLResponse(console_html())
 
     return app
