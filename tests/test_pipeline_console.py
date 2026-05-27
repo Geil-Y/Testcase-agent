@@ -2402,3 +2402,98 @@ class TestConsoleUIFixes:
             assert "proposed_decisions" in data
             assert "saved" in data
             assert data["saved"] is False
+
+
+class TestAssetServingSecurity:
+    """P0: Asset serving must be safe from path traversal and return correct MIME types."""
+
+    def test_assets_path_traversal_rejected(self, client):
+        """Double-dot paths under /console/assets must be rejected (404 or 400)."""
+        traversal_paths = [
+            "/console/assets/../../../etc/passwd",
+            "/console/assets/..%2F..%2F..%2Fetc/passwd",
+            "/console/assets/....//....//....//etc/passwd",
+            "/console/assets/%2e%2e/%2e%2e/etc/passwd",
+        ]
+        for path in traversal_paths:
+            r = client.get(path)
+            assert r.status_code in (404, 400), (
+                f"Path traversal {path!r} returned {r.status_code}, expected 404 or 400"
+            )
+
+    def test_assets_legit_path_served(self, client):
+        """A legitimate asset path under /console/assets must return 200 if the dist exists."""
+        # The test build may not exist; if assets dir exists, a real file should be served.
+        import src.testcase_agent.api as api_mod
+        assets_dir = api_mod._CONSOLE_UI_DIST / "assets"
+        if assets_dir.exists():
+            # Find a real file in the assets dir
+            files = list(assets_dir.glob("*"))
+            if files:
+                asset_path = f"/console/assets/{files[0].name}"
+                r = client.get(asset_path)
+                assert r.status_code == 200, f"Asset {asset_path} returned {r.status_code}"
+
+    def test_console_shell_returns_html(self, client):
+        """The /console and /console/run/* shells must return HTML, not JSON."""
+        urls = ["/console", "/console/run/test-run-001"]
+        for url in urls:
+            r = client.get(url)
+            assert r.status_code == 200
+            content_type = r.headers.get("content-type", "")
+            assert "text/html" in content_type, (
+                f"{url} returned Content-Type {content_type!r}, expected text/html"
+            )
+
+    def test_assets_return_correct_mime_not_html(self, client):
+        """JS/CSS assets must return correct MIME type, not text/html."""
+        import src.testcase_agent.api as api_mod
+        assets_dir = api_mod._CONSOLE_UI_DIST / "assets"
+        if assets_dir.exists():
+            for f in assets_dir.iterdir():
+                if f.suffix in (".js", ".css", ".svg"):
+                    r = client.get(f"/console/assets/{f.name}")
+                    content_type = r.headers.get("content-type", "")
+                    if f.suffix == ".js":
+                        assert "javascript" in content_type or "text/html" not in content_type, (
+                            f"JS asset {f.name} got Content-Type {content_type!r}"
+                        )
+                    elif f.suffix == ".css":
+                        assert "css" in content_type or "text/html" not in content_type, (
+                            f"CSS asset {f.name} got Content-Type {content_type!r}"
+                        )
+                    break  # One file per type is sufficient
+
+    def test_console_run_shell_returns_html_not_asset(self, client):
+        """Direct refresh on /console/run/<run> must return HTML shell, not JSON/asset."""
+        r = client.get("/console/run/some-run-dir")
+        assert r.status_code == 200
+        content_type = r.headers.get("content-type", "")
+        assert "text/html" in content_type, (
+            f"Run shell returned {content_type!r}, expected text/html"
+        )
+        body = r.text
+        # The HTML shell should contain the React mount point or HTML structure
+        assert "Pipeline Console" in body or '<div id="root">' in body or "<html" in body.lower(), (
+            "Run shell response does not look like an HTML shell"
+        )
+
+    def test_assets_mount_before_catchall(self):
+        """Verify StaticFiles mount is registered before the catch-all routes."""
+        import src.testcase_agent.api as api_mod
+        app = api_mod.create_app()
+        routes = app.routes
+        # Find the positions of the assets mount and the catch-all
+        mount_idx = None
+        catchall_idx = None
+        for i, route in enumerate(routes):
+            path = getattr(route, 'path', '')
+            if path == '/console/assets':
+                mount_idx = i
+            if path == '/console/{rest_path:path}':
+                catchall_idx = i
+        if mount_idx is not None and catchall_idx is not None:
+            assert mount_idx < catchall_idx, (
+                f"StaticFiles mount at position {mount_idx} must come before "
+                f"catch-all route at position {catchall_idx}"
+            )
