@@ -3,19 +3,21 @@ import ReviewQueue from '../components/ReviewQueue'
 import ClarificationDetail from '../components/ClarificationDetail'
 import ValidationSummary from '../components/ValidationSummary'
 import ConfirmDialog from '../components/ConfirmDialog'
+import RegenerateDialog from '../components/RegenerateDialog'
 import { useClarificationReview } from '../hooks/useClarificationReview'
 import { useJob } from '../hooks/JobContext'
 
 interface Props {
   runDir: string
+  onAdvanced?: () => void
 }
 
-export default function ClarificationReviewPage({ runDir }: Props) {
+export default function ClarificationReviewPage({ runDir, onAdvanced }: Props) {
   const {
     items, selectedId, selectedItem, loading, saving, error,
     reasonCodes, memoryHints, validationErrors,
     setSelectedId, updateDraftItem, saveDraft, advance, acceptRecs,
-    applyProposedDecisions, setFilterParams, filters, isDirty, refetch,
+    applyProposedDecisions, setFilterParams, isDirty, refetch,
     setValidationErrors,
   } = useClarificationReview(runDir)
   const { isLocked, startPolling } = useJob()
@@ -26,8 +28,6 @@ export default function ClarificationReviewPage({ runDir }: Props) {
   const [highRiskConfirm, setHighRiskConfirm] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
   const [regenOpen, setRegenOpen] = useState(false)
-  const [regenInfo, setRegenInfo] = useState<{ confirmation_required: boolean; affected_artifacts?: string[]; message?: string } | null>(null)
-  const [regenConfirming, setRegenConfirming] = useState(false)
 
   const handleFilter = useCallback((field: string, value: string) => {
     if (field === 'decision') setDecisionFilter(value)
@@ -95,6 +95,7 @@ export default function ClarificationReviewPage({ runDir }: Props) {
     } else {
       setStatusMsg('Advanced to Case Intent Review!')
       refetch()
+      onAdvanced?.()
     }
   }
 
@@ -139,13 +140,11 @@ export default function ClarificationReviewPage({ runDir }: Props) {
         >
           Save &amp; Prepare Case Intent Review
         </button>
-        <button className="btn btn-sm btn-danger" onClick={async () => {
-          try {
-            const { regenerateConfirm } = await import('../api/endpoints')
-            setRegenInfo(await regenerateConfirm(runDir, 'clarification'))
-            setRegenOpen(true)
-          } catch { /* ignore */ }
-        }} disabled={isLocked}>
+        <button
+          className="btn btn-sm btn-danger"
+          onClick={() => setRegenOpen(true)}
+          disabled={isLocked}
+        >
           Regenerate
         </button>
         <button className="btn btn-sm" onClick={() => { refetch(); setValidationErrors(new Map()); }}>
@@ -186,33 +185,13 @@ export default function ClarificationReviewPage({ runDir }: Props) {
         onCancel={() => setHighRiskConfirm(false)}
       />
 
-      {regenOpen && (
-        <div className="dialog-overlay" onClick={() => setRegenOpen(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()}>
-            <h3>Regenerate Clarification</h3>
-            <p>{regenInfo?.message || 'This will archive downstream artifacts.'}</p>
-            {regenInfo?.affected_artifacts && regenInfo.affected_artifacts.length > 0 && (
-              <ul className="dialog-details">
-                {regenInfo.affected_artifacts.map((a) => <li key={a}>{a}</li>)}
-              </ul>
-            )}
-            <div className="dialog-actions">
-              <button className="btn btn-danger" onClick={async () => {
-                setRegenConfirming(true)
-                try {
-                  const { regenerateExecute } = await import('../api/endpoints')
-                  const res = await regenerateExecute(runDir, 'clarification')
-                  if (res.status === 'started') startPolling()
-                  setRegenOpen(false)
-                } catch { setRegenConfirming(false) }
-              }} disabled={regenConfirming}>
-                {regenConfirming ? 'Regenerating...' : 'Confirm Regenerate'}
-              </button>
-              <button className="btn" onClick={() => setRegenOpen(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RegenerateDialog
+        open={regenOpen}
+        runDir={runDir}
+        stage="clarification"
+        onClose={() => setRegenOpen(false)}
+        onStarted={startPolling}
+      />
     </div>
   )
 }

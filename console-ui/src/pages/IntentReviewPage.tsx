@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import ValidationSummary from '../components/ValidationSummary'
-import ConfirmDialog from '../components/ConfirmDialog'
+import RegenerateDialog from '../components/RegenerateDialog'
 import { useIntentReview } from '../hooks/useIntentReview'
 import { useJob } from '../hooks/JobContext'
 import type { IntentReviewItem } from '../api/types'
@@ -15,7 +15,6 @@ const DECISION_LABELS: Record<string, string> = {
 
 function IntentDetail({ item, validationErrors, onChange }: {
   item: IntentReviewItem | null
-  reasonCodes?: unknown
   validationErrors: string[]
   onChange: (c: Partial<IntentReviewItem>) => void
 }) {
@@ -133,8 +132,6 @@ export default function IntentReviewPage({ runDir }: Props) {
     }
   }
 
-  const handleRegenerateConfirm = () => setRegenerateConfirm(true)
-
   if (loading) return <div className="card"><p>Loading intent review...</p></div>
   if (error) return <div className="error-msg">{error}</div>
 
@@ -157,7 +154,7 @@ export default function IntentReviewPage({ runDir }: Props) {
         <button className="btn btn-primary" onClick={handleGenerate} disabled={isLocked || !isDirty}>
           Save &amp; Generate Cases
         </button>
-        <button className="btn btn-sm" onClick={handleRegenerateConfirm} disabled={isLocked}>
+        <button className="btn btn-sm" onClick={() => setRegenerateConfirm(true)} disabled={isLocked}>
           Regenerate
         </button>
       </div>
@@ -201,61 +198,6 @@ export default function IntentReviewPage({ runDir }: Props) {
         onClose={() => setRegenerateConfirm(false)}
         onStarted={startPolling}
       />
-    </div>
-  )
-}
-
-function RegenerateDialog({ open, runDir, stage, onClose, onStarted }: {
-  open: boolean; runDir: string; stage: string; onClose: () => void; onStarted: () => void
-}) {
-  const [confirming, setConfirming] = useState(false)
-  const [info, setInfo] = useState<{ confirmation_required: boolean; affected_artifacts?: string[]; message?: string } | null>(null)
-
-  const handleOpen = async () => {
-    try {
-      const { regenerateConfirm } = await import('../api/endpoints')
-      const result = await regenerateConfirm(runDir, stage)
-      setInfo(result)
-    } catch { onClose() }
-  }
-
-  const handleConfirm = async () => {
-    setConfirming(true)
-    try {
-      const { regenerateExecute } = await import('../api/endpoints')
-      const res = await regenerateExecute(runDir, stage)
-      if (res.status === 'started') { onStarted(); onClose() }
-    } catch { setConfirming(false) }
-  }
-
-  if (!open) return null
-
-  return (
-    <div className="dialog-overlay" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>Regenerate {stage}</h3>
-        {!info ? (
-          <>
-            <p>Loading confirmation...</p>
-            {setTimeout(handleOpen, 0) as unknown as null}
-          </>
-        ) : (
-          <>
-            <p>{info.message || `This will regenerate downstream artifacts.`}</p>
-            {info.affected_artifacts && info.affected_artifacts.length > 0 && (
-              <ul className="dialog-details">
-                {info.affected_artifacts.map((a) => <li key={a}>{a}</li>)}
-              </ul>
-            )}
-            <div className="dialog-actions">
-              <button className="btn btn-danger" onClick={handleConfirm} disabled={confirming}>
-                {confirming ? 'Regenerating...' : 'Confirm Regenerate'}
-              </button>
-              <button className="btn" onClick={onClose}>Cancel</button>
-            </div>
-          </>
-        )}
-      </div>
     </div>
   )
 }

@@ -18,10 +18,11 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-    ...init,
-  })
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> || {}) }
+  if (!(init?.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
+  }
+  const res = await fetch(`${BASE}${path}`, { ...init, headers })
   const body = await res.json().catch(() => null)
   if (!res.ok) {
     throw new ApiError(res.status, body)
@@ -43,7 +44,6 @@ function post<T>(path: string, data?: unknown): Promise<T> {
 function upload<T>(path: string, formData: FormData): Promise<T> {
   return request<T>(path, {
     method: 'POST',
-    headers: {},
     body: formData,
   })
 }

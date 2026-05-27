@@ -72,7 +72,10 @@ export default function Workspace() {
 
         <div className="workspace-content">
           {activeStage === 'clarification' && runDir && (
-            <ClarificationReviewPage runDir={runDir} />
+            <ClarificationReviewPage
+              runDir={runDir}
+              onAdvanced={() => { refetchRun(); setActiveStage('intents') }}
+            />
           )}
           {activeStage === 'intents' && runDir && (
             <IntentReviewPage runDir={runDir} />

@@ -8,10 +8,20 @@ interface JobPollState {
   result: unknown | null
 }
 
+function clearIntervalSafe(ref: React.MutableRefObject<ReturnType<typeof setInterval> | null>) {
+  if (ref.current) {
+    clearInterval(ref.current)
+    ref.current = null
+  }
+}
+
 export function useJobPolling(pollInterval = 1500) {
   const [state, setState] = useState<JobPollState>({ job: null, status: 'idle', result: null })
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const activeRef = useRef(false)
+
+  const stopPolling = useCallback(() => {
+    clearIntervalSafe(intervalRef)
+  }, [])
 
   const poll = useCallback(() => {
     getCurrentJob()
@@ -21,14 +31,13 @@ export function useJobPolling(pollInterval = 1500) {
           if (j.status === 'running') {
             setState({ job: j, status: 'running', result: null })
           } else if (j.status === 'succeeded') {
-            stopPolling()
+            clearIntervalSafe(intervalRef)
             setState({ job: j, status: 'succeeded', result: j.result ?? null })
           } else if (j.status === 'failed') {
-            stopPolling()
+            clearIntervalSafe(intervalRef)
             setState({ job: j, status: 'retryable', result: null })
           }
         } else {
-          // Check last_job
           const last = (data as JobState).last_job
           if (last) {
             if (last.status === 'succeeded') {
@@ -41,28 +50,19 @@ export function useJobPolling(pollInterval = 1500) {
           } else {
             setState({ job: null, status: 'idle', result: null })
           }
-          stopPolling()
+          clearIntervalSafe(intervalRef)
         }
       })
       .catch(() => {
-        stopPolling()
+        clearIntervalSafe(intervalRef)
       })
   }, [])
 
   const startPolling = useCallback(() => {
-    if (activeRef.current) return
-    activeRef.current = true
+    if (intervalRef.current) return // already polling
     poll()
     intervalRef.current = setInterval(poll, pollInterval)
   }, [poll, pollInterval])
-
-  const stopPolling = useCallback(() => {
-    activeRef.current = false
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-  }, [])
 
   const clear = useCallback(() => {
     stopPolling()
