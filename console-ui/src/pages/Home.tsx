@@ -49,6 +49,7 @@ export default function Home() {
             <RequirementsTable
               requirements={selectedBatch.requirements}
               runMap={runMap}
+              batchId={selectedBatch.id}
             />
           )}
 
