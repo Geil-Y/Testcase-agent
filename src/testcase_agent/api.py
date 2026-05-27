@@ -39,6 +39,11 @@ def create_app() -> FastAPI:
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     if _CONSOLE_UI_DIST.exists():
+        assets_dir = _CONSOLE_UI_DIST / "assets"
+        if assets_dir.exists():
+            # /assets covers ./assets/ when page URL is /console (no trailing slash)
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="console_assets")
+
         @app.get("/console/assets/{file_path:path}")
         def serve_console_asset(file_path: str):
             """Serve Vite-built assets referenced by the React shell."""
