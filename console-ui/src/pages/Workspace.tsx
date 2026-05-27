@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import StageNav from '../components/StageNav'
 import ModeBadge from '../components/ModeBadge'
+import ClarificationReviewPage from './ClarificationReviewPage'
 import { useRun } from '../hooks/useRun'
 import { useJob } from '../hooks/JobContext'
 
@@ -15,6 +16,12 @@ const STATUS_LABELS: Record<string, string> = {
   failed: 'Failed',
 }
 
+function determineStage(artifacts: Set<string>): string {
+  if (artifacts.has('generated_cases.json') || artifacts.has('evaluation_summary.json')) return 'results'
+  if (artifacts.has('case_intent_review.json')) return 'intents'
+  return 'clarification'
+}
+
 export default function Workspace() {
   const { runDir } = useParams<{ runDir: string }>()
   const navigate = useNavigate()
@@ -22,20 +29,16 @@ export default function Workspace() {
   const { isLocked } = useJob()
   const [activeStage, setActiveStage] = useState('clarification')
 
-  // Determine initial active stage from artifacts
-  const determineStage = (): string => {
-    if (!run) return 'clarification'
-    const arts = new Set(run.artifacts || [])
-    if (arts.has('generated_cases.json')) return 'results'
-    if (arts.has('case_intent_review.json')) return 'intents'
-    return 'clarification'
-  }
+  useEffect(() => {
+    if (run) {
+      const arts = new Set(run.artifacts || [])
+      setActiveStage(determineStage(arts))
+    }
+  }, [run])
 
   if (loading) return <div className="workspace"><p>Loading run...</p></div>
   if (error) return <div className="workspace"><div className="error-msg">{error}</div></div>
   if (!run) return <div className="workspace"><div className="error-msg">Run not found</div></div>
-
-  const stage = activeStage || determineStage()
 
   return (
     <div className="workspace">
@@ -58,25 +61,22 @@ export default function Workspace() {
       </div>
 
       <div className="workspace-body">
-        <StageNav run={run} activeStage={stage} onStageClick={setActiveStage} />
+        <StageNav run={run} activeStage={activeStage} onStageClick={setActiveStage} />
 
         <div className="workspace-content">
-          {stage === 'clarification' && (
-            <div className="card">
-              <h3>Clarification Review</h3>
-              <p className="text-muted">Review workbench will be implemented in #22.</p>
-            </div>
+          {activeStage === 'clarification' && runDir && (
+            <ClarificationReviewPage runDir={runDir} />
           )}
-          {stage === 'intents' && (
+          {activeStage === 'intents' && (
             <div className="card">
               <h3>Case Intent Review</h3>
-              <p className="text-muted">Review workbench will be implemented in #24.</p>
+              <p className="text-muted">Case intent workbench — see #24.</p>
             </div>
           )}
-          {stage === 'results' && (
+          {activeStage === 'results' && (
             <div className="card">
               <h3>Results</h3>
-              <p className="text-muted">Results view will be implemented in #27.</p>
+              <p className="text-muted">Read-only results — see #27.</p>
             </div>
           )}
         </div>
