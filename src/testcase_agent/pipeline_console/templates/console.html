@@ -7,35 +7,45 @@
 <style>
   :root { --bg:#f8f9fa; --surface:#fff; --border:#dee2e6; --text:#212529; --text-muted:#6c757d; --primary:#0d6efd; --primary-light:#e7f1ff; --success:#198754; --warning:#ffc107; --danger:#dc3545; --info:#0dcaf0; --radius:6px; --shadow:0 1px 3px rgba(0,0,0,0.08); --orange:#fd7e14; }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); line-height:1.5; font-size:1rem; }
   header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 1.5rem; height:52px; display:flex; align-items:center; justify-content:space-between; box-shadow:var(--shadow); position:sticky; top:0; z-index:10; }
-  header h1 { font-size:1.1rem; font-weight:600; cursor:pointer; }
-  .mode-badge { padding:2px 8px; border-radius:10px; font-weight:600; font-size:0.7rem; text-transform:uppercase; }
+  header h1 { font-size:1.15rem; font-weight:600; cursor:pointer; }
+  .mode-badge { padding:2px 8px; border-radius:10px; font-weight:600; font-size:0.78rem; text-transform:uppercase; }
   .mode-real { background:#d1e7dd; color:var(--success); } .mode-mock { background:#fff3cd; color:#856404; }
   main { max-width:1280px; margin:0 auto; padding:1.5rem; }
   .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:1rem; }
-  .card-header { padding:0.6rem 1rem; border-bottom:1px solid var(--border); font-weight:600; font-size:0.9rem; display:flex; align-items:center; justify-content:space-between; }
+  .card-header { padding:0.6rem 1rem; border-bottom:1px solid var(--border); font-weight:600; font-size:0.92rem; display:flex; align-items:center; justify-content:space-between; }
   .card-body { padding:0.75rem 1rem; }
-  .btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.35rem 0.7rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); font-size:0.8rem; cursor:pointer; white-space:nowrap; }
+  .btn { display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.75rem; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); color:var(--text); font-size:0.9rem; cursor:pointer; white-space:nowrap; }
   .btn:hover { background:#e9ecef; } .btn-primary { background:var(--primary); color:#fff; border-color:var(--primary); } .btn-primary:hover { background:#0b5ed7; }
   .btn-success { background:var(--success); color:#fff; border-color:var(--success); } .btn-danger { background:var(--danger); color:#fff; border-color:var(--danger); }
-  .btn-sm { padding:0.15rem 0.4rem; font-size:0.72rem; } .btn:disabled { opacity:0.5; cursor:not-allowed; }
-  select, input[type="text"], input[type="file"], textarea { padding:0.3rem 0.5rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.8rem; background:var(--surface); }
+  .btn-sm { padding:0.25rem 0.5rem; font-size:0.85rem; } .btn:disabled { opacity:0.5; cursor:not-allowed; }
+  select, input[type="text"], input[type="file"], textarea { padding:0.4rem 0.55rem; border:1px solid var(--border); border-radius:var(--radius); font-size:0.9rem; background:var(--surface); }
   select:focus, input:focus, textarea:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 2px var(--primary-light); }
-  table { width:100%; border-collapse:collapse; font-size:0.8rem; } th, td { padding:0.4rem 0.6rem; text-align:left; border-bottom:1px solid var(--border); }
+  table { width:100%; border-collapse:collapse; font-size:0.9rem; } th, td { padding:0.5rem 0.65rem; text-align:left; border-bottom:1px solid var(--border); }
   th { background:#f8f9fa; font-weight:600; white-space:nowrap; } tr:hover { background:var(--primary-light); }
   .empty-state { text-align:center; padding:2rem 1rem; color:var(--text-muted); }
-  .alert { padding:0.5rem 0.8rem; border-radius:var(--radius); font-size:0.8rem; margin:0.4rem 0; }
+  .alert { padding:0.5rem 0.9rem; border-radius:var(--radius); font-size:0.9rem; margin:0.4rem 0; }
   .alert-danger { background:#f8d7da; border:1px solid #f5c2c7; color:#842029; } .alert-success { background:#d1e7dd; border:1px solid #badbcc; color:#0f5132; }
   .alert-info { background:#cff4fc; border:1px solid #b6effb; color:#055160; } .alert-warning { background:#fff3cd; border:1px solid #ffecb5; color:#856404; }
   .form-row { display:flex; gap:0.5rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:0.5rem; }
-  .form-group { display:flex; flex-direction:column; gap:0.2rem; } .form-group label { font-size:0.7rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; }
+  .form-group { display:flex; flex-direction:column; gap:0.2rem; } .form-group label { font-size:0.82rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; }
   .hidden { display:none !important; } .flex-between { display:flex; justify-content:space-between; align-items:center; }
   .routing-g { color:var(--success); font-weight:600; } .routing-b { color:var(--primary); font-weight:600; } .routing-o { color:var(--orange); font-weight:600; } .routing-r { color:var(--danger); font-weight:600; }
-  .stage-nav { display:flex; gap:0; margin-bottom:1rem; } .stage-item { padding:0.4rem 0.8rem; border:1px solid var(--border); font-size:0.75rem; cursor:pointer; background:var(--surface); }
-  .stage-item.active { background:var(--primary); color:#fff; border-color:var(--primary); } .stage-item.done { background:#d1e7dd; border-color:#badbcc; }
+  .stage-nav { display:flex; gap:0; margin-bottom:1rem; } .stage-item { padding:0.45rem 0.85rem; border:1px solid var(--border); font-size:0.84rem; cursor:default; background:var(--surface); user-select:none; }
+  .stage-item.active { background:var(--primary); color:#fff; border-color:var(--primary); cursor:default; }
+  .stage-item.done { background:#d1e7dd; border-color:#badbcc; cursor:pointer; } .stage-item.done:hover { background:#a3cfbb; }
   .stage-item:first-child { border-radius:var(--radius) 0 0 var(--radius); } .stage-item:last-child { border-radius:0 var(--radius) var(--radius) 0; }
   .pending-row { background:#fffbe6; }
+  .affected-cell { max-width:260px; word-wrap:break-word; overflow-wrap:break-word; white-space:normal; }
+  @keyframes job-pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .job-banner { display:flex; align-items:center; gap:0.5rem; animation:job-pulse 1.5s ease-in-out infinite; }
+  .job-spinner { display:inline-block; width:12px; height:12px; border:2px solid var(--info); border-top-color:transparent; border-radius:50%; animation:spin 0.6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .sidebar { display:flex; gap:1rem; }
+  .sidebar-nav { width:180px; flex-shrink:0; }
+  .sidebar-nav .stage-item { display:block; border-radius:var(--radius); margin-bottom:2px; font-size:0.84rem; }
+  .sidebar-workspace { flex:1; min-width:0; }
 </style>
 </head>
 <body>
@@ -55,7 +65,7 @@ async function loadMode() { try { const h=await(await fetch('/api/v1/health')).j
 
 function showHome() { stopPolling(); STATE.activeRun=null; STATE.runMeta=null; renderHome(); }
 function openRun(runDir) { STATE.activeRun = runDir; loadRunMeta(); }
-function stopPolling() { if(STATE.jobPoll){clearInterval(STATE.jobPoll);STATE.jobPoll=null;} }
+function stopPolling() { if(STATE.jobPoll){clearInterval(STATE.jobPoll);STATE.jobPoll=null;} clearJobBanner(); }
 
 // -- Job polling --
 function pollJob(jobId, onDone) {
@@ -63,15 +73,28 @@ function pollJob(jobId, onDone) {
   STATE.jobPoll = setInterval(async () => {
     try {
       const r = await get(API+'/jobs/current');
-      if(r.status==='idle'){stopPolling();if(onDone)onDone();return;}
+      if(r.status==='idle'){
+        stopPolling();
+        // Handle fast-completing job captured only as last_job
+        if(r.last_job && r.last_job.id===jobId){
+          if(r.last_job.status==='succeeded') handleJobResult(r.last_job);
+          else if(r.last_job.status==='failed') STATE.jobResultMessage = {type:'error', text:'Job failed: '+(r.last_job.error||'unknown')};
+        }
+        if(onDone)onDone();
+        return;
+      }
       const j = r.job;
+      if(j.id!==jobId) return;
       if(j.status==='succeeded'){
         stopPolling();
         handleJobResult(j);
         if(onDone)onDone();
       } else if(j.status==='failed'){
         stopPolling();
-        alert('Job failed: '+(j.error||'unknown')+(j.error_detail?'\n'+j.error_detail:''));
+        STATE.jobResultMessage = {type:'error', text:'Job failed: '+(j.error||'unknown')+(j.error_detail?' — '+j.error_detail:'')};
+        if(onDone)onDone();
+      } else {
+        showJobBanner(j);
       }
     } catch(e) { stopPolling(); }
   }, 1000);
@@ -83,9 +106,9 @@ function handleJobResult(j) {
   const isValFail = r.status==='validation_failed' || (r.validated===false && (r.errors||[]).length>0);
   const isBlocked = r.status==='blocked' || r.blocked===true;
   if(isValFail){
-    alert('Validation failed:\n'+(r.errors||[]).map(e=>e.field_path+': '+e.message).join('\n'));
+    STATE.jobResultMessage = {type:'error', text:'Validation failed:<br>'+(r.errors||[]).map(e=>esc(e.field_path)+': '+esc(e.message)).join('<br>')};
   } else if(isBlocked){
-    alert('Blocked: '+(r.block_reasons||[]).join(', '));
+    STATE.jobResultMessage = {type:'warning', text:'Blocked: '+(r.block_reasons||[]).join(', ')};
   }
 }
 
@@ -167,6 +190,57 @@ async function loadRunMeta() {
   renderWorkspace();
 }
 
+// -- Job progress display --
+function describeJob(name) {
+  const map = {
+    'start-run':'Starting new run...',
+    'advance-clarification':'Preparing case intent review...',
+    'generate-cases':'Generating test cases...',
+    'regenerate-clarification':'Regenerating clarification...',
+    'regenerate-intents':'Regenerating case intents...',
+    'regenerate-cases':'Regenerating cases...',
+  };
+  for(const [k,v] of Object.entries(map)){if(name.includes(k)) return v;}
+  return name;
+}
+
+function showJobBanner(job) {
+  clearJobBanner();
+  const el = document.createElement('div');
+  el.className = 'alert alert-info job-banner';
+  el.id = 'job-banner';
+  const elapsed = job.started_at ? Math.max(0,Math.floor((Date.now()/1000)-job.started_at)) : 0;
+  const mins = Math.floor(elapsed/60), secs = elapsed%60;
+  el.innerHTML = `<span class="job-spinner"></span> <strong>${describeJob(job.name)}</strong> &mdash; ${mins}:${String(secs).padStart(2,'0')} elapsed`;
+  document.getElementById('main-content').insertBefore(el, document.getElementById('main-content').firstChild);
+  // Update elapsed time every second
+  const timerId = setInterval(() => {
+    const banner = document.getElementById('job-banner');
+    if(!banner){clearInterval(timerId);return;}
+    const e = job.started_at ? Math.max(0,Math.floor((Date.now()/1000)-job.started_at)) : 0;
+    const m = Math.floor(e/60), s = e%60;
+    const strong = banner.querySelector('strong');
+    if(strong) strong.nextSibling.textContent = ` — ${m}:${String(s).padStart(2,'0')} elapsed`;
+  }, 1000);
+  STATE._jobTimer = timerId;
+}
+
+function clearJobBanner() {
+  const el = document.getElementById('job-banner');
+  if(el) el.remove();
+  if(STATE._jobTimer){clearInterval(STATE._jobTimer);STATE._jobTimer=null;}
+}
+
+function goToStage(stageKey) {
+  // If clicking the active stage while viewing a past stage, return to current
+  if (STATE.viewStage && STATE.viewStage === stageKey) {
+    STATE.viewStage = null;
+  } else {
+    STATE.viewStage = stageKey;
+  }
+  renderWorkspace();
+}
+
 function renderWorkspace() {
   stopPolling();
   const r = STATE.runMeta;
@@ -174,29 +248,38 @@ function renderWorkspace() {
 
   const statusOrder = ['new','clarification_ready','clarification_blocked','intent_ready','cases_ready','evaluated'];
   const currentIdx = statusOrder.indexOf(r.status);
-  let stages = '<div class="stage-nav">';
-  ['New','Clarification','Intent Review','Cases','Results'].forEach((label,i) => {
-    const idx = [0,1,2,3,4][i]; // map: new=0, clarification_ready/blocked=1, intent_ready=2, cases_ready=3, evaluated=4
-    const realIdx = i===0?0:i===1?1:i===2?2:i===3?3:4;
-    let cls = '';
-    if(currentIdx>=0){
-      if(currentIdx===realIdx||(i===1&&(r.status==='clarification_ready'||r.status==='clarification_blocked'))) cls='active';
-      else if(currentIdx>realIdx) cls='done';
-    }
-    stages += `<div class="stage-item ${cls}">${label}</div>`;
-  });
-  stages += '</div>';
+  const stageDefs = [
+    {label:'New', key:'new', doneAfter:0},
+    {label:'Clarification', key:'clarification', doneAfter:2},
+    {label:'Intent Review', key:'intents', doneAfter:3},
+    {label:'Cases', key:'cases', doneAfter:4},
+    {label:'Results', key:'results', doneAfter:5},
+  ];
 
+  let stagesNav = '<div class="sidebar-nav">';
+  stageDefs.forEach((def,i) => {
+    const done = currentIdx > def.doneAfter;
+    const active = !done && (i===0?currentIdx===0:i===1?currentIdx===1||currentIdx===2:currentIdx===def.doneAfter);
+    let cls = active ? 'active' : done ? 'done' : '';
+    const clickable = (done || (active && STATE.viewStage && STATE.viewStage!==def.key));
+    const onclick = clickable ? ` onclick="goToStage('${def.key}')"` : '';
+    stagesNav += `<div class="stage-item ${cls}"${onclick}>${def.label}</div>`;
+  });
+  stagesNav += '</div>';
+
+  const view = STATE.viewStage;
   let body = '';
-  if(r.status==='new'||r.status==='clarification_ready'||r.status==='clarification_blocked'){
-    body = renderClarificationSection();
-  } else if(r.status==='intent_ready'){
-    body = renderIntentSection();
-  } else if(r.status==='cases_ready'||r.status==='evaluated'){
-    body = renderResultsSection();
-  } else {
-    body = `<div class="card"><div class="card-body"><p>Status: ${esc(r.status)}</p></div></div>`;
+  if(view && currentIdx > (stageDefs.find(d=>d.key===view)||{}).doneAfter){
+    // Revisiting a completed stage — render its section
+    if(view==='new'||view==='clarification') body = renderClarificationSection();
+    else if(view==='intents') body = renderIntentSection();
+    else if(view==='cases'||view==='results') body = renderResultsSection();
+  } else if(currentIdx>=0){
+    if(currentIdx<=2) body = renderClarificationSection();
+    else if(currentIdx===3) body = renderIntentSection();
+    else body = renderResultsSection();
   }
+  if(!body) body = `<div class="card"><div class="card-body"><p>Status: ${esc(r.status)}</p></div></div>`;
 
   document.getElementById('main-content').innerHTML = `
 <div class="card"><div class="card-header">Run: ${esc(r.run_dir)}</div>
@@ -206,13 +289,21 @@ function renderWorkspace() {
     <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button>
     <button class="btn btn-sm" onclick="importMemory()">Import Memory</button>
     <button class="btn btn-sm btn-danger" onclick="showRegenerate()">Regenerate</button></span>
-  </div>${stages}</div>${body}`;
+  </div></div>
+  ${STATE.jobResultMessage ? `<div class="alert ${STATE.jobResultMessage.type==='error'?'alert-danger':'alert-warning'}">${STATE.jobResultMessage.text}</div>` : ''}
+  <div class="sidebar">${stagesNav}<div class="sidebar-workspace">${body}</div></div>`;
+  STATE.jobResultMessage = null;
 
-  // Poll for active jobs on this run
-  get(API+'/jobs/current').then(jr=>{if(jr.status==='active'&&jr.job.run_dir===r.run_dir){const el=document.createElement('div');el.className='alert alert-info';el.id='job-status-'+jr.job.id;el.textContent=`Job: ${jr.job.name} — ${jr.job.status}`;document.getElementById('main-content').insertBefore(el,document.getElementById('main-content').firstChild);pollJob(jr.job.id,()=>{loadRunMeta();});}}).catch(()=>{});
-}
+  // Poll for active jobs on this run — skip completed/failed ones
+  get(API+'/jobs/current').then(jr=>{
+    if(jr.status==='active' && jr.job.run_dir===r.run_dir && jr.job.status!=='succeeded' && jr.job.status!=='failed'){
+      showJobBanner(jr.job);
+      pollJob(jr.job.id, ()=>{ loadRunMeta(); });
+    }
+  }).catch(()=>{});
+  }
 
-// -- Regenerate UI --
+  // -- Regenerate UI --
 async function showRegenerate() {
   const r = STATE.runMeta; if(!r) return;
   const stage = r.status==='clarification_ready'||r.status==='clarification_blocked'?'clarification':r.status==='intent_ready'?'intents':'cases';
@@ -258,9 +349,9 @@ async function loadAndRenderClarification() {
     let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
     return `<tr class="${decided?'':'pending-row'}">
       <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.affected_text||'')}">${esc((a.affected_text||'').substring(0,50))}</td>
+      <td class="affected-cell" title="${esc(a.affected_text||'')}">${esc(a.affected_text||'—')}</td>
       <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
-      <td><select multiple onchange="updateReasonCodes('${esc(d.item_id)}',Array.from(this.selectedOptions).map(o=>o.value))" style="height:40px;width:100px;">${rcOpts}</select></td>
+      <td><select onchange="updateReasonCode('${esc(d.item_id)}',this.value)">${rcOpts}</select></td>
       <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
       <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
     </tr>`;
@@ -283,7 +374,7 @@ async function loadAndRenderClarification() {
 }
 
 function updateDecision(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.decision=v;}
-function updateReasonCodes(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_codes=v;}
+function updateReasonCode(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_codes=v?[v]:[];}
 function updateReasonText(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_text=v;}
 function updateClarifiedValue(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.clarified_value=v;}
 
@@ -305,9 +396,9 @@ function rebuildClarificationTable() {
     let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
     return `<tr class="${decided?'':'pending-row'}">
       <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
-      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.affected_text||'')}">${esc((a.affected_text||'').substring(0,50))}</td>
+      <td class="affected-cell" title="${esc(a.affected_text||'')}">${esc(a.affected_text||'—')}</td>
       <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
-      <td><select multiple onchange="updateReasonCodes('${esc(d.item_id)}',Array.from(this.selectedOptions).map(o=>o.value))" style="height:40px;width:100px;">${rcOpts}</select></td>
+      <td><select onchange="updateReasonCode('${esc(d.item_id)}',this.value)">${rcOpts}</select></td>
       <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
       <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
     </tr>`;

@@ -158,6 +158,8 @@ def get_current_job():
     job = runner.get_job()
     if job is None:
         return {"status": "idle"}
+    if job.get("status") in ("succeeded", "failed"):
+        return {"status": "idle", "last_job": job}
     return {"status": "active", "job": job}
 
 
