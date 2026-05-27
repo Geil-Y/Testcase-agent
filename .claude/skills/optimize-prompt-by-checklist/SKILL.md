@@ -72,6 +72,7 @@ python -m optimization.cli run `
   --excel requirements.xlsx `
   --sample 20 `
   --seed 42 `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 ```
 
@@ -82,15 +83,17 @@ The set is self-contained — entries have inline `description`,
 `function_name`, and `supplementary_info`, so `--excel` is NOT required.
 
 ```powershell
-# Full 35-entry set
+# Full 35-entry set with incremental DeepSeek scoring
 python -m optimization.cli run `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 
 # First N entries only
 python -m optimization.cli run `
   --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
   --limit 5 `
+  --eval `
   --output-dir optimization_runs/log/<run-name>/round_01
 ```
 
@@ -101,13 +104,15 @@ When `--requirement-set` is provided:
 - `generated_cases.json` is enriched with `evaluation_bucket`, `expected_missing_categories`, and `requirement_set_note`.
 - `summary.json` records `requirement_set_name`, `requirement_set_path`, and `total_requirement_set_entries`.
 
-## Sanitization
+## Post-Generation Quality Loop
 
-Sanitization is ON by default for `optimization.cli run`.
+The batch runner applies three post-generation quality steps per case:
 
-- Use `--no-sanitize` to disable it.
-- Sanitization replaces invented numeric values with `[NEEDS REVIEW]`.
-- Each case in `generated_cases.json` records case-level provenance: `sanitize.enabled`, `sanitize.replacement_count`, and `sanitize.replacements`.
+1. **Self-check** — LLM reviews the case for invented signal names / DTCs / state names not in the known lists, replacing inventions with `[NEEDS REVIEW]`.
+2. **Numeric sanitization** — deterministic post-processing replaces unsupported concrete numeric values with `[NEEDS REVIEW]`. Only the selected requirement or an explicitly accepted test basis authorizes concrete values; supplementary context does not.
+3. **Retry loop** — hard-gate rules (from `evaluate_case()`) are run against the case. Failed hard gates trigger regeneration with the failure reason as `review_comment`, up to 2 retries. Regenerated cases pass through self-check and numeric sanitization again before re-evaluation. Exhausted retries are recorded in the case output.
+
+Each case in `generated_cases.json` records `sanitize.*` provenance and `retry.attempts`, `retry.exhausted`, `retry.failures`, and `retry.self_check_changed`.
 
 ## Evaluation Architecture
 
@@ -123,13 +128,23 @@ Renderers consume evaluator results:
 
 ### DeepSeek AI Review
 
-DeepSeek uses the 8-dimension scoring rubric in `optimization_runs/scoring_rubrics.md`.
-It evaluates requirement groups, not isolated flattened cases:
+**Unified scoring engine:** `optimization/claude_evaluator.py::_score_requirements_parallel`
+is the single entry point for all DeepSeek 8-dimension scoring. Both `run --eval` and
+the standalone `evaluate` command route through it.
+
+DeepSeek receives only the requirement description and final generated case content —
+no LLM#1 analysis intermediate data (signals, thresholds, timing, coverage plan, etc.).
+It evaluates requirement groups using the rubric in `optimization_runs/scoring_rubrics.md`:
 
 - `coverage_value` is scored once per requirement over the full generated case set.
 - Other 7 dimensions are scored per case.
 - `deepseek_evaluation.json` stores both nested `requirements` and flattened `cases`.
 - `overall_weighted` is computed by averaging per-requirement weighted scores.
+
+**Batching:** Requirements are grouped into batches of 5 per API call, submitted with
+up to 3 concurrent workers. When `--eval` is passed to `run`, entries are buffered
+during generation and flushed in batches of 5. The standalone `evaluate` subcommand
+reads `generated_cases.json` and scores all entries in batches of 5.
 
 ### Manual Review Scores
 
@@ -146,14 +161,24 @@ Format uses the same 8-dimension structure. See `optimization/manual_review.py`.
 
 ## Eval-Only Workflow
 
-1. Generate cases with either random exploration or the full Prompt Evaluation Set.
+1. Generate + evaluate in one pass with `--eval` (DeepSeek scores print in real-time).
 2. Run `generate_round_html()` to produce `cases_report.html`.
 3. Optionally generate `evaluation_report.html`.
-4. Optionally run AI evaluation: `python -m optimization.cli evaluate --round-dir <round_dir>`
-5. Optionally write `manual_review_scores.json` and rerun `generate_round_html()`.
+4. Optionally write `manual_review_scores.json` and rerun `generate_round_html()`.
 
 ```powershell
+# One command: generate cases, hard-rule eval, and incremental DeepSeek scoring
+python -m optimization.cli run `
+  --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json `
+  --eval `
+  --output-dir optimization_runs/log/<run-name>/round_01
+
+# Generate the unified report
 python -c "from pathlib import Path; from optimization.generate_case_html import generate_round_html; generate_round_html(Path('<round_dir>'), 1)"
+```
+
+If you need to re-score an existing round (e.g. after rubric changes):
+```powershell
 python -m optimization.cli evaluate --round-dir <round_dir>
 ```
 
@@ -165,14 +190,13 @@ Rules:
 
 ### Per-Round Steps
 
-1. Generate cases with the full Prompt Evaluation Set (acceptance signal).
-2. Generate `cases_report.html`.
+1. Generate + evaluate with `--eval` (DeepSeek scores print in real-time as each requirement completes).
+2. Run `generate_round_html()` to produce `cases_report.html`.
 3. Optionally generate `evaluation_report.html`.
-4. Run AI evaluation: `python -m optimization.cli evaluate --round-dir <round_dir>`
-5. If using Manual Review Scores, write `manual_review_scores.json` and rerun `generate_round_html()`.
-6. Diagnose the lowest-quality cases before editing prompts.
-7. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output format.
-8. Repeat for the next round.
+4. If using Manual Review Scores, write `manual_review_scores.json` and rerun `generate_round_html()`.
+5. Diagnose the lowest-quality cases from the report before editing prompts.
+6. Modify prompt files only; preserve the LLM#1 -> LLM#2 flow and HTML output format.
+7. Repeat for the next round.
 
 ### Optimization Rules
 

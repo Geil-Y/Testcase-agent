@@ -81,10 +81,17 @@ class TestLoadPromptEvalV1:
 
         # Complete info baseline → no missing
         assert lookup["REQ-BMS-OVP-002"]["expected_missing_categories"] == []
-        # Threshold/timing boundary → timing missing
-        assert lookup["REQ-BMS-OVP-001"]["expected_missing_categories"] == ["timing"]
-        # New: Undervoltage Protection domain → threshold + timing missing
-        assert lookup["REQ-BMS-UVP-001"]["expected_missing_categories"] == ["threshold", "timing"]
+        # Raw OV detection has a symbolic threshold, but still lacks the
+        # controllable cell-voltage interface and raw response/sample time.
+        assert lookup["REQ-BMS-OVP-001"]["expected_missing_categories"] == ["signal", "timing"]
+        # UVP-001 provides the 2.80 V threshold; the missing semantics are the
+        # controllable cell-voltage interface, response timing, and concrete
+        # evidence/value for discharge limiting.
+        assert lookup["REQ-BMS-UVP-001"]["expected_missing_categories"] == ["signal", "timing", "observation"]
+        # BAL-002 provides 20 mV and 5 A thresholds; timeout duration and
+        # concrete balancing status/control signals and observations remain
+        # missing.
+        assert lookup["REQ-BMS-BAL-002"]["expected_missing_categories"] == ["signal", "timing", "observation"]
         # Missing info trap → threshold + timing
         assert lookup["REQ-BMS-THM-004"]["expected_missing_categories"] == ["threshold", "timing"]
         # Multi-branch → state + observation

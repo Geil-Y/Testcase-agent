@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 import time
 from dataclasses import dataclass, field
@@ -24,7 +25,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "deepseek-v4-flash[1m]")
-MAX_REQUIREMENTS_PER_CALL = 20
 _RUBRICS_PATH = _PROJECT_ROOT / "optimization_runs" / "scoring_rubrics.md"
 
 CASE_LEVEL_DIMS = [
@@ -148,6 +148,17 @@ def _build_system_prompt(checklist: str) -> str:
     )
 
 
+def build_system_prompt() -> str:
+    """Build and return the system prompt from checklist_v2.md.
+
+    The result can be reused across multiple score_batch() calls so the
+    checklist and rubrics are loaded only once.
+    """
+    checklist_path = _PROJECT_ROOT / "optimization_runs" / "checklist_v2.md"
+    checklist = checklist_path.read_text(encoding="utf-8")
+    return _build_system_prompt(checklist)
+
+
 def _fmt_list(values: list[Any]) -> str:
     clean = [str(v).strip() for v in values if str(v).strip()]
     return ", ".join(clean) if clean else "none"
@@ -168,40 +179,20 @@ def _fmt_missing_items(items: list[dict[str, Any]]) -> str:
 
 
 def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> str:
-    """Build user prompt for a batch of requirement groups."""
+    """Build user prompt for a batch of requirement groups — case content only."""
     parts = [
         f"Evaluate the following {len(requirements)} requirement group(s) "
         f"(batch {start_idx + 1}-{start_idx + len(requirements)} of {total} total).\n",
     ]
 
     for offset, req in enumerate(requirements):
-        analysis = req.get("analysis", {})
-        intents = analysis.get("case_intents", [])
-        intent_lines = []
-        for i, intent in enumerate(intents):
-            intent_lines.append(
-                f"  {i}. coverage={intent.get('coverage', '')}; "
-                f"intent={intent.get('description', '')}"
-            )
-
         parts.append(
             f"## Requirement Group {start_idx + offset}: {req.get('requirement_key', '')}\n"
             f"Function: {req.get('function_name', '')}\n"
             f"Description: {req.get('description', '')}\n"
-            f"Supplementary info: {req.get('supplementary_info', '')}\n"
-            f"Evaluation bucket: {req.get('evaluation_bucket', '')}\n"
-            f"Expected missing categories: {_fmt_list(req.get('expected_missing_categories', []))}\n"
-            f"Known signals: {_fmt_list(analysis.get('signals', []))}\n"
-            f"Known thresholds: {_fmt_list(analysis.get('thresholds', []))}\n"
-            f"Known timing: {_fmt_list(analysis.get('timing', []))}\n"
-            f"Known states: {_fmt_list(analysis.get('states', []))}\n"
-            f"Known observations: {_fmt_list(analysis.get('observations', []))}\n"
-            f"Missing information items:\n{_fmt_missing_items(analysis.get('missing_info_items', []))}\n"
-            f"Coverage plan:\n{chr(10).join(intent_lines) if intent_lines else '  none'}\n"
         )
 
         for ci, case in enumerate(req.get("cases", [])):
-            intent = intents[ci] if ci < len(intents) else {}
             steps_text = "\n".join(
                 f"    {s.get('order', j + 1)}. Action: {s.get('action', '')} | "
                 f"Expected: {s.get('expected', 'none')}"
@@ -209,8 +200,6 @@ def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> 
             )
             parts.append(
                 f"### Case {ci} — {case.get('title', '')}\n"
-                f"Case coverage: {intent.get('coverage', '')}\n"
-                f"Case intent: {intent.get('description', '')}\n"
                 f"Objective: {case.get('objective', '')}\n"
                 f"Precondition: {case.get('precondition', '')}\n"
                 f"Postcondition: {case.get('postcondition', '')}\n"
@@ -443,12 +432,126 @@ def _parse_requirement_scores(parsed: dict) -> list[RequirementScore]:
     return scores
 
 
+def score_batch(
+    batch: list[dict],
+    system_prompt: str,
+    model: str = DEFAULT_MODEL,
+    start_idx: int = 0,
+    total: int | None = None,
+) -> list[RequirementScore]:
+    """Score a batch of requirement groups in a single LLM call.
+
+    Raises RuntimeError if the LLM response cannot be parsed.
+    """
+    if total is None:
+        total = len(batch)
+    user_prompt = _build_user_prompt(batch, start_idx, total)
+    raw = _call_llm(system_prompt, user_prompt, model)
+    parsed = _extract_json(raw)
+    if parsed is None:
+        raise RuntimeError(f"Failed to parse JSON from LLM response")
+    return _parse_requirement_scores(parsed)
+
+
+def _print_requirement_score(idx: int, total: int, req_key: str, r: "RequirementScore | None"):
+    """Print a single requirement's DeepSeek score line."""
+    if r is None:
+        print(f"  DeepSeek [{idx + 1}/{total}] {req_key} MISSING (not in batch response)")
+        return
+    avgs = r.case_dimension_averages
+    print(
+        f"  DeepSeek [{idx + 1}/{total}] {req_key}  "
+        f"w={r.weighted_score}  cov={r.coverage_value}  "
+        f"al={avgs['requirement_alignment']}  ex={avgs['executability']}  "
+        f"ob={avgs['observability']}  pf={avgs['pass_fail_clarity']}  "
+        f"in={avgs['information_integrity']}  st={avgs['state_and_environment_control']}  "
+        f"ar={avgs['automation_readiness']}"
+    )
+
+
+def _score_requirements_parallel(
+    data: list[dict],
+    system_prompt: str,
+    model: str = DEFAULT_MODEL,
+    batch_size: int = 5,
+    max_concurrency: int = 3,
+    submit_delay: float = 0.1,
+) -> tuple[list[RequirementScore], int]:
+    """Score requirements in parallel, batching multiple entries per API call.
+
+    Returns (all_scores_in_original_order, error_count).
+    Prints per-requirement results as they complete.
+    """
+    total = len(data)
+    results: dict[int, list[RequirementScore]] = {}
+    errors = 0
+
+    # Split into batches
+    batches: list[tuple[list[int], list[dict]]] = []
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        batches.append((list(range(start, end)), data[start:end]))
+
+    def _score_batch(indices: list[int], entries: list[dict]):
+        try:
+            scores = score_batch(entries, system_prompt, model, start_idx=indices[0] + 1, total=total)
+            return indices, scores, None
+        except Exception as exc:
+            return indices, [], exc
+
+    with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
+        future_to_indices: dict = {}
+        for indices, entries in batches:
+            future = executor.submit(_score_batch, indices, entries)
+            future_to_indices[future] = indices
+            if submit_delay and len(future_to_indices) < len(batches):
+                time.sleep(submit_delay)
+
+        for future in as_completed(future_to_indices):
+            indices = future_to_indices[future]
+            try:
+                _, scores, exc = future.result()
+                if exc:
+                    for idx in indices:
+                        req_key = data[idx].get("requirement_key", f"#{idx}")
+                        print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                        errors += 1
+                else:
+                    score_by_key = {s.requirement_key: s for s in scores}
+                    for idx in indices:
+                        req_key = data[idx].get("requirement_key", f"#{idx}")
+                        s = score_by_key.get(req_key)
+                        if s:
+                            results[idx] = [s]
+                            _print_requirement_score(idx, total, req_key, s)
+                        else:
+                            _print_requirement_score(idx, total, req_key, None)
+                            errors += 1
+                sys.stdout.flush()
+            except Exception as exc:
+                for idx in indices:
+                    req_key = data[idx].get("requirement_key", f"#{idx}")
+                    print(f"  DeepSeek [{idx + 1}/{total}] {req_key} FAILED: {exc}")
+                    errors += 1
+                sys.stdout.flush()
+
+    all_scores: list[RequirementScore] = []
+    for i in sorted(results.keys()):
+        all_scores.extend(results[i])
+
+    return all_scores, errors
+
+
 def evaluate_round(
     round_dir: Path,
     model: str = DEFAULT_MODEL,
-    delay: float = 0.5,
+    delay: float = 0.1,
+    max_concurrency: int = 5,
 ) -> EvalResult:
-    """Score all requirement groups in a round using DeepSeek API."""
+    """Score all requirement groups in a round using DeepSeek API.
+
+    Requirements are scored in parallel with up to max_concurrency workers.
+    """
     cases_path = round_dir / "generated_cases.json"
     if not cases_path.exists():
         raise FileNotFoundError(f"generated_cases.json not found in {round_dir}")
@@ -459,54 +562,16 @@ def evaluate_round(
 
     with open(cases_path, encoding="utf-8") as f:
         data = json.load(f)
-    checklist = checklist_path.read_text(encoding="utf-8")
 
-    total = len(data)
-    system_prompt = _build_system_prompt(checklist)
+    system_prompt = _build_system_prompt(checklist_path.read_text(encoding="utf-8"))
     result = EvalResult(model_used=model)
 
-    for batch_start in range(0, total, MAX_REQUIREMENTS_PER_CALL):
-        batch = data[batch_start:batch_start + MAX_REQUIREMENTS_PER_CALL]
-        batch_num = batch_start // MAX_REQUIREMENTS_PER_CALL + 1
-        total_batches = (total + MAX_REQUIREMENTS_PER_CALL - 1) // MAX_REQUIREMENTS_PER_CALL
-
-        print(
-            f"[Batch {batch_num}/{total_batches}] Evaluating {len(batch)} requirement group(s) "
-            f"({batch_start + 1}-{batch_start + len(batch)} of {total}) ..."
-        )
-
-        user_prompt = _build_user_prompt(batch, batch_start, total)
-
-        try:
-            raw = _call_llm(system_prompt, user_prompt, model)
-            parsed = _extract_json(raw)
-
-            if parsed is None:
-                print("  ERROR: Failed to parse JSON from response")
-                print(f"  Raw (first 500 chars): {raw[:500]}")
-                result.errors += 1
-                continue
-
-            batch_scores = _parse_requirement_scores(parsed)
-            missing_scores = [
-                rs for rs in batch_scores
-                if rs.coverage_value == 0 or any(
-                    getattr(cs, dim) == 0 for cs in rs.cases for dim in CASE_LEVEL_DIMS
-                )
-            ]
-            if missing_scores:
-                print(f"  WARNING: {len(missing_scores)} requirement group(s) have missing/invalid scores")
-
-            result.requirements.extend(batch_scores)
-            print(f"  Got {len(batch_scores)} requirement score(s)")
-            sys.stdout.flush()
-
-        except Exception as exc:
-            print(f"  ERROR: {exc}")
-            result.errors += 1
-
-        if batch_start + MAX_REQUIREMENTS_PER_CALL < total:
-            time.sleep(delay)
+    result.requirements, result.errors = _score_requirements_parallel(
+        data, system_prompt, model,
+        batch_size=5,
+        max_concurrency=max_concurrency,
+        submit_delay=delay,
+    )
 
     return result
 
@@ -587,13 +652,14 @@ def save_evaluation(result: EvalResult, round_dir: Path, evaluator_name: str = "
 def run_full_evaluation(
     round_dir: Path,
     model: str = DEFAULT_MODEL,
-    delay: float = 0.5,
+    delay: float = 0.1,
+    max_concurrency: int = 5,
 ) -> float:
     """Run DeepSeek 8-dimension scoring and save to deepseek_evaluation.json.
 
     Returns the overall weighted score (0.0-5.0).
     """
-    result = evaluate_round(round_dir, model=model, delay=delay)
+    result = evaluate_round(round_dir, model=model, delay=delay, max_concurrency=max_concurrency)
     save_evaluation(result, round_dir, evaluator_name="deepseek")
 
     avgs = result.dimension_averages

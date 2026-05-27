@@ -3,5 +3,55 @@
     "allow": [
       "Read(//f/Python/BMS_HIL_Agent_CodeX/docs/sandbox/**)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in *.env|*.env.*|*credentials*|*secret*) echo '[HOOK] Blocked: sensitive file'; exit 1 ;; esac"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in *.env|*.env.*|*credentials*|*secret*) echo '[HOOK] Blocked: sensitive file'; exit 1 ;; esac"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in *.py) cd \"$CLAUDE_PROJECT_DIR\" && python -m ruff check --fix --quiet \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>&1 || true; python -m ruff format --quiet \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>&1 || true ;; esac"
+          },
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in F:/Python/Testcase-agent/src/*|F:/Python/Testcase-agent/optimization/*) TEST_FILE=\"$CLAUDE_PROJECT_DIR/tests/test_$(basename \"$CLAUDE_TOOL_INPUT_FILE_PATH\" .py).py\"; if [ -f \"$TEST_FILE\" ]; then cd \"$CLAUDE_PROJECT_DIR\" && python -m pytest \"$TEST_FILE\" -x -q --tb=short 2>&1 | tail -15; fi ;; esac"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in *.py) cd \"$CLAUDE_PROJECT_DIR\" && python -m ruff check --fix --quiet \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>&1 || true; python -m ruff format --quiet \"$CLAUDE_TOOL_INPUT_FILE_PATH\" 2>&1 || true ;; esac"
+          },
+          {
+            "type": "command",
+            "command": "case \"${CLAUDE_TOOL_INPUT_FILE_PATH:-}\" in F:/Python/Testcase-agent/src/*|F:/Python/Testcase-agent/optimization/*) TEST_FILE=\"$CLAUDE_PROJECT_DIR/tests/test_$(basename \"$CLAUDE_TOOL_INPUT_FILE_PATH\" .py).py\"; if [ -f \"$TEST_FILE\" ]; then cd \"$CLAUDE_PROJECT_DIR\" && python -m pytest \"$TEST_FILE\" -x -q --tb=short 2>&1 | tail -15; fi ;; esac"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -134,7 +134,7 @@ def _build_eval_panel(evaluation, ext_evals: dict, req_key: str, ci_idx: int) ->
         sections.append('</div>')
 
     if hr_all_passed:
-        sections.append('<div class="eval-all-pass">All 40 items passed</div>')
+        sections.append('<div class="eval-all-pass">All 34 items passed</div>')
 
     sections.append('</div>')
 
@@ -240,7 +240,7 @@ def _render_legacy_items(name: str, label: str, cr: dict | None) -> str:
         parts.append('</div>')
 
     if all_passed:
-        parts.append('<div class="eval-all-pass">All 40 items passed</div>')
+        parts.append('<div class="eval-all-pass">All 34 items passed</div>')
 
     parts.append('</div>')
     return "".join(parts)

@@ -76,7 +76,7 @@ class TestSanitizeNumericValues:
             steps=[Step(order=1, action="Set voltage to 4.25V", expected="OK")],
         )
         result, reps = sanitize_numeric_values(
-            case, **self._kwargs(extracted_thresholds=["OV = 4.25V"])
+            case, **self._kwargs(requirement_description="OV threshold is 4.25V")
         )
         assert result.steps[0].action == "Set voltage to 4.25V"
         assert len(reps) == 0
@@ -86,7 +86,7 @@ class TestSanitizeNumericValues:
             steps=[Step(order=1, action="Apply 4.68V to cell", expected="OK")],
         )
         result, reps = sanitize_numeric_values(
-            case, **self._kwargs(extracted_thresholds=["OV = 4.25V"])
+            case, **self._kwargs(requirement_description="OV threshold is 4.25V")
         )
         # 4.68 is ~10% above 4.25, should be kept
         assert "4.68V" in result.steps[0].action
@@ -97,7 +97,7 @@ class TestSanitizeNumericValues:
             steps=[Step(order=1, action="Apply 9.99V", expected="OK")],
         )
         result, reps = sanitize_numeric_values(
-            case, **self._kwargs(extracted_thresholds=["OV = 4.25V"])
+            case, **self._kwargs(requirement_description="OV threshold is 4.25V")
         )
         assert "9.99V" not in result.steps[0].action
         assert "[NEEDS REVIEW]" in result.steps[0].action
@@ -118,7 +118,7 @@ class TestSanitizeNumericValues:
             steps=[Step(order=1, action="Check", expected="Voltage reads 7.77V")],
         )
         result, reps = sanitize_numeric_values(
-            case, **self._kwargs(extracted_thresholds=["OV = 4.25V"])
+            case, **self._kwargs(requirement_description="OV threshold is 4.25V")
         )
         assert "7.77V" not in result.steps[0].expected
         assert len(reps) == 1
@@ -128,8 +128,34 @@ class TestSanitizeNumericValues:
             steps=[Step(order=1, action="Apply 4.25A", expected="OK")],
         )
         result, reps = sanitize_numeric_values(
-            case, **self._kwargs(extracted_thresholds=["OV = 4.25V"])
+            case, **self._kwargs(requirement_description="OV threshold is 4.25V")
         )
         # 4.25A is not a match for 4.25V (different unit)
         assert "[NEEDS REVIEW]" in result.steps[0].action
         assert len(reps) == 1
+
+    def test_supplementary_info_does_not_authorize_values(self):
+        case = _make_case(
+            steps=[Step(order=1, action="Wait 500ms", expected="OK")],
+        )
+        result, reps = sanitize_numeric_values(
+            case,
+            **self._kwargs(supplementary_info="Debounce time: 500ms"),
+        )
+        assert "500ms" not in result.steps[0].action
+        assert "[NEEDS REVIEW]" in result.steps[0].action
+        assert reps == ["500ms"]
+
+    def test_explicit_accepted_test_basis_authorizes_values(self):
+        case = _make_case(
+            steps=[Step(order=1, action="Wait 500ms", expected="OK")],
+        )
+        result, reps = sanitize_numeric_values(
+            case,
+            **self._kwargs(
+                supplementary_info="Debounce time: 500ms",
+                accepted_test_basis="For this review, use debounce time 500ms.",
+            ),
+        )
+        assert result.steps[0].action == "Wait 500ms"
+        assert reps == []
