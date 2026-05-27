@@ -30,19 +30,21 @@ export default function Workspace() {
   const { run, loading, error, refetch: refetchRun } = useRun(runDir)
   const { isLocked } = useJob()
   const [activeStage, setActiveStage] = useState('clarification')
+  const [userSelectedStage, setUserSelectedStage] = useState(false)
 
   useEffect(() => {
-    if (run) {
+    if (run && !userSelectedStage) {
       const arts = new Set(run.artifacts || [])
       setActiveStage(determineStage(arts))
     }
-  }, [run])
+  }, [run, userSelectedStage])
 
   if (loading) return <div className="workspace"><p>Loading run...</p></div>
   if (error) return <div className="workspace"><div className="error-msg">{error}</div></div>
   if (!run) return <div className="workspace"><div className="error-msg">Run not found</div></div>
 
   const handleStageChange = (stage: string) => {
+    setUserSelectedStage(true)
     setActiveStage(stage)
     refetchRun()
   }
