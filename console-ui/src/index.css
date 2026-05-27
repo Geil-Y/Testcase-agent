@@ -743,3 +743,92 @@ body {
   gap: 8px;
   justify-content: flex-end;
 }
+
+/* ── Results page ───────────────────────────────────────────────────────── */
+
+.read-only-notice {
+  background: #fef9e7;
+  border-color: #f59e0b;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+}
+
+.results-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.evaluation-summary h3 {
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.eval-item {
+  font-size: 0.875rem;
+  padding: 4px 0;
+}
+
+.case-item {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.case-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: left;
+}
+
+.case-header:hover {
+  background: #f8f8f8;
+}
+
+.case-detail {
+  padding: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.case-field {
+  margin-bottom: 8px;
+}
+
+.case-field label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.case-field pre {
+  font-size: 0.8125rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #f5f5f5;
+  padding: 6px 8px;
+  border-radius: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* ── Intent review extras ───────────────────────────────────────────────── */
+
+.intent-review .queue-type {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.dec-reject { background: #fef2f2; color: #991b1b; }
+.dec-revise { background: #fef3c7; color: #92400e; }
+.dec-merge { background: #ede9fe; color: #5b21b6; }
+.dec-split { background: #fce7f3; color: #9d174d; }
+.dec-defer { background: #f5f5f5; color: #666; }

@@ -25,6 +25,9 @@ export default function ClarificationReviewPage({ runDir }: Props) {
   const [search, setSearch] = useState('')
   const [highRiskConfirm, setHighRiskConfirm] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [regenOpen, setRegenOpen] = useState(false)
+  const [regenInfo, setRegenInfo] = useState<{ confirmation_required: boolean; affected_artifacts?: string[]; message?: string } | null>(null)
+  const [regenConfirming, setRegenConfirming] = useState(false)
 
   const handleFilter = useCallback((field: string, value: string) => {
     if (field === 'decision') setDecisionFilter(value)
@@ -136,6 +139,15 @@ export default function ClarificationReviewPage({ runDir }: Props) {
         >
           Save &amp; Prepare Case Intent Review
         </button>
+        <button className="btn btn-sm btn-danger" onClick={async () => {
+          try {
+            const { regenerateConfirm } = await import('../api/endpoints')
+            setRegenInfo(await regenerateConfirm(runDir, 'clarification'))
+            setRegenOpen(true)
+          } catch { /* ignore */ }
+        }} disabled={isLocked}>
+          Regenerate
+        </button>
         <button className="btn btn-sm" onClick={() => { refetch(); setValidationErrors(new Map()); }}>
           Refresh
         </button>
@@ -173,6 +185,34 @@ export default function ClarificationReviewPage({ runDir }: Props) {
         onConfirm={handleHighRiskConfirm}
         onCancel={() => setHighRiskConfirm(false)}
       />
+
+      {regenOpen && (
+        <div className="dialog-overlay" onClick={() => setRegenOpen(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()}>
+            <h3>Regenerate Clarification</h3>
+            <p>{regenInfo?.message || 'This will archive downstream artifacts.'}</p>
+            {regenInfo?.affected_artifacts && regenInfo.affected_artifacts.length > 0 && (
+              <ul className="dialog-details">
+                {regenInfo.affected_artifacts.map((a) => <li key={a}>{a}</li>)}
+              </ul>
+            )}
+            <div className="dialog-actions">
+              <button className="btn btn-danger" onClick={async () => {
+                setRegenConfirming(true)
+                try {
+                  const { regenerateExecute } = await import('../api/endpoints')
+                  const res = await regenerateExecute(runDir, 'clarification')
+                  if (res.status === 'started') startPolling()
+                  setRegenOpen(false)
+                } catch { setRegenConfirming(false) }
+              }} disabled={regenConfirming}>
+                {regenConfirming ? 'Regenerating...' : 'Confirm Regenerate'}
+              </button>
+              <button className="btn" onClick={() => setRegenOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

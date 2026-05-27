@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import StageNav from '../components/StageNav'
 import ModeBadge from '../components/ModeBadge'
 import ClarificationReviewPage from './ClarificationReviewPage'
+import IntentReviewPage from './IntentReviewPage'
+import ResultsPage from './ResultsPage'
 import { useRun } from '../hooks/useRun'
 import { useJob } from '../hooks/JobContext'
 
@@ -25,7 +27,7 @@ function determineStage(artifacts: Set<string>): string {
 export default function Workspace() {
   const { runDir } = useParams<{ runDir: string }>()
   const navigate = useNavigate()
-  const { run, loading, error } = useRun(runDir)
+  const { run, loading, error, refetch: refetchRun } = useRun(runDir)
   const { isLocked } = useJob()
   const [activeStage, setActiveStage] = useState('clarification')
 
@@ -39,6 +41,11 @@ export default function Workspace() {
   if (loading) return <div className="workspace"><p>Loading run...</p></div>
   if (error) return <div className="workspace"><div className="error-msg">{error}</div></div>
   if (!run) return <div className="workspace"><div className="error-msg">Run not found</div></div>
+
+  const handleStageChange = (stage: string) => {
+    setActiveStage(stage)
+    refetchRun()
+  }
 
   return (
     <div className="workspace">
@@ -61,23 +68,17 @@ export default function Workspace() {
       </div>
 
       <div className="workspace-body">
-        <StageNav run={run} activeStage={activeStage} onStageClick={setActiveStage} />
+        <StageNav run={run} activeStage={activeStage} onStageClick={handleStageChange} />
 
         <div className="workspace-content">
           {activeStage === 'clarification' && runDir && (
             <ClarificationReviewPage runDir={runDir} />
           )}
-          {activeStage === 'intents' && (
-            <div className="card">
-              <h3>Case Intent Review</h3>
-              <p className="text-muted">Case intent workbench — see #24.</p>
-            </div>
+          {activeStage === 'intents' && runDir && (
+            <IntentReviewPage runDir={runDir} />
           )}
-          {activeStage === 'results' && (
-            <div className="card">
-              <h3>Results</h3>
-              <p className="text-muted">Read-only results — see #27.</p>
-            </div>
+          {activeStage === 'results' && runDir && (
+            <ResultsPage runDir={runDir} />
           )}
         </div>
       </div>
