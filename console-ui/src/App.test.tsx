@@ -15,13 +15,13 @@ describe('Console shell', () => {
     expect(screen.getByRole('banner')).toBeInTheDocument()
   })
 
-  it('renders home page by default', () => {
+  it('renders home page with import section', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
       </MemoryRouter>
     )
-    expect(screen.getByText('Loading Console...')).toBeInTheDocument()
+    expect(screen.getByText('Import Requirements')).toBeInTheDocument()
   })
 
   it('renders workspace for run route', () => {
