@@ -40,6 +40,7 @@ from .runs import (
     get_run,
     has_changed,
 )
+from .trace import read_trace_events
 
 router = APIRouter()
 
@@ -199,6 +200,16 @@ def get_run_info(run_dir_name: str):
     if info is None:
         return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
     return info
+
+
+@router.get("/runs/{run_dir_name}/trace")
+def get_trace_events(run_dir_name: str):
+    """Get generation progress trace events for a run."""
+    run_info = get_run(run_dir_name)
+    if run_info is None:
+        return JSONResponse({"error": f"Run '{run_dir_name}' not found"}, status_code=404)
+    events = read_trace_events(str(run_info["run_path"]))
+    return {"run_dir": run_dir_name, "events": events}
 
 
 @router.post("/runs/start")

@@ -17,6 +17,7 @@ import type {
   ExportBundle,
   ValidationErrorItem,
   ArtifactSummary,
+  TraceData,
 } from './types'
 
 // Imports
@@ -95,6 +96,9 @@ export const regenerateConfirm = (runDir: string, stage: string) =>
   post<ArtifactSummary & { confirmation_required: boolean }>(`/runs/${runDir}/regenerate`, { stage, confirm: false })
 export const regenerateExecute = (runDir: string, stage: string) =>
   post<{ status: string; job: JobState['job']; archived: string[] }>(`/runs/${runDir}/regenerate`, { stage, confirm: true })
+
+// Trace
+export const getTrace = (runDir: string) => get<TraceData>(`/runs/${runDir}/trace`)
 
 // Re-export validation error type
 export type { ValidationErrorItem }

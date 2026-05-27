@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import StageNav from '../components/StageNav'
 import ModeBadge from '../components/ModeBadge'
+import ProgressTrace from '../components/ProgressTrace'
 import ClarificationReviewPage from './ClarificationReviewPage'
 import IntentReviewPage from './IntentReviewPage'
 import ResultsPage from './ResultsPage'
@@ -87,6 +88,12 @@ export default function Workspace() {
           )}
         </div>
       </div>
+
+      {runDir && (
+        <div style={{ marginTop: 24 }}>
+          <ProgressTrace runDir={runDir} />
+        </div>
+      )}
     </div>
   )
 }

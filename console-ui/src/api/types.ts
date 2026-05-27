@@ -195,6 +195,22 @@ export interface PreviewResult {
   tmp_path: string
 }
 
+export interface TraceEvent {
+  timestamp: number
+  stage: string
+  event: string
+  provider?: string | null
+  model?: string | null
+  duration_ms?: number | null
+  message: string
+  detail?: string | null
+}
+
+export interface TraceData {
+  run_dir: string
+  events: TraceEvent[]
+}
+
 export interface ExportBundle {
   run: RunInfo
   active_artifacts: Record<string, unknown>

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ from .runs import (
     infer_run_status,
     content_hash,
 )
+from .trace import write_trace_event
 
 
 def validate_start_run(requirement_key: str, batch_id: str) -> None:
@@ -62,13 +64,29 @@ def start_run(requirement_key: str, batch_id: str) -> dict[str, Any]:
 
     settings = get_settings()
     provider = create_provider(settings)
+    provider_name = settings.llm.provider
+    model_name = settings.llm.model_name
 
+    write_trace_event(run_dir, stage="clarify", event="stage_started",
+                      message="Starting requirement decomposition")
+
+    t0 = time.time()
     input_path = str(run_dir / "00_requirements.json")
     review = prepare_clarification_review(
         input_path=input_path,
         out_dir=str(run_dir),
         provider=provider,
     )
+    dt_ms = round((time.time() - t0) * 1000, 1)
+
+    write_trace_event(run_dir, stage="clarify", event="llm_done",
+                      provider=provider_name, model=model_name,
+                      duration_ms=dt_ms,
+                      message="Requirement decomposition complete")
+    write_trace_event(run_dir, stage="clarify", event="artifact_written",
+                      message="Written clarification_review.json")
+    write_trace_event(run_dir, stage="clarify", event="completed",
+                      message="Clarification review ready")
 
     return get_run(run_dir.name) or {"run_dir": run_dir.name, "requirement_key": requirement_key}
 
@@ -158,10 +176,14 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
             pass
 
     # Validate
+    write_trace_event(run_path, stage="intents", event="stage_started",
+                      message="Validating clarification decisions")
     review_path = str(run_path / "clarification_review.json")
     validation, basis = validate_clarification_review(review_path)
 
     if not validation.is_valid:
+        write_trace_event(run_path, stage="intents", event="validation",
+                          message=f"Validation failed: {len(validation.errors)} error(s)")
         return {
             "saved": True,
             "validated": False,
@@ -173,6 +195,8 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     # Check for blocked
     assert basis is not None
     if basis.blocked:
+        write_trace_event(run_path, stage="intents", event="completed",
+                          message=f"Blocked: {'; '.join(basis.block_reasons)}")
         return {
             "saved": True,
             "validated": True,
@@ -185,8 +209,25 @@ def save_and_advance_clarification(run_dir_name: str, decisions: list[dict[str, 
     # Prepare case intent review
     settings = get_settings()
     provider = create_provider(settings)
+    provider_name = settings.llm.provider
+    model_name = settings.llm.model_name
     from ..review_pipeline.stages.plan_case_intents import prepare_intent_review
+
+    write_trace_event(run_path, stage="intents", event="llm_call",
+                      provider=provider_name, model=model_name,
+                      message="Planning case intents")
+    t0 = time.time()
     prepare_intent_review(str(run_path), provider=provider, memory_hints=None)
+    dt_ms = round((time.time() - t0) * 1000, 1)
+
+    write_trace_event(run_path, stage="intents", event="llm_done",
+                      provider=provider_name, model=model_name,
+                      duration_ms=dt_ms,
+                      message="Case intent planning complete")
+    write_trace_event(run_path, stage="intents", event="artifact_written",
+                      message="Written case_intent_review.json")
+    write_trace_event(run_path, stage="intents", event="completed",
+                      message="Intent review ready")
 
     # Persist decisions hash for future reuse checks
     _persist_advance_state(run_path, "clarification_decisions_hash", dec_hash)
@@ -274,11 +315,15 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
             pass
 
     # Validate intent review
+    write_trace_event(run_path, stage="cases", event="stage_started",
+                      message="Validating case intent decisions")
     from ..review_pipeline.stages.validate_case_intent import validate_case_intent_review
     review_path = str(run_path / "case_intent_review.json")
     validation, plan = validate_case_intent_review(review_path)
 
     if not validation.is_valid:
+        write_trace_event(run_path, stage="cases", event="validation",
+                          message=f"Validation failed: {len(validation.errors)} error(s)")
         return {
             "saved": True,
             "validated": False,
@@ -292,12 +337,34 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
     # Generate cases
     settings = get_settings()
     provider = create_provider(settings)
+    provider_name = settings.llm.provider
+    model_name = settings.llm.model_name
+    approved_count = len(plan.approved_intents)
+
+    write_trace_event(run_path, stage="cases", event="llm_call",
+                      provider=provider_name, model=model_name,
+                      message=f"Writing {approved_count} test case(s)")
+    t0 = time.time()
     from ..review_pipeline.stages.write_cases import generate_cases
     case_set = generate_cases(str(run_path), provider=provider)
+    dt_ms = round((time.time() - t0) * 1000, 1)
+
+    write_trace_event(run_path, stage="cases", event="llm_done",
+                      provider=provider_name, model=model_name,
+                      duration_ms=dt_ms,
+                      message=f"Generated {len(case_set.cases)} test case(s)")
+    write_trace_event(run_path, stage="cases", event="artifact_written",
+                      message="Written generated_cases.json")
 
     # Evaluate
+    write_trace_event(run_path, stage="evaluate", event="stage_started",
+                      message="Running hard-rule evaluation")
     from ..review_pipeline.stages.evaluate import evaluate_run
     evaluate_run(str(run_path))
+    write_trace_event(run_path, stage="evaluate", event="artifact_written",
+                      message="Written evaluation_results.json")
+    write_trace_event(run_path, stage="evaluate", event="completed",
+                      message="Evaluation complete")
 
     # Persist decisions hash for future reuse checks
     _persist_advance_state(run_path, "intent_decisions_hash", dec_hash)
@@ -308,7 +375,7 @@ def save_and_generate_cases(run_dir_name: str, decisions: list[dict[str, Any]]) 
         "generated": True,
         "evaluated": True,
         "case_count": len(case_set.cases),
-        "approved_intent_count": len(plan.approved_intents),
+        "approved_intent_count": approved_count,
         "run": get_run(run_dir_name),
     }
 
