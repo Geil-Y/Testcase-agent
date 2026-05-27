@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { startRun } from '../api/endpoints'
 import { useJob } from '../hooks/JobContext'
@@ -21,18 +21,41 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function RequirementsTable({ requirements, runMap, batchId }: Props) {
   const navigate = useNavigate()
-  const { isLocked, startPolling } = useJob()
+  const { isLocked, startPolling, status: jobStatus, result: jobResult, job } = useJob()
   const [starting, setStarting] = useState<string | null>(null)
+  const [pendingStart, setPendingStart] = useState<string | null>(null)
+  const [startError, setStartError] = useState<string | null>(null)
+
+  // Navigate to workspace when the start-run job completes successfully
+  useEffect(() => {
+    if (!pendingStart) return
+    if (jobStatus === 'succeeded') {
+      const runDir =
+        job?.run_dir ||
+        (jobResult as Record<string, unknown> | undefined)?.['run_dir'] as string | undefined
+      if (runDir) {
+        navigate(`/run/${runDir}`)
+      } else {
+        setPendingStart(null)
+      }
+    }
+    if (jobStatus === 'failed' || jobStatus === 'retryable') {
+      setPendingStart(null)
+    }
+  }, [pendingStart, jobStatus, jobResult, job?.run_dir, navigate])
 
   const handleStartRun = async (reqKey: string) => {
     setStarting(reqKey)
+    setStartError(null)
     try {
       const res = await startRun({ requirement_key: reqKey, batch_id: batchId })
       if (res.status === 'started') {
+        setPendingStart(reqKey)
         startPolling()
       }
-    } catch {
-      // error shown by job banner
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to start run'
+      setStartError(msg)
     } finally {
       setStarting(null)
     }
@@ -48,6 +71,7 @@ export default function RequirementsTable({ requirements, runMap, batchId }: Pro
   return (
     <div className="card">
       <h3>Requirements ({rows.length})</h3>
+      {startError && <div className="error-msg">{startError}</div>}
       <table className="table">
         <thead>
           <tr>

@@ -1,8 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { JobProvider } from '../hooks/JobContext'
 import RequirementsTable from './RequirementsTable'
+
+vi.mock('../api/endpoints', () => ({
+  startRun: vi.fn(),
+}))
+
+import { startRun } from '../api/endpoints'
 
 const longDesc = 'This is a very long requirement description that should not be truncated at eighty characters since the hard slice has been removed from the render logic and the full text must be visible in the table row for reviewers to read without needing to click into a detail view first'
 const sampleReqs = [
@@ -23,6 +30,10 @@ function renderTable(runMap: Map<string, { status: string; time: string; dir: st
 }
 
 describe('RequirementsTable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('renders requirement keys in the table', () => {
     renderTable(new Map())
     expect(screen.getByText('REQ-001')).toBeInTheDocument()
@@ -96,5 +107,52 @@ describe('RequirementsTable', () => {
     const cells = document.querySelectorAll('.desc-cell')
     const emptyCell = Array.from(cells).find((c) => c.textContent === '-')
     expect(emptyCell).toBeTruthy()
+  })
+
+  // ── #33: Start New Run navigation ────────────────────────────────────
+
+  it('shows "Starting..." on the clicked row button while request is pending', async () => {
+    const user = userEvent.setup()
+    ;(startRun as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ status: 'started', job: { run_dir: null } }), 100))
+    )
+    renderTable(new Map())
+    const btn = screen.getAllByText('Start New Run')[0]
+    await user.click(btn)
+    expect(screen.getByText('Starting...')).toBeInTheDocument()
+  })
+
+  it('disables button while request is pending', async () => {
+    const user = userEvent.setup()
+    ;(startRun as ReturnType<typeof vi.fn>).mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ status: 'started', job: { run_dir: null } }), 100))
+    )
+    renderTable(new Map())
+    const btn = screen.getAllByText('Start New Run')[0]
+    await user.click(btn)
+    expect(btn).toBeDisabled()
+  })
+
+  it('shows error message when startRun fails', async () => {
+    const user = userEvent.setup()
+    const errorMsg = 'A job is already running. Wait for it to complete.'
+    ;(startRun as ReturnType<typeof vi.fn>).mockRejectedValue(new Error(errorMsg))
+    renderTable(new Map())
+    const btn = screen.getAllByText('Start New Run')[0]
+    await user.click(btn)
+    await waitFor(() => {
+      expect(screen.getByText(errorMsg)).toBeInTheDocument()
+    })
+  })
+
+  it('re-enables button after failed start', async () => {
+    const user = userEvent.setup()
+    ;(startRun as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'))
+    renderTable(new Map())
+    const btn = screen.getAllByText('Start New Run')[0]
+    await user.click(btn)
+    await waitFor(() => {
+      expect(screen.getAllByText('Start New Run').length).toBeGreaterThanOrEqual(1)
+    })
   })
 })

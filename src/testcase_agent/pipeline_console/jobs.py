@@ -92,6 +92,8 @@ class JobRunner:
                 result = fn()
                 job.result = result
                 job.status = JobStatus.succeeded
+                if isinstance(result, dict) and result.get("run_dir"):
+                    job.run_dir = result["run_dir"]
             except Exception as e:
                 job.error = str(e)
                 job.error_detail = traceback.format_exc()
