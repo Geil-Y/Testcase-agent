@@ -9,3 +9,6 @@ local_testdata/
 .ruff_cache/
 optimization_runs/log/
 reviews/
+.superpowers/
+node_modules/
+console-ui/dist/

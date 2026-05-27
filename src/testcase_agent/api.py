@@ -11,6 +11,9 @@ from .pipeline_console.router import console_html, router as console_router
 
 root_router = APIRouter()
 
+# Path to the React/Vite build output
+_CONSOLE_UI_DIST = Path(__file__).resolve().parents[2] / "console-ui" / "dist"
+
 
 @root_router.get("/health")
 def health():
@@ -30,12 +33,29 @@ def create_app() -> FastAPI:
     app.include_router(root_router, prefix=settings.api_v1_prefix)
     app.include_router(console_router, prefix=f"{settings.api_v1_prefix}/console")
 
+    # Serve React/Vite build static assets if available
+    if _CONSOLE_UI_DIST.exists():
+        assets_dir = _CONSOLE_UI_DIST / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="console_assets")
+
+    # Legacy static dir (images etc.)
     static_dir = Path(__file__).resolve().parents[2] / "static"
     if static_dir.exists():
         app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     @app.get("/console", response_class=HTMLResponse)
-    def serve_console():
+    @app.get("/console/{rest_path:path}", response_class=HTMLResponse)
+    def serve_console(rest_path: str = ""):
+        """Serve the React Console shell.
+
+        If the Vite build exists at console-ui/dist/index.html, serve it.
+        Otherwise fall back to the legacy single-file console.html template.
+        """
+        index_path = _CONSOLE_UI_DIST / "index.html"
+        if index_path.exists():
+            html = index_path.read_text(encoding="utf-8")
+            return HTMLResponse(html)
         return HTMLResponse(console_html())
 
     return app
