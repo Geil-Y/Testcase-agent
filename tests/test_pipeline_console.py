@@ -2446,23 +2446,27 @@ class TestAssetServingSecurity:
             )
 
     def test_assets_return_correct_mime_not_html(self, client):
-        """JS/CSS assets must return correct MIME type, not text/html."""
+        """JS and CSS assets must each return correct MIME type, not text/html."""
         import src.testcase_agent.api as api_mod
         assets_dir = api_mod._CONSOLE_UI_DIST / "assets"
-        if assets_dir.exists():
-            for f in assets_dir.iterdir():
-                if f.suffix in (".js", ".css", ".svg"):
-                    r = client.get(f"/console/assets/{f.name}")
-                    content_type = r.headers.get("content-type", "")
-                    if f.suffix == ".js":
-                        assert "javascript" in content_type or "text/html" not in content_type, (
-                            f"JS asset {f.name} got Content-Type {content_type!r}"
-                        )
-                    elif f.suffix == ".css":
-                        assert "css" in content_type or "text/html" not in content_type, (
-                            f"CSS asset {f.name} got Content-Type {content_type!r}"
-                        )
-                    break  # One file per type is sufficient
+        if not assets_dir.exists():
+            pytest.skip("React build assets not present")
+        js_files = sorted(assets_dir.glob("*.js"))
+        css_files = sorted(assets_dir.glob("*.css"))
+        if not js_files or not css_files:
+            pytest.skip("React build JS or CSS assets not found")
+        for f, expected in [(js_files[0], "javascript"), (css_files[0], "css")]:
+            r = client.get(f"/console/assets/{f.name}")
+            assert r.status_code == 200, (
+                f"Asset {f.name} returned {r.status_code}, expected 200"
+            )
+            content_type = r.headers.get("content-type", "")
+            assert expected in content_type, (
+                f"Asset {f.name} expected Content-Type containing {expected!r}, got {content_type!r}"
+            )
+            assert "text/html" not in content_type, (
+                f"Asset {f.name} must not be served as text/html, got {content_type!r}"
+            )
 
     def test_console_run_shell_returns_html_not_asset(self, client):
         """Direct refresh on /console/run/<run> must return HTML shell, not JSON/asset."""
