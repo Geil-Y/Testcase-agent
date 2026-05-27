@@ -63,7 +63,7 @@ export default function RequirementsTable({ requirements, runMap, batchId }: Pro
           {rows.map((r) => (
             <tr key={r.requirement_key}>
               <td><code>{r.requirement_key}</code></td>
-              <td>{r.description?.slice(0, 80)}{(r.description?.length || 0) > 80 ? '...' : ''}</td>
+              <td className="desc-cell">{r.description || '-'}</td>
               <td>{r.function_name || r.requirement_type || '-'}</td>
               <td>
                 {r.status ? (

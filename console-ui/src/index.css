@@ -1190,8 +1190,20 @@ body::before {
   white-space: nowrap;
   position: sticky;
   right: 0;
-  background: inherit;
-  padding-right: 12px;
+  background: var(--color-surface);
+  padding-left: 12px;
+}
+
+tr:hover .actions-cell {
+  background: var(--color-surface-hover);
+}
+
+/* ── Description Cell ──────────────────────────────────────────────────── */
+
+.desc-cell {
+  max-width: 360px;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .home-main .table {
