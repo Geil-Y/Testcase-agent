@@ -9,3 +9,9 @@ local_testdata/
 .ruff_cache/
 optimization_runs/log/
 reviews/
+
+# JS / React Console UI
+node_modules/
+dist/
+.vite/
+*.log
