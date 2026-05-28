@@ -87,10 +87,10 @@ class TestIssue15LegacyPipelineRemoval:
         from testcase_agent.review_pipeline.cli import build_parser
 
         subcommands = build_parser()._subparsers._group_actions[0].choices
-        assert "prepare-clarification-review" in subcommands
-        assert "prepare-intent-review" in subcommands
+        assert "extract" in subcommands
+        assert "plan-intents" in subcommands
         assert "generate-cases" in subcommands
-        assert "import-memory" in subcommands
+        assert "regenerate" in subcommands
 
     def test_legacy_optimization_run_command_is_disabled(self, monkeypatch):
         from optimization import cli
@@ -138,29 +138,28 @@ class TestIssue15LegacyPipelineRemoval:
         assert len(reloaded.decomposition.ambiguities) == 1
 
     def test_case_intent_review_roundtrip(self, run_dir):
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentPlan, CaseIntentReview, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
-        plan = CaseIntentPlan(
-            review_session_id="s1", requirement_key="REQ_001",
+        plan = CaseIntentSet(
+            requirement_key="REQ_001",
+            source_description="Test requirement",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                      intent_text="Verify normal op", confidence_score=0.7)],
+                      intent_text="Verify normal operation")],
         )
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan)
         path = run_dir / "test_intent_review.json"
-        write_json(path, review.model_dump())
-        reloaded = CaseIntentReview(**read_json(path))
-        assert len(reloaded.plan.intents) == 1
+        write_json(path, plan.model_dump())
+        reloaded = CaseIntentSet(**read_json(path))
+        assert len(reloaded.intents) == 1
 
     def test_generated_case_set_roundtrip(self, run_dir):
         from testcase_agent.review_pipeline.artifacts.models import GeneratedCaseSet, GeneratedCase
         from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
         case_set = GeneratedCaseSet(
-            review_session_id="s1", requirement_key="REQ_001",
+            requirement_key="REQ_001",
             cases=[GeneratedCase(case_id="c1", title="Test title", requirement_key="REQ_001",
-                    approved_intent_id="i1", coverage_dimension="normal_behavior",
-                    review_session_id="s1")],
+                    intent_id="i1", coverage_dimension="normal_behavior")],
         )
         path = run_dir / "test_cases.json"
         write_json(path, [c.model_dump() for c in case_set.cases])

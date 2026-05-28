@@ -856,13 +856,20 @@ class TestJobAPIEndpoints:
 
 
 from src.testcase_agent.pipeline_console.workbench import (
-    load_clarification_review,
-    load_intent_review,
-    save_and_advance_clarification,
-    save_and_generate_cases,
-    save_clarification_draft,
-    save_intent_draft,
+    load_extraction,
+    load_intents,
+    load_cases,
+    save_extraction_review,
+    save_intent_review,
+    save_case_edit,
+    accept_extraction_all,
+    accept_intents_all,
+    accept_cases_all,
+    plan_and_load_intents,
+    generate_and_load_cases,
+    regenerate_cases,
     start_run,
+    validate_start_run,
 )
 
 
