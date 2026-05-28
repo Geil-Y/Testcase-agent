@@ -1,18 +1,22 @@
-"""Artifact models for the clarification-first review pipeline.
+"""Artifact models for the simplified A/B/C reviewed pipeline.
 
-Each artifact is a Pydantic model that defines the JSON contract for a stage
-in the pipeline. Code owns plumbing; prompts own generation philosophy.
+ADP-0005 pipeline split:
+  LLM-A extraction -> review -> LLM-B planning -> review -> LLM-C writing -> review
+
+Each LLM output artifact and its ``reviewed_*`` counterpart use the same schema.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
-# ── Requirement Input ──────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Requirement Input
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class RequirementInput(BaseModel):
     requirement_key: str
@@ -22,168 +26,123 @@ class RequirementInput(BaseModel):
     supplementary_info: str = ""
 
 
-# ── LLM-A: Requirement Decomposition ───────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# LLM-A: Extracted Test Basis (and reviewed counterpart, same schema)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-class FactItem(BaseModel):
+ALLOWED_SECTION_NAMES = frozenset({
+    "signals", "thresholds", "timing", "states", "observations",
+})
+
+
+class SectionItem(BaseModel):
+    """One item inside an extracted test basis section.
+
+    - status="known": ``content`` must have a value backed by the requirement.
+    - status="needs_review": ``need`` must describe what information is missing.
+    """
     item_id: str
-    fact_text: str
+    status: Literal["known", "needs_review"] = "known"
+    content: str = ""
+    need: str = ""
     source_text: str = ""
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _enforce_status_semantics(self) -> "SectionItem":
+        if self.status == "known" and not self.content.strip():
+            raise ValueError(
+                f"SectionItem {self.item_id!r}: status='known' requires non-empty 'content'")
+        if self.status == "needs_review" and not self.need.strip():
+            raise ValueError(
+                f"SectionItem {self.item_id!r}: status='needs_review' requires non-empty 'need'")
+        return self
 
 
-class AmbiguityItem(BaseModel):
-    item_id: str
-    affected_text: str
-    ambiguity_type: str
-    impact: str = ""
-    severity: str = "medium"
-    clarification_question: str = ""
-    safe_generation_policy: str = ""
-    recommended_review_decision: str = "mark_needs_review"
-    confidence_drivers: dict[str, float] = Field(default_factory=dict)
-    reasons: list[str] = Field(default_factory=list)
+class ExtractedTestBasis(BaseModel):
+    """LLM-A output: five evidence sections extracted from the requirement description.
 
+    Also used as the schema for ``reviewed_extracted_test_basis.json``.
+    """
 
-class ClarificationQuestion(BaseModel):
-    item_id: str
-    question: str
-    context: str = ""
-    relates_to_ambiguity_ids: list[str] = Field(default_factory=list)
-
-
-class SafeGenerationPolicy(BaseModel):
-    can_generate: bool = True
-    blocked_dimensions: list[str] = Field(default_factory=list)
-    requires_markers: list[str] = Field(default_factory=list)
-    notes: str = ""
-
-
-class RequirementDecomposition(BaseModel):
-    """LLM-A output: decomposed requirement with facts, ambiguities, and policy."""
-
-    requirement_key: str
-    facts: list[FactItem] = Field(default_factory=list)
-    ambiguities: list[AmbiguityItem] = Field(default_factory=list)
-    clarification_questions: list[ClarificationQuestion] = Field(default_factory=list)
-    safe_generation_policy: SafeGenerationPolicy = Field(default_factory=SafeGenerationPolicy)
-    confidence_drivers: dict[str, float] = Field(default_factory=dict)
-
-
-# ── Clarification Review (human-edited) ────────────────────────────────────
-
-class ClarificationDecision(BaseModel):
-    item_id: str
-    decision: str  # approve, clarify, mark_needs_review, block, edit
-    reason_codes: list[str] = Field(default_factory=list)
-    reason_text: str = ""
-    clarified_value: str = ""
-    edited_content: dict[str, Any] = Field(default_factory=dict)
-    review_marker_policy: str = ""
-    confidence_before_review: float | None = None
-
-
-class ClarificationReview(BaseModel):
-    """Human review decisions on the requirement decomposition."""
-
-    review_session_id: str
     requirement_key: str
     source_description: str = ""
-    function_name: str = ""
-    requirement_type: str = ""
-    supplementary_info: str = ""
-    source_requirement_hash: str = ""
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    decomposition: RequirementDecomposition = Field(default_factory=RequirementDecomposition)
-    decisions: list[ClarificationDecision] = Field(default_factory=list)
+    sections: dict[str, list[SectionItem]] = Field(default_factory=lambda: {
+        name: [] for name in ALLOWED_SECTION_NAMES
+    })
+    blocking_gaps: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _enforce_section_names(self) -> "ExtractedTestBasis":
+        extra = set(self.sections.keys()) - ALLOWED_SECTION_NAMES
+        if extra:
+            raise ValueError(
+                f"ExtractedTestBasis sections must be one of {sorted(ALLOWED_SECTION_NAMES)}. "
+                f"Got extra keys: {sorted(extra)}")
+        return self
+
+    @property
+    def has_blocking_gaps(self) -> bool:
+        return len(self.blocking_gaps) > 0
+
+    def known_items(self, section: str) -> list[SectionItem]:
+        return [i for i in self.sections.get(section, []) if i.status == "known"]
+
+    def needs_review_items(self, section: str) -> list[SectionItem]:
+        return [i for i in self.sections.get(section, []) if i.status == "needs_review"]
+
+    def all_needs_review_items(self) -> list[SectionItem]:
+        result: list[SectionItem] = []
+        for sec in ALLOWED_SECTION_NAMES:
+            result.extend(self.needs_review_items(sec))
+        return result
 
 
-# ── Clarified Test Basis ───────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# LLM-B: Case Intents (and reviewed counterpart, same schema)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-class ClarifiedTestBasis(BaseModel):
-    """Resolved requirement understanding after human clarification review."""
+VALID_COVERAGE_DIMENSIONS = frozenset({
+    "normal_behavior", "boundary_or_threshold", "fault_or_protection",
+    "state_transition", "observability",
+})
 
-    requirement_key: str
-    review_session_id: str
-    source_description: str = ""
-    function_name: str = ""
-    requirement_type: str = ""
-    supplementary_info: str = ""
-    test_basis_hash: str = ""
-    facts: list[FactItem] = Field(default_factory=list)
-    resolved_ambiguities: list[dict[str, Any]] = Field(default_factory=list)
-    blocked: bool = False
-    block_reasons: list[str] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-
-
-# ── LLM-B: Case Intent Plan ────────────────────────────────────────────────
 
 class CaseIntentItem(BaseModel):
+    """One planned case intent — coverage dimension + one-sentence intent text.
+
+    No confidence routing, reasons, or item-level basis references.
+    """
     intent_id: str
-    coverage_dimension: str
-    intent_text: str
-    requirement_basis_refs: list[str] = Field(default_factory=list)
-    confidence_drivers: dict[str, float] = Field(default_factory=dict)
-    confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    routing_color: str = "blue"
-    routing_label: str = ""
-    reasons: list[str] = Field(default_factory=list)
-    recommended_review_decision: str = "approve"
+    coverage_dimension: str = ""
+    intent_text: str = ""
+
+    @model_validator(mode="after")
+    def _enforce_fields(self) -> "CaseIntentItem":
+        if not self.intent_text.strip():
+            raise ValueError(
+                f"CaseIntentItem {self.intent_id!r}: 'intent_text' must be non-empty")
+        return self
 
 
-class CaseIntentPlan(BaseModel):
-    """LLM-B output: proposed case intents for review."""
+class CaseIntentSet(BaseModel):
+    """LLM-B output: coverage plan from reviewed extraction.
 
-    review_session_id: str
+    Also used as the schema for ``reviewed_case_intents.json``.
+    """
+
     requirement_key: str
-    source_requirement_hash: str = ""
-    test_basis_hash: str = ""
+    source_description: str = ""
     intents: list[CaseIntentItem] = Field(default_factory=list)
-    planning_blocked: bool = False
-    planning_block_reason: str = ""
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    blocking_gaps: list[str] = Field(default_factory=list)
+
+    @property
+    def has_blocking_gaps(self) -> bool:
+        return len(self.blocking_gaps) > 0
 
 
-# ── Case Intent Review (human-edited) ──────────────────────────────────────
-
-class CaseIntentDecision(BaseModel):
-    intent_id: str
-    decision: str  # approve, reject, revise, merge, split, defer
-    reason_codes: list[str] = Field(default_factory=list)
-    reason_text: str = ""
-    revised_intent_text: str = ""
-    merge_target_id: str = ""
-    split_children: list[CaseIntentItem] = Field(default_factory=list)
-    confidence_before_review: float | None = None
-
-
-class CaseIntentReview(BaseModel):
-    """Human review decisions on the case intent plan."""
-
-    review_session_id: str
-    requirement_key: str
-    source_requirement_hash: str = ""
-    test_basis_hash: str = ""
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-    plan: CaseIntentPlan = Field(default_factory=CaseIntentPlan)
-    decisions: list[CaseIntentDecision] = Field(default_factory=list)
-
-
-# ── Approved Case Plan ─────────────────────────────────────────────────────
-
-class ApprovedCasePlan(BaseModel):
-    """Final approved case intents, ready for the case writer."""
-
-    review_session_id: str
-    requirement_key: str
-    source_requirement_hash: str = ""
-    test_basis_hash: str = ""
-    approved_intents: list[CaseIntentItem] = Field(default_factory=list)
-    traceability: list[dict[str, Any]] = Field(default_factory=list)
-    generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
-
-
-# ── LLM-C: Generated Cases ─────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# LLM-C: Generated Cases (and reviewed counterpart, same schema)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 class GeneratedCase(BaseModel):
     case_id: str
@@ -193,17 +152,104 @@ class GeneratedCase(BaseModel):
     steps: list[dict[str, str]] = Field(default_factory=list)
     post_condition: str = ""
     requirement_key: str = ""
-    approved_intent_id: str = ""
+    intent_id: str = ""
     coverage_dimension: str = ""
-    review_session_id: str = ""
-    traceability: dict[str, Any] = Field(default_factory=dict)
 
 
 class GeneratedCaseSet(BaseModel):
-    """LLM-C output: generated test cases from approved intents."""
+    """LLM-C output: generated test cases.
 
-    review_session_id: str
+    Also used as the schema for ``reviewed_cases.json``.
+    BOTH ``generated_cases.json`` and ``reviewed_cases.json`` use this same object shape.
+    """
+
     requirement_key: str
-    source_requirement_hash: str = ""
+    source_description: str = ""
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     cases: list[GeneratedCase] = Field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Review action helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+EXTRACTION_REVIEW_ACTIONS = frozenset({"accept", "edit", "add", "remove", "block"})
+INTENT_REVIEW_ACTIONS = frozenset({"accept", "edit", "add", "remove", "block"})
+
+
+class ExtractionReviewAction(BaseModel):
+    """A single review action on an extraction item."""
+    item_id: str
+    section: str
+    action: str
+    edited_item: SectionItem | None = None
+    new_item: SectionItem | None = None
+
+    @model_validator(mode="after")
+    def _enforce_action_semantics(self) -> "ExtractionReviewAction":
+        if self.action not in EXTRACTION_REVIEW_ACTIONS:
+            raise ValueError(
+                f"ExtractionReviewAction: unknown action {self.action!r}. "
+                f"Must be one of: {sorted(EXTRACTION_REVIEW_ACTIONS)}")
+        if self.action == "edit" and self.edited_item is None:
+            raise ValueError("action='edit' requires edited_item")
+        if self.action == "add" and self.new_item is None:
+            raise ValueError("action='add' requires new_item")
+        return self
+
+
+class IntentReviewAction(BaseModel):
+    """A single review action on a case intent."""
+    intent_id: str
+    action: str
+    edited_intent: CaseIntentItem | None = None
+    new_intent: CaseIntentItem | None = None
+
+    @model_validator(mode="after")
+    def _enforce_action_semantics(self) -> "IntentReviewAction":
+        if self.action not in INTENT_REVIEW_ACTIONS:
+            raise ValueError(
+                f"IntentReviewAction: unknown action {self.action!r}. "
+                f"Must be one of: {sorted(INTENT_REVIEW_ACTIONS)}")
+        if self.action == "edit" and self.edited_intent is None:
+            raise ValueError("action='edit' requires edited_intent")
+        if self.action == "add" and self.new_intent is None:
+            raise ValueError("action='add' requires new_intent")
+        return self
+
+
+class RegenerateRequest(BaseModel):
+    """Request to regenerate a case with a review comment."""
+    case_id: str
+    intent_id: str
+    review_comment: str
+
+    @model_validator(mode="after")
+    def _enforce_comment_nonempty(self) -> "RegenerateRequest":
+        if not self.review_comment.strip():
+            raise ValueError("RegenerateRequest: review_comment must be non-empty")
+        return self
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Re-export legacy models for backward compatibility with tests and legacy code.
+# New pipeline code must NOT use these.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from testcase_agent.review_pipeline.artifacts.legacy_models import (
+    FactItem,
+    AmbiguityItem,
+    ClarificationQuestion,
+    SafeGenerationPolicy,
+    RequirementDecomposition,
+    ClarificationDecision,
+    ClarificationReview,
+    ClarifiedTestBasis,
+    LegacyCaseIntentItem,
+    CaseIntentPlan,
+    CaseIntentDecision,
+    CaseIntentReview,
+    ApprovedCasePlan,
+    LegacyGeneratedCaseSet,
+)
+
