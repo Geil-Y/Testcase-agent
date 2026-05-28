@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
@@ -23,13 +22,11 @@ from testcase_agent.review_pipeline.artifacts.models import (
     CaseIntentItem,
     IntentReviewAction,
 )
-from testcase_agent.review_pipeline.artifacts.legacy_models import (
-    ClarifiedTestBasis,
-    ClarificationReview,
-    CaseIntentPlan,
-    CaseIntentReview,
-    CaseIntentDecision,
-    # LegacyCaseIntentItem used for old prepare_intent_review alias
+from testcase_agent.review_pipeline.artifacts.formatting import (
+    parse_json_response,
+    dump_raw_response,
+    format_known_items,
+    format_unresolved_items,
 )
 from testcase_agent.review_pipeline.artifacts.validation import (
     ValidationResult,
@@ -49,7 +46,6 @@ def plan_intents(run_dir: str | Path, *, provider=None) -> CaseIntentSet:
     """
     rdir = Path(run_dir)
 
-    # Validate that reviewed extraction exists
     reviewed_path = rdir / "reviewed_extracted_test_basis.json"
     validation = validate_reviewed_artifact(
         reviewed_path, artifact_label="reviewed_extracted_test_basis.json")
@@ -160,12 +156,12 @@ def _call_plan_llm(
     description = basis.source_description
 
     # Build prompt sections from reviewed extraction
-    known_signals = _format_known_items(basis, "signals")
-    known_thresholds = _format_known_items(basis, "thresholds")
-    known_timing = _format_known_items(basis, "timing")
-    known_states = _format_known_items(basis, "states")
-    known_observations = _format_known_items(basis, "observations")
-    unresolved_items = _format_unresolved_items(basis)
+    known_signals = format_known_items(basis, "signals")
+    known_thresholds = format_known_items(basis, "thresholds")
+    known_timing = format_known_items(basis, "timing")
+    known_states = format_known_items(basis, "states")
+    known_observations = format_known_items(basis, "observations")
+    unresolved_items = format_unresolved_items(basis)
 
     system_prompt, user_prompt = render_prompt(
         "plan_intents",
@@ -182,10 +178,10 @@ def _call_plan_llm(
     raw_response = provider.complete(system_prompt, user_prompt)
 
     try:
-        payload = _parse_json_response(raw_response)
+        payload = parse_json_response(raw_response)
         return CaseIntentSet(**payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as exc:
-        _dump_raw_response(run_dir, raw_response, "llm_b")
+        dump_raw_response(run_dir, raw_response, "llm_b")
         raise ValueError(f"LLM-B response was not valid JSON: {exc}") from exc
 
 
@@ -203,48 +199,6 @@ def _plan_placeholder(basis: ExtractedTestBasis) -> CaseIntentSet:
         ],
         blocking_gaps=[],
     )
-
-
-def _format_known_items(basis: ExtractedTestBasis, section: str) -> str:
-    """Format known items from one section for the prompt."""
-    items = basis.known_items(section)
-    if not items:
-        return ""
-    lines = []
-    for it in items:
-        lines.append(f"- [{it.item_id}] {it.content}")
-    return "\n".join(lines)
-
-
-def _format_unresolved_items(basis: ExtractedTestBasis) -> str:
-    """Format all needs_review items across all sections."""
-    items = basis.all_needs_review_items()
-    if not items:
-        return ""
-    lines = []
-    for it in items:
-        lines.append(f"- [{it.item_id}] {it.need}")
-    return "\n".join(lines)
-
-
-def _parse_json_response(raw_response: str) -> dict[str, Any]:
-    text = raw_response.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    parsed = json.loads(text)
-    if not isinstance(parsed, dict):
-        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
-    return parsed
-
-
-def _dump_raw_response(run_dir: Path, raw_response: str, label: str) -> None:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / f"{label}_raw_response.txt").write_text(raw_response, encoding="utf-8")
 
 
 # ── Legacy aliases (for test backward compatibility) ────────────────────────

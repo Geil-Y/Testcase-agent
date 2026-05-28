@@ -33,13 +33,7 @@ _ARTIFACT_ORDER = [
     "reviewed_cases.json",
 ]
 
-# Legacy artifact names for detection
-_LEGACY_ARTIFACTS = frozenset({
-    "clarification_review.json",
-    "clarified_test_basis.json",
-    "case_intent_review.json",
-    "approved_case_plan.json",
-})
+from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
 
 # Downstream invalidation map
 _DOWNSTREAM_MAP: dict[str, list[str]] = {
@@ -202,8 +196,7 @@ def _read_run_info(run_dir: Path) -> dict[str, Any] | None:
 
 
 def _has_legacy_artifacts(run_dir: Path) -> bool:
-    """Check if this run directory contains legacy artifacts."""
-    return any((run_dir / name).exists() for name in _LEGACY_ARTIFACTS)
+    return is_legacy_run_dir(run_dir)
 
 
 def _dir_creation_time(run_dir: Path) -> str:

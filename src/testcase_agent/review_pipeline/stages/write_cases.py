@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
@@ -27,9 +26,14 @@ from testcase_agent.review_pipeline.artifacts.models import (
     GeneratedCaseSet,
     RegenerateRequest,
 )
+from testcase_agent.review_pipeline.artifacts.formatting import (
+    parse_json_response,
+    dump_raw_response,
+    format_known_items,
+    format_unresolved_items,
+)
 from testcase_agent.review_pipeline.artifacts.validation import (
     validate_reviewed_artifact,
-    validate_accept_all_no_blocking_gaps,
 )
 from testcase_agent.review_pipeline.prompts import render_prompt
 
@@ -246,12 +250,12 @@ def _call_write_case_llm(
     """Call LLM-C and parse its JSON response."""
     description = basis.source_description
 
-    known_signals = _format_known_items(basis, "signals")
-    known_thresholds = _format_known_items(basis, "thresholds")
-    known_timing = _format_known_items(basis, "timing")
-    known_states = _format_known_items(basis, "states")
-    known_observations = _format_known_items(basis, "observations")
-    unresolved_items = _format_unresolved_items(basis)
+    known_signals = format_known_items(basis, "signals")
+    known_thresholds = format_known_items(basis, "thresholds")
+    known_timing = format_known_items(basis, "timing")
+    known_states = format_known_items(basis, "states")
+    known_observations = format_known_items(basis, "observations")
+    unresolved_items = format_unresolved_items(basis)
 
     system_prompt, user_prompt = render_prompt(
         "write_case",
@@ -272,18 +276,17 @@ def _call_write_case_llm(
     raw_response = provider.complete(system_prompt, user_prompt)
 
     try:
-        payload = _parse_json_response(raw_response)
+        payload = parse_json_response(raw_response)
         payload.setdefault("case_id", f"case-{uuid.uuid4().hex[:8]}")
         payload.setdefault("requirement_key", basis.requirement_key)
         payload.setdefault("intent_id", intent.intent_id)
         payload.setdefault("coverage_dimension", intent.coverage_dimension)
-        # Coerce step_number to string (LLM may emit int)
         for step in payload.get("steps", []):
             if "step_number" in step:
                 step["step_number"] = str(step["step_number"])
         return GeneratedCase(**payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as exc:
-        _dump_raw_response(run_dir, raw_response, "llm_c")
+        dump_raw_response(run_dir, raw_response, "llm_c")
         raise ValueError(f"LLM-C response was not valid JSON: {exc}") from exc
 
 
@@ -307,20 +310,6 @@ def _write_placeholder(basis: ExtractedTestBasis, intent: CaseIntentItem) -> Gen
     )
 
 
-def _format_known_items(basis: ExtractedTestBasis, section: str) -> str:
-    items = basis.known_items(section)
-    if not items:
-        return ""
-    return "\n".join(f"- [{it.item_id}] {it.content}" for it in items)
-
-
-def _format_unresolved_items(basis: ExtractedTestBasis) -> str:
-    items = basis.all_needs_review_items()
-    if not items:
-        return ""
-    return "\n".join(f"- [{it.item_id}] {it.need}" for it in items)
-
-
 def _find_intent(intents: CaseIntentSet, intent_id: str) -> CaseIntentItem | None:
     for i in intents.intents:
         if i.intent_id == intent_id:
@@ -328,21 +317,3 @@ def _find_intent(intents: CaseIntentSet, intent_id: str) -> CaseIntentItem | Non
     return None
 
 
-def _parse_json_response(raw_response: str) -> dict[str, Any]:
-    text = raw_response.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].strip().startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        text = "\n".join(lines).strip()
-    parsed = json.loads(text)
-    if not isinstance(parsed, dict):
-        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
-    return parsed
-
-
-def _dump_raw_response(run_dir: Path, raw_response: str, label: str) -> None:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / f"{label}_raw_response.txt").write_text(raw_response, encoding="utf-8")

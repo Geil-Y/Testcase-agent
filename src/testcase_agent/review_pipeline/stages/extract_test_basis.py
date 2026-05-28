@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from pydantic import ValidationError
 
@@ -23,6 +22,7 @@ from testcase_agent.review_pipeline.artifacts.models import (
     ExtractionReviewAction,
 )
 from testcase_agent.review_pipeline.artifacts.validation import validate_accept_all_no_blocking_gaps
+from testcase_agent.review_pipeline.artifacts.formatting import parse_json_response, dump_raw_response
 from testcase_agent.review_pipeline.prompts import render_prompt
 
 
@@ -174,10 +174,10 @@ def _call_extract_llm(
     raw_response = provider.complete(system_prompt, user_prompt)
 
     try:
-        payload = _parse_json_response(raw_response)
+        payload = parse_json_response(raw_response)
         return ExtractedTestBasis(**payload)
     except (json.JSONDecodeError, ValidationError, TypeError) as exc:
-        _dump_raw_response(run_dir, raw_response)
+        dump_raw_response(run_dir, raw_response, "llm_a")
         raise ValueError(f"LLM-A response was not valid JSON: {exc}") from exc
 
 
@@ -213,26 +213,3 @@ def _extract_placeholder(req: RequirementInput) -> ExtractedTestBasis:
     )
 
 
-def _parse_json_response(raw_response: str) -> dict[str, Any]:
-    """Parse raw model output that should contain exactly one JSON object."""
-    text = raw_response.strip()
-    if text.startswith("```"):
-        text = _strip_markdown_fence(text)
-    parsed = json.loads(text)
-    if not isinstance(parsed, dict):
-        raise TypeError(f"Expected JSON object, got {type(parsed).__name__}")
-    return parsed
-
-
-def _strip_markdown_fence(text: str) -> str:
-    lines = text.splitlines()
-    if lines and lines[0].strip().startswith("```"):
-        lines = lines[1:]
-    if lines and lines[-1].strip() == "```":
-        lines = lines[:-1]
-    return "\n".join(lines).strip()
-
-
-def _dump_raw_response(run_dir: Path, raw_response: str) -> None:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    (run_dir / "llm_a_raw_response.txt").write_text(raw_response, encoding="utf-8")
