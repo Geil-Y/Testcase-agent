@@ -246,14 +246,13 @@ function renderWorkspace() {
   const r = STATE.runMeta;
   if(!r){document.getElementById('main-content').innerHTML='<div class="card"><div class="card-body">Loading run...</div></div>';return;}
 
-  const statusOrder = ['new','clarification_ready','clarification_blocked','intent_ready','cases_ready','evaluated'];
+  const statusOrder = ['new','extraction_pending_review','extraction_reviewed','extraction_blocked','intents_pending_review','intents_reviewed','intents_blocked','cases_pending_review','cases_reviewed'];
   const currentIdx = statusOrder.indexOf(r.status);
   const stageDefs = [
-    {label:'New', key:'new', doneAfter:0},
-    {label:'Clarification', key:'clarification', doneAfter:2},
-    {label:'Intent Review', key:'intents', doneAfter:3},
-    {label:'Cases', key:'cases', doneAfter:4},
-    {label:'Results', key:'results', doneAfter:5},
+    {label:'Extraction', key:'extraction', doneAfter:2},
+    {label:'Case Intents', key:'intents', doneAfter:5},
+    {label:'Case Generation', key:'cases', doneAfter:7},
+    {label:'Case Review', key:'review', doneAfter:8},
   ];
 
   let stagesNav = '<div class="sidebar-nav">';
@@ -271,12 +270,12 @@ function renderWorkspace() {
   let body = '';
   if(view && currentIdx > (stageDefs.find(d=>d.key===view)||{}).doneAfter){
     // Revisiting a completed stage — render its section
-    if(view==='new'||view==='clarification') body = renderClarificationSection();
+    if(view==='extraction') body = renderExtractionSection();
     else if(view==='intents') body = renderIntentSection();
-    else if(view==='cases'||view==='results') body = renderResultsSection();
+    else if(view==='cases'||view==='review') body = renderResultsSection();
   } else if(currentIdx>=0){
-    if(currentIdx<=2) body = renderClarificationSection();
-    else if(currentIdx===3) body = renderIntentSection();
+    if(currentIdx<=2) body = renderExtractionSection();
+    else if(currentIdx<=5) body = renderIntentSection();
     else body = renderResultsSection();
   }
   if(!body) body = `<div class="card"><div class="card-body"><p>Status: ${esc(r.status)}</p></div></div>`;
@@ -286,9 +285,7 @@ function renderWorkspace() {
   <div class="card-body flex-between">
     <span>Req: <code>${esc(r.requirement_key)}</code> | Status: <strong>${esc(r.status)}</strong></span>
     <span><button class="btn btn-sm" onclick="showHome()">&#8592; Home</button>
-    <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button>
-    <button class="btn btn-sm" onclick="importMemory()">Import Memory</button>
-    <button class="btn btn-sm btn-danger" onclick="showRegenerate()">Regenerate</button></span>
+    <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button></span>
   </div></div>
   ${STATE.jobResultMessage ? `<div class="alert ${STATE.jobResultMessage.type==='error'?'alert-danger':'alert-warning'}">${STATE.jobResultMessage.text}</div>` : ''}
   <div class="sidebar">${stagesNav}<div class="sidebar-workspace">${body}</div></div>`;
@@ -303,181 +300,100 @@ function renderWorkspace() {
   }).catch(()=>{});
   }
 
-  // -- Regenerate UI --
-async function showRegenerate() {
-  const r = STATE.runMeta; if(!r) return;
-  const stage = r.status==='clarification_ready'||r.status==='clarification_blocked'?'clarification':r.status==='intent_ready'?'intents':'cases';
-  try {
-    // Call without confirm to get affected artifacts list
-    const info = await post(API+'/runs/'+r.run_dir+'/regenerate', {stage, confirm:false});
-    if(info.confirmation_required){
-      const artifacts = (info.affected_artifacts||[]).join(', ');
-      if(!confirm(`Regenerate will archive these downstream artifacts:\n${artifacts}\n\nProceed?`)) return;
-    }
-    // Now confirm
-    const result = await post(API+'/runs/'+r.run_dir+'/regenerate', {stage, confirm:true});
-    if(result.status==='started'){
-      alert('Regenerate job started. Polling for completion...');
-      pollJob(result.job.id, () => { loadRunMeta(); });
-    }
-  } catch(e) { alert('Regenerate failed: '+(e.error||e.message)); }
+// -- Extraction Review --
+function renderExtractionSection() {
+  loadAndRenderExtraction();
+  return '<div class="card"><div class="card-body"><p>Loading extraction...</p></div></div>';
 }
 
-// -- Clarification Review --
-function renderClarificationSection() {
-  // Load data async and re-render
-  loadAndRenderClarification();
-  return '<div class="card"><div class="card-body"><p>Loading clarification review...</p></div></div>';
-}
-
-async function loadAndRenderClarification() {
+async function loadAndRenderExtraction() {
   const r = STATE.runMeta; if(!r) return;
-  let data, reasonCodes;
-  try { data = await get(API+'/runs/'+r.run_dir+'/clarification'); reasonCodes = await get(API+'/reason-codes?review_type=clarification'); } catch(e) { return; }
+  let data;
+  try { data = await get(API+'/runs/'+r.run_dir+'/extraction'); } catch(e) { return; }
   STATE.activeReview = data;
-  STATE.reasonCodesCache = reasonCodes;  // cache for local re-renders
-  const decisions = data.review.decisions||[];
-  const amb = data.review.decomposition?.ambiguities||[];
-  const ambById={};amb.forEach(a=>ambById[a.item_id]=a);
 
-  let rows = decisions.map(d => {
-    const a=ambById[d.item_id]||{};
-    const conf=d.confidence_before_review||(a.confidence_drivers?.overall)||0.5;
-    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
-    const decided=!!(d.decision||'').trim();
-    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
-    let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
-    return `<tr class="${decided?'':'pending-row'}">
-      <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
-      <td class="affected-cell" title="${esc(a.affected_text||'')}">${esc(a.affected_text||'—')}</td>
-      <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
-      <td><select onchange="updateReasonCode('${esc(d.item_id)}',this.value)">${rcOpts}</select></td>
-      <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
-      <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
-    </tr>`;
-  }).join('');
+  if (data.legacy) {
+    // Legacy run — show unsupported message
+    const main = document.getElementById('main-content');
+    const cards = main.querySelectorAll('.card');
+    const lastCard = cards[cards.length-1];
+    if(lastCard){
+      lastCard.innerHTML = `<div class="card-header">Extraction</div>
+        <div class="card-body"><div class="alert alert-warning">${esc(data.message)}</div></div>`;
+    }
+    return;
+  }
 
-  // Find the card-body of the clarification card and replace
+  const extraction = data.extraction || {};
+  const sections = extraction.sections || {};
+  const blocking = extraction.blocking_gaps || [];
+  const reviewed = data.reviewed || false;
+
+  let rows = '';
+  const sectionNames = ['signals', 'thresholds', 'timing', 'states', 'observations'];
+  sectionNames.forEach(sec => {
+    const items = sections[sec] || [];
+    items.forEach(it => {
+      const statusLabel = it.status === 'known' ? '&#9989; known' : '&#9888; needs_review';
+      const content = it.status === 'known' ? esc(it.content) : '';
+      const need = it.status === 'needs_review' ? esc(it.need) : '';
+      rows += `<tr>
+        <td><code>${esc(it.item_id)}</code></td><td><strong>${sec}</strong></td>
+        <td>${statusLabel}</td><td>${content}</td><td>${need}</td>
+        <td style="font-size:0.8em;color:#757575">${esc(it.source_text||'').substring(0,60)}</td>
+      </tr>`;
+    });
+  });
+
+  let blockingHtml = '';
+  if (blocking.length > 0) {
+    blockingHtml = `<div class="alert alert-danger"><strong>BLOCKED:</strong> ${blocking.map(esc).join('; ')}</div>`;
+  }
+
+  let reviewedBadge = reviewed ? '<span class="badge bg-success">Reviewed</span>' : '<span class="badge bg-warning">Pending Review</span>';
+
   const main = document.getElementById('main-content');
-  // Find the last card and replace it
   const cards = main.querySelectorAll('.card');
   const lastCard = cards[cards.length-1];
   if(lastCard){
-    lastCard.innerHTML = `<div class="card-header flex-between">&#128221; Clarification Review
-      <span><button class="btn btn-sm" onclick="acceptRecs()">Accept All Recs</button>
-      <button class="btn btn-sm btn-primary" onclick="saveDraft()">Save Draft</button>
-      <button class="btn btn-sm btn-success" onclick="saveAndAdvance()">Save & Prep Intent Review</button></span></div>
-      <div class="card-body"><div id="clarification-msg"></div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th></th><th>Type</th><th>Affected</th><th>Decision</th><th>Reason Codes</th><th>Reason Text</th><th>Clarified</th></tr></thead><tbody>${rows}</tbody></table></div>
+    lastCard.innerHTML = `<div class="card-header flex-between">&#128221; Extraction — Test Basis Review ${reviewedBadge}
+      <span>${!reviewed ? `<button class="btn btn-sm btn-success" onclick="acceptExtraction()">Accept All</button>` : ''}
+      <button class="btn btn-sm btn-primary" onclick="saveExtractionReview()">Save Review</button>
+      <button class="btn btn-sm" onclick="planIntents()">Plan Intents &#9654;</button></span></div>
+      <div class="card-body"><div id="extraction-msg"></div>
+      ${blockingHtml}
+      <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th>Section</th><th>Status</th><th>Content</th><th>Need</th><th>Source</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No items extracted</td></tr>'}</tbody></table></div>
     </div>`;
   }
 }
 
-function updateDecision(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.decision=v;}
-function updateReasonCode(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_codes=v?[v]:[];}
-function updateReasonText(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.reason_text=v;}
-function updateClarifiedValue(id,v){if(!STATE.activeReview)return;const d=STATE.activeReview.review.decisions.find(d=>d.item_id===id);if(d)d.clarified_value=v;}
-
-function rebuildClarificationTable() {
-  // Re-render the clarification table from STATE.activeReview without any network fetch.
-  // Used by applyProposed and other local-state mutations.
-  const data = STATE.activeReview; if(!data) return;
-  const reasonCodes = STATE.reasonCodesCache || {decisions:[],reason_codes:[]};
-  const decisions = data.review.decisions||[];
-  const amb = data.review.decomposition?.ambiguities||[];
-  const ambById={};amb.forEach(a=>ambById[a.item_id]=a);
-
-  let rows = decisions.map(d => {
-    const a=ambById[d.item_id]||{};
-    const conf=d.confidence_before_review||(a.confidence_drivers?.overall)||0.5;
-    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
-    const decided=!!(d.decision||'').trim();
-    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
-    let rcOpts=reasonCodes.reason_codes.map(rc=>`<option value="${rc}" ${(d.reason_codes||[]).includes(rc)?'selected':''}>${rc}</option>`).join('');
-    return `<tr class="${decided?'':'pending-row'}">
-      <td><code>${esc(d.item_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(a.ambiguity_type||'')}</td>
-      <td class="affected-cell" title="${esc(a.affected_text||'')}">${esc(a.affected_text||'—')}</td>
-      <td><select onchange="updateDecision('${esc(d.item_id)}',this.value)">${decOpts}</select></td>
-      <td><select onchange="updateReasonCode('${esc(d.item_id)}',this.value)">${rcOpts}</select></td>
-      <td><input type="text" onchange="updateReasonText('${esc(d.item_id)}',this.value)" value="${esc(d.reason_text||'')}" style="width:120px;"></td>
-      <td><input type="text" onchange="updateClarifiedValue('${esc(d.item_id)}',this.value)" value="${esc(d.clarified_value||'')}" style="width:100px;"></td>
-    </tr>`;
-  }).join('');
-
-  const cards = document.getElementById('main-content').querySelectorAll('.card');
-  const lastCard = cards[cards.length-1];
-  if(lastCard){
-    lastCard.innerHTML = `<div class="card-header flex-between">&#128221; Clarification Review
-      <span><button class="btn btn-sm" onclick="acceptRecs()">Accept All Recs</button>
-      <button class="btn btn-sm btn-primary" onclick="saveDraft()">Save Draft</button>
-      <button class="btn btn-sm btn-success" onclick="saveAndAdvance()">Save & Prep Intent Review</button></span></div>
-      <div class="card-body"><div id="clarification-msg"></div>
-      <div style="overflow-x:auto"><table><thead><tr><th>Item</th><th></th><th>Type</th><th>Affected</th><th>Decision</th><th>Reason Codes</th><th>Reason Text</th><th>Clarified</th></tr></thead><tbody>${rows}</tbody></table></div>
-    </div>`;
-  }
+async function acceptExtraction() {
+  const r = STATE.runMeta; if(!r) return;
+  const msg = document.getElementById('extraction-msg'); if(!msg) return;
+  try {
+    const result = await post(API+'/runs/'+r.run_dir+'/extraction/accept-all', {});
+    msg.innerHTML = '<div class="alert alert-success">Extraction accepted. Reviewed artifact written.</div>';
+    loadRunMeta();
+  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">${e.error||e.message}</div>`; }
 }
 
-async function acceptRecs() {
-  const msg=document.getElementById('clarification-msg'); if(!msg) return;
-  try{
-    const result=await post(API+'/runs/'+STATE.activeRun+'/clarification/accept-recommendations',{confirm_high_risk:false});
-    if(result.requires_confirmation){
-      if(confirm(`${result.message}\n\nOK to accept ALL including orange/red items.`)){
-        const r2=await post(API+'/runs/'+STATE.activeRun+'/clarification/accept-recommendations',{confirm_high_risk:true});
-        applyProposed(r2.proposed_decisions);
-        msg.innerHTML=`<div class="alert alert-info">${r2.filled} decisions filled (incl. ${r2.high_risk_accepted} high-risk). <strong>Use Save Draft to persist.</strong></div>`;
-      }else{
-        applyProposed(result.proposed_decisions);
-        msg.innerHTML=`<div class="alert alert-info">${result.filled} filled, ${result.high_risk_skipped} high-risk skipped. <strong>Use Save Draft to persist.</strong></div>`;
-      }
-    }else{
-      applyProposed(result.proposed_decisions);
-      msg.innerHTML=`<div class="alert alert-info">${result.filled} filled. <strong>Use Save Draft to persist.</strong></div>`;
-    }
-  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
+async function saveExtractionReview() {
+  const msg = document.getElementById('extraction-msg'); if(!msg) return;
+  const r = STATE.runMeta; if(!r) return;
+  // Build actions from data
+  const actions = [];
+  try {
+    const result = await post(API+'/runs/'+r.run_dir+'/extraction/review', {actions:[]});
+    msg.innerHTML = '<div class="alert alert-success">Review saved.</div>';
+  } catch(e) { msg.innerHTML = `<div class="alert alert-danger">${e.error||e.message}</div>`; }
 }
 
-function applyProposed(proposed) {
-  if(!proposed||!STATE.activeReview)return;
-  proposed.forEach(p=>{
-    const d=STATE.activeReview.review.decisions.find(d=>d.item_id===p.item_id);
-    if(d)d.decision=p.decision;
-  });
-  // Re-render from local STATE.activeReview only — never fetch from server.
-  rebuildClarificationTable();
-}
-
-async function saveDraft() {
-  const msg=document.getElementById('clarification-msg'); if(!msg) return;
-  try{
-    const decisions=(STATE.activeReview.review.decisions||[]).map(d=>({item_id:d.item_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',clarified_value:d.clarified_value||'',edited_content:d.edited_content||{}}));
-    await post(API+'/runs/'+STATE.activeRun+'/clarification/draft',{decisions});
-    msg.innerHTML='<div class="alert alert-success">Draft saved.</div>';
-  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
-}
-
-async function saveAndAdvance() {
-  const msg=document.getElementById('clarification-msg'); if(!msg) return;
-  msg.innerHTML='<div class="alert alert-info">Saving and advancing...</div>';
-  try{
-    const decisions=(STATE.activeReview.review.decisions||[]).map(d=>({item_id:d.item_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',clarified_value:d.clarified_value||'',edited_content:d.edited_content||{}}));
-    const result=await post(API+'/runs/'+STATE.activeRun+'/clarification/advance',{decisions});
-    if(result.status==='started'){
-      msg.innerHTML='<div class="alert alert-info">Job started. Polling...</div>';
-      pollJob(result.job.id, ()=>{loadRunMeta();});
-    }else if(result.blocked){
-      msg.innerHTML=`<div class="alert alert-danger">Blocked: ${(result.block_reasons||[]).join(', ')}</div>`;
-      loadRunMeta();
-    }else if(result.errors){
-      msg.innerHTML=`<div class="alert alert-danger">${result.errors.map(e=>esc(e.field_path+': '+e.message)).join('<br>')}</div>`;
-    }else if(result.reused){
-      msg.innerHTML='<div class="alert alert-success">Unchanged — reused existing downstream artifacts.</div>';
-      loadRunMeta();
-    }else{
-      msg.innerHTML='<div class="alert alert-success">Advanced to Case Intent Review.</div>';
-      loadRunMeta();
-    }
-  }catch(e){msg.innerHTML=`<div class="alert alert-danger">Error: ${e.error||e.message}</div>`;}
+async function planIntents() {
+  const r = STATE.runMeta; if(!r) return;
+  try {
+    const result = await post(API+'/runs/'+r.run_dir+'/intents/plan', {});
+    if (result.job) { pollJob(result.job.id, () => { loadRunMeta(); }); }
+  } catch(e) { alert('Plan intents failed: '+(e.error||e.message)); }
 }
 
 // -- Case Intent Review --
@@ -488,83 +404,99 @@ function renderIntentSection() {
 
 async function loadAndRenderIntents() {
   const r=STATE.runMeta; if(!r) return;
-  let data,reasonCodes;
-  try{data=await get(API+'/runs/'+r.run_dir+'/intents');reasonCodes=await get(API+'/reason-codes?review_type=case_intent');}catch(e){return;}
-  STATE.activeIntents=data;
-  const decisions=data.review.decisions||[];
-  const intents=data.review.plan?.intents||[];
-  const intentById={};intents.forEach(i=>intentById[i.intent_id]=i);
+  let data;
+  try{data=await get(API+'/runs/'+r.run_dir+'/intents');}catch(e){return;}
 
-  let rows=decisions.map(d=>{
-    const i=intentById[d.intent_id]||{};
-    const conf=d.confidence_before_review||i.confidence_score||0.5;
-    const color=conf>=0.85?'g':conf>=0.65?'b':conf>=0.40?'o':'r';
-    const decided=!!(d.decision||'').trim();
-    let decOpts=reasonCodes.decisions.map(dec=>`<option value="${dec}" ${d.decision===dec?'selected':''}>${dec}</option>`).join('');
-    return `<tr class="${decided?'':'pending-row'}"><td><code>${esc(d.intent_id)}</code></td><td><span class="routing-${color}">&#9679;</span></td><td>${esc(i.coverage_dimension||'')}</td><td>${esc((i.intent_text||'').substring(0,80))}</td><td><select onchange="updateIntentDecision('${esc(d.intent_id)}',this.value)">${decOpts}</select></td></tr>`;
-  }).join('');
+  if (data.legacy) {
+    const cards=document.getElementById('main-content').querySelectorAll('.card');
+    const lastCard=cards[cards.length-1];
+    if(lastCard) lastCard.innerHTML=`<div class="card-header">Case Intents</div><div class="card-body"><div class="alert alert-warning">${esc(data.message)}</div></div>`;
+    return;
+  }
+
+  STATE.activeIntents=data;
+  const intents = (data.intents||{}).intents || [];
+  const blocking = (data.intents||{}).blocking_gaps || [];
+  const reviewed = data.reviewed || false;
+
+  let rows=intents.map(i=>`<tr><td><code>${esc(i.intent_id)}</code></td><td>${esc(i.coverage_dimension||'')}</td><td>${esc((i.intent_text||'').substring(0,100))}</td></tr>`).join('');
+
+  let blockingHtml = blocking.length>0 ? `<div class="alert alert-danger"><strong>BLOCKED:</strong> ${blocking.map(esc).join('; ')}</div>` : '';
+  let reviewedBadge = reviewed ? '<span class="badge bg-success">Reviewed</span>' : '<span class="badge bg-warning">Pending Review</span>';
 
   const cards=document.getElementById('main-content').querySelectorAll('.card');
   const lastCard=cards[cards.length-1];
   if(lastCard){
-    lastCard.innerHTML=`<div class="card-header flex-between">&#128221; Case Intent Review
-      <span><button class="btn btn-sm btn-primary" onclick="saveIntentDraft()">Save Draft</button>
-      <button class="btn btn-sm btn-success" onclick="saveAndGenerate()">Save & Generate Cases</button></span></div>
-      <div class="card-body"><div id="intent-msg"></div>
-      <table><thead><tr><th>Intent</th><th></th><th>Dimension</th><th>Intent Text</th><th>Decision</th></tr></thead><tbody>${rows}</tbody></table>
+    lastCard.innerHTML=`<div class="card-header flex-between">&#128221; Case Intents ${reviewedBadge}
+      <span>${!reviewed?`<button class="btn btn-sm btn-success" onclick="acceptIntents()">Accept All</button>`:''}
+      <button class="btn btn-sm btn-primary" onclick="saveIntentReview()">Save Review</button>
+      <button class="btn btn-sm" onclick="generateCases()">Generate Cases &#9654;</button></span></div>
+      <div class="card-body"><div id="intent-msg"></div>${blockingHtml}
+      <table><thead><tr><th>Intent</th><th>Dimension</th><th>Intent Text</th></tr></thead><tbody>${rows||'<tr><td colspan="3">No intents planned.</td></tr>'}</tbody></table>
     </div>`;
   }
 }
 
-function updateIntentDecision(id,v){if(!STATE.activeIntents)return;const d=STATE.activeIntents.review.decisions.find(d=>d.intent_id===id);if(d)d.decision=v;}
-
-async function saveIntentDraft(){
-  const msg=document.getElementById('intent-msg');if(!msg)return;
-  try{const decisions=(STATE.activeIntents.review.decisions||[]).map(d=>({intent_id:d.intent_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',revised_intent_text:d.revised_intent_text||'',merge_target_id:d.merge_target_id||'',split_children:d.split_children||[]}));await post(API+'/runs/'+STATE.activeRun+'/intents/draft',{decisions});msg.innerHTML='<div class="alert alert-success">Draft saved.</div>';}catch(e){msg.innerHTML=`<div class="alert alert-danger">${e.error||e.message}</div>`;}
+async function acceptIntents() {
+  const r=STATE.runMeta; if(!r)return;
+  try{await post(API+'/runs/'+r.run_dir+'/intents/accept-all',{}); loadRunMeta(); }
+  catch(e){alert('Accept failed: '+(e.error||e.message));}
 }
 
-async function saveAndGenerate(){
-  const msg=document.getElementById('intent-msg');if(!msg)return;
-  msg.innerHTML='<div class="alert alert-info">Generating cases...</div>';
-  try{const decisions=(STATE.activeIntents.review.decisions||[]).map(d=>({intent_id:d.intent_id,decision:d.decision||'',reason_codes:d.reason_codes||[],reason_text:d.reason_text||'',revised_intent_text:d.revised_intent_text||'',merge_target_id:d.merge_target_id||'',split_children:d.split_children||[]}));const result=await post(API+'/runs/'+STATE.activeRun+'/intents/generate',{decisions});
-    if(result.status==='started'){msg.innerHTML='<div class="alert alert-info">Job started. Polling...</div>';pollJob(result.job.id,()=>{loadRunMeta();});}
-    else if(result.reused){msg.innerHTML='<div class="alert alert-success">Unchanged — reused existing downstream artifacts.</div>';loadRunMeta();}
-    else if(result.errors){msg.innerHTML=`<div class="alert alert-danger">${result.errors.map(e=>esc(e.field_path+': '+e.message)).join('<br>')}</div>`;}
-  }catch(e){msg.innerHTML=`<div class="alert alert-danger">${e.error||e.message}</div>`;}
+async function saveIntentReview() {
+  const msg=document.getElementById('intent-msg'); if(!msg)return;
+  try{await post(API+'/runs/'+STATE.runMeta.run_dir+'/intents/review',{actions:[]}); msg.innerHTML='<div class="alert alert-success">Review saved.</div>';}
+  catch(e){msg.innerHTML=`<div class="alert alert-danger">${e.error||e.message}</div>`;}
 }
 
-// -- Results --
+async function generateCases() {
+  const r=STATE.runMeta; if(!r)return;
+  try{const result=await post(API+'/runs/'+r.run_dir+'/cases/generate',{});
+    if(result.job){pollJob(result.job.id,()=>{loadRunMeta();});}
+  }catch(e){alert('Generate failed: '+(e.error||e.message));}
+}
+
+// -- Results / Case Review --
 function renderResultsSection() {
   loadAndRenderResults();
-  return '<div class="card"><div class="card-body"><p>Loading results...</p></div></div>';
+  return '<div class="card"><div class="card-body"><p>Loading cases...</p></div></div>';
 }
 
 async function loadAndRenderResults() {
   const r=STATE.runMeta;if(!r)return;
-  let results; try{results=await get(API+'/runs/'+r.run_dir+'/results');}catch(e){return;}
-  const cases=results.cases||[];
-  const eval_=results.evaluation||{};
+  let results; try{results=await get(API+'/runs/'+r.run_dir+'/cases');}catch(e){return;}
+  if (results.legacy) {
+    const cards=document.getElementById('main-content').querySelectorAll('.card');
+    const lastCard=cards[cards.length-1];
+    if(lastCard) lastCard.innerHTML=`<div class="card-header">Cases</div><div class="card-body"><div class="alert alert-warning">${esc(results.message)}</div></div>`;
+    return;
+  }
+  const caseData = results.cases || {};
+  const cases = caseData.cases || [];
+  const reviewed = results.reviewed || false;
   let caseRows=cases.map(c=>`<tr><td><code>${esc(c.case_id)}</code></td><td>${esc(c.title||'')}</td><td>${esc(c.coverage_dimension||'')}</td><td>${esc((c.objective||'').substring(0,60))}</td><td>${(c.steps||[]).length} steps</td></tr>`).join('');
-  let evalHtml=eval_.passed!==undefined?`<div class="alert ${eval_.failed>0?'alert-danger':'alert-success'}">Evaluation: ${eval_.passed||0} passed, ${eval_.failed||0} failed</div>`:'';
+  let reviewedBadge = reviewed ? '<span class="badge bg-success">Reviewed</span>' : '<span class="badge bg-warning">Pending Review</span>';
   const cards=document.getElementById('main-content').querySelectorAll('.card');
   const lastCard=cards[cards.length-1];
   if(lastCard){
-    lastCard.innerHTML=`<div class="card-header">&#128202; Results <span style="font-size:0.75rem;color:var(--text-muted);">Read-only</span></div>
-      <div class="card-body">${evalHtml}<p style="font-size:0.75rem;color:var(--text-muted);">${results.note||''}</p>
+    lastCard.innerHTML=`<div class="card-header flex-between">&#128202; Case Review ${reviewedBadge}
+      <span>${!reviewed?`<button class="btn btn-sm btn-success" onclick="acceptCases()">Accept All</button>`:''}
+      <button class="btn btn-sm btn-primary" onclick="exportRun()">Export</button></span></div>
+      <div class="card-body"><div id="case-msg"></div>
       <table><thead><tr><th>Case ID</th><th>Title</th><th>Dimension</th><th>Objective</th><th>Steps</th></tr></thead><tbody>${caseRows||'<tr><td colspan="5">No cases generated.</td></tr>'}</tbody></table>
     </div>`;
   }
 }
 
+async function acceptCases() {
+  const r=STATE.runMeta; if(!r)return;
+  try{await post(API+'/runs/'+r.run_dir+'/cases/accept-all',{}); loadRunMeta(); }
+  catch(e){alert('Accept failed: '+(e.error||e.message));}
+}
+
 async function exportRun() {
   const r=STATE.runMeta;if(!r)return;
   try{const data=await get(API+'/runs/'+r.run_dir+'/export');const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=r.run_dir+'_export.json';a.click();URL.revokeObjectURL(url);}catch(e){alert('Export failed: '+e.message);}
-}
-
-async function importMemory() {
-  const r=STATE.runMeta;if(!r)return;
-  if(!confirm('Import Review Memory for this run? This is explicit and never automatic.'))return;
-  try{const result=await post(API+'/runs/'+r.run_dir+'/import-memory');alert('Memory imported: '+(result.message||'success'));}catch(e){alert('Import failed: '+(e.error||e.message));}
 }
 </script>
 </body>
