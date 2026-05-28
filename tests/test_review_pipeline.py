@@ -668,330 +668,217 @@ class TestClarificationValidation:
 # ── Issue 8: Case intent planning ──────────────────────────────────────────
 
 class TestIntentPlanning:
-    def test_produces_intent_review(self, run_dir, sample_requirement_json):
-        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
-        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
-
-        prepare_clarification_review(str(sample_requirement_json), str(run_dir))
-        # Auto-approve
-        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
-        data = read_json(run_dir / "clarification_review.json")
-        data["decisions"] = [{"item_id": a["item_id"], "decision": "approve"}
-                             for a in data["decomposition"]["ambiguities"]]
-        write_json(run_dir / "clarification_review.json", data)
-        validate_clarification_review(str(run_dir / "clarification_review.json"))
-
-        review = prepare_intent_review(str(run_dir))
-        assert (run_dir / "case_intent_review.json").exists()
-        assert (run_dir / "case_intent_review.html").exists()
-        assert len(review.plan.intents) >= 1
-
-    def test_blocked_basis_prevents_planning(self, run_dir, sample_requirement_json):
-        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
+    def test_plan_intents_produces_case_intents(self, run_dir):
+        """plan_intents() reads reviewed_extracted_test_basis.json, writes case_intents.json."""
+        from testcase_agent.review_pipeline.stages.extract_test_basis import extract_test_basis, accept_extraction
+        from testcase_agent.review_pipeline.stages.plan_case_intents import plan_intents
         from testcase_agent.review_pipeline.artifacts.io import write_json
-        from testcase_agent.review_pipeline.artifacts.models import ClarifiedTestBasis
 
-        prepare_clarification_review(str(sample_requirement_json), str(run_dir))
-        # Write a blocked test basis
-        basis = ClarifiedTestBasis(
-            requirement_key="BMS_REQ_001", review_session_id="s1",
-            blocked=True, block_reasons=["Unresolvable ambiguity"],
+        req_path = run_dir / "requirements.json"
+        write_json(req_path, [{"requirement_key": "REQ_001", "description": "Test requirement"}])
+
+        extract_test_basis(str(req_path), str(run_dir))
+        accept_extraction(str(run_dir))
+
+        intent_set = plan_intents(str(run_dir))
+        assert (run_dir / "case_intents.json").exists()
+        assert len(intent_set.intents) >= 1
+        assert intent_set.requirement_key == "REQ_001"
+
+    def test_blocking_gaps_prevent_planning(self, run_dir):
+        """If reviewed_extracted_test_basis has blocking_gaps, plan_intents raises ValueError."""
+        from testcase_agent.review_pipeline.stages.plan_case_intents import plan_intents
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis
+        from testcase_agent.review_pipeline.artifacts.io import write_json
+
+        basis = ExtractedTestBasis(
+            requirement_key="REQ_001",
+            source_description="Blocked requirement",
+            blocking_gaps=["Unresolvable timing ambiguity"],
         )
-        write_json(run_dir / "clarified_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
 
-        review = prepare_intent_review(str(run_dir))
-        assert review.plan.planning_blocked
-        assert "Unresolvable" in review.plan.planning_block_reason
+        with pytest.raises(ValueError, match="blocking gaps"):
+            plan_intents(str(run_dir))
 
-    def test_html_contains_routing_colors(self, run_dir, sample_requirement_json):
-        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
-        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
-        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
+    def test_plan_intents_requires_reviewed_extraction(self, run_dir):
+        """plan_intents raises ValueError if reviewed_extracted_test_basis.json is missing."""
+        from testcase_agent.review_pipeline.stages.plan_case_intents import plan_intents
 
-        prepare_clarification_review(str(sample_requirement_json), str(run_dir))
-        data = read_json(run_dir / "clarification_review.json")
-        data["decisions"] = [{"item_id": a["item_id"], "decision": "approve"}
-                             for a in data["decomposition"]["ambiguities"]]
-        write_json(run_dir / "clarification_review.json", data)
-        validate_clarification_review(str(run_dir / "clarification_review.json"))
-        prepare_intent_review(str(run_dir))
-
-        html = (run_dir / "case_intent_review.html").read_text(encoding="utf-8")
-        assert "Case Intent Review" in html
-        assert "border-left" in html
+        with pytest.raises(ValueError, match="Cannot plan intents"):
+            plan_intents(str(run_dir))
 
 
-# ── Issue 9: Case intent validation ────────────────────────────────────────
+# ── Issue 9: Case intent validation (new CaseIntentSet schema) ─────────────
 
 class TestCaseIntentValidation:
-    def test_approve_includes_intent(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
+    def test_case_intent_set_roundtrip(self, run_dir):
+        """CaseIntentSet with CaseIntentItem writes to JSON and reads back correctly."""
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentSet, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
+        intent_set = CaseIntentSet(
+            requirement_key="REQ_001",
+            source_description="Test desc",
+            intents=[
+                CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
+                               intent_text="Verify normal operation"),
+                CaseIntentItem(intent_id="i2", coverage_dimension="fault_or_protection",
+                               intent_text="Verify fault behavior"),
+            ],
+        )
+        path = run_dir / "case_intents.json"
+        write_json(path, intent_set.model_dump())
+        reloaded = CaseIntentSet(**read_json(path))
+        assert len(reloaded.intents) == 2
+        assert reloaded.intents[0].intent_id == "i1"
+        assert reloaded.intents[0].coverage_dimension == "normal_behavior"
+
+    def test_case_intent_item_empty_text_rejected(self):
+        """CaseIntentItem requires non-empty intent_text."""
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentItem
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="")
+
+    def test_accept_intents_copies_to_reviewed(self, run_dir):
+        """accept_intents copies case_intents.json to reviewed_case_intents.json."""
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentSet, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.plan_case_intents import accept_intents
+
+        intent_set = CaseIntentSet(
+            requirement_key="REQ_001",
             intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                      intent_text="Verify normal op", confidence_score=0.8)])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="approve")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.approved_intents) == 1
+                                     intent_text="Verify normal")],
+        )
+        write_json(run_dir / "case_intents.json", intent_set.model_dump())
 
-    def test_reject_excludes_intent(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
+        result = accept_intents(str(run_dir))
+        assert (run_dir / "reviewed_case_intents.json").exists()
+        assert len(result.intents) == 1
+
+    def test_accept_intents_blocks_on_blocking_gaps(self, run_dir):
+        """accept_intents raises ValueError if case_intents.json has blocking_gaps."""
+        from testcase_agent.review_pipeline.artifacts.models import CaseIntentSet
         from testcase_agent.review_pipeline.artifacts.io import write_json
+        from testcase_agent.review_pipeline.stages.plan_case_intents import accept_intents
 
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                      intent_text="Verify normal op", confidence_score=0.8)])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="reject",
-                                             reason_codes=["unsupported_by_requirement"], reason_text="Not valid")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.approved_intents) == 0
+        intent_set = CaseIntentSet(
+            requirement_key="REQ_001",
+            blocking_gaps=["Missing critical threshold"],
+        )
+        write_json(run_dir / "case_intents.json", intent_set.model_dump())
 
-    def test_defer_excludes_intent(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
+        with pytest.raises(ValueError, match="Cannot Accept All"):
+            accept_intents(str(run_dir))
 
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                      intent_text="Verify normal op", confidence_score=0.3)])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="defer",
-                                             reason_codes=["needs_clarification"], reason_text="Need more info")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.approved_intents) == 0
+    def test_accept_intents_requires_file(self, run_dir):
+        """accept_intents raises ValueError if case_intents.json is missing."""
+        from testcase_agent.review_pipeline.stages.plan_case_intents import accept_intents
 
-    def test_merge_requires_target(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
-
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="A"),
-                     CaseIntentItem(intent_id="i2", coverage_dimension="normal_behavior", intent_text="B")])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i2", decision="merge",
-                                             reason_codes=["duplicate_expected_behavior"], merge_target_id="i1")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.approved_intents) == 1
-        assert plan_out.approved_intents[0].intent_id == "i1"
-
-    def test_split_requires_children(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
-
-        child1 = CaseIntentItem(intent_id="i1-s1", coverage_dimension="boundary_or_threshold",
-                                intent_text="Child 1", confidence_score=0.7)
-        child2 = CaseIntentItem(intent_id="i1-s2", coverage_dimension="fault_or_protection",
-                                intent_text="Child 2", confidence_score=0.7)
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="Parent")])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="split",
-                                             split_children=[child1, child2])])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.approved_intents) == 2
-
-    def test_revise_includes_final_text(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
-
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior", intent_text="Original")])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="revise",
-                                             reason_codes=["too_broad_to_verify"], revised_intent_text="Revised")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert plan_out.approved_intents[0].intent_text == "Revised"
-
-    def test_traceability_preserved(self, run_dir):
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.artifacts.models import CaseIntentReview, CaseIntentPlan, CaseIntentItem, CaseIntentDecision
-        from testcase_agent.review_pipeline.artifacts.io import write_json
-
-        plan = CaseIntentPlan(review_session_id="s1", requirement_key="REQ_001",
-            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                      intent_text="Verify normal op", confidence_score=0.8)])
-        review = CaseIntentReview(review_session_id="s1", requirement_key="REQ_001", plan=plan,
-                                  decisions=[CaseIntentDecision(intent_id="i1", decision="approve")])
-        path = run_dir / "case_intent_review.json"
-        write_json(path, review.model_dump())
-        result, plan_out = validate_case_intent_review(str(path))
-        assert result.is_valid
-        assert len(plan_out.traceability) == 1
-        assert plan_out.traceability[0]["intent_id"] == "i1"
+        with pytest.raises(ValueError, match="case_intents.json not found"):
+            accept_intents(str(run_dir))
 
 
 # ── Issue 10: Case writer ──────────────────────────────────────────────────
 
 class TestCaseWriter:
     def test_generates_one_case_per_intent(self, run_dir):
+        """generate_cases produces one GeneratedCase per intent in reviewed_case_intents.json."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="s1", requirement_key="REQ_001",
-            approved_intents=[
+        basis = ExtractedTestBasis(
+            requirement_key="REQ_001",
+            source_description="Test requirement",
+        )
+        intents = CaseIntentSet(
+            requirement_key="REQ_001",
+            source_description="Test requirement",
+            intents=[
                 CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                               intent_text="Verify normal", confidence_score=0.8),
+                               intent_text="Verify normal"),
                 CaseIntentItem(intent_id="i2", coverage_dimension="boundary_or_threshold",
-                               intent_text="Verify boundary", confidence_score=0.7),
+                               intent_text="Verify boundary"),
             ],
         )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
+
         case_set = generate_cases(str(run_dir))
         assert len(case_set.cases) == 2
+        assert (run_dir / "generated_cases.json").exists()
 
-    def test_skips_where_plan_empty(self, run_dir):
+    def test_skips_where_intents_empty(self, run_dir):
+        """generate_cases produces empty case set when no intents."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet
         from testcase_agent.review_pipeline.artifacts.io import write_json
 
-        plan = ApprovedCasePlan(review_session_id="s1", requirement_key="REQ_001", approved_intents=[])
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        basis = ExtractedTestBasis(requirement_key="REQ_001")
+        intents = CaseIntentSet(requirement_key="REQ_001", intents=[])
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
+
         case_set = generate_cases(str(run_dir))
         assert len(case_set.cases) == 0
 
-    def test_generated_cases_have_traceability(self, run_dir):
+    def test_generated_case_has_intent_traceability(self, run_dir):
+        """Each GeneratedCase carries intent_id and coverage_dimension from its intent."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="s1", requirement_key="REQ_001",
-            approved_intents=[
-                CaseIntentItem(intent_id="i1", coverage_dimension="observability",
-                               intent_text="Verify obs", confidence_score=0.9),
-            ],
+        basis = ExtractedTestBasis(
+            requirement_key="REQ_001",
+            source_description="Test req",
         )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        intents = CaseIntentSet(
+            requirement_key="REQ_001",
+            intents=[CaseIntentItem(intent_id="obs-intent", coverage_dimension="observability",
+                                     intent_text="Verify obs")],
+        )
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
+
         case_set = generate_cases(str(run_dir))
         case = case_set.cases[0]
         assert case.requirement_key == "REQ_001"
-        assert case.approved_intent_id == "i1"
-        assert case.traceability["requirement_key"] == "REQ_001"
+        assert case.intent_id == "obs-intent"
+        assert case.coverage_dimension == "observability"
 
-    def test_generated_json_has_evaluator_fields(self, run_dir):
+    def test_generated_json_has_required_fields(self, run_dir):
+        """generated_cases.json (when read from disk) has all expected output fields."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="s1", requirement_key="REQ_001",
-            approved_intents=[
-                CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                               intent_text="Verify normal", confidence_score=0.8),
-            ],
+        basis = ExtractedTestBasis(requirement_key="REQ_001")
+        intents = CaseIntentSet(
+            requirement_key="REQ_001",
+            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
+                                     intent_text="Verify normal")],
         )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
         generate_cases(str(run_dir))
+
         data = read_json(run_dir / "generated_cases.json")
-        case = data[0]
-        assert "case_id" in case
-        assert "title" in case
-        assert "objective" in case
-        assert "pre_condition" in case
-        assert "steps" in case
-        assert "post_condition" in case
-        assert "requirement_key" in case
-        assert "coverage_dimension" in case
+        assert "cases" in data
+        case = data["cases"][0]
+        for field in ("case_id", "title", "objective", "pre_condition", "steps",
+                       "post_condition", "requirement_key", "intent_id", "coverage_dimension"):
+            assert field in case, f"Missing field: {field}"
 
-    def test_writer_prompt_receives_source_context_and_missing_markers(self, run_dir):
+    def test_generate_cases_blocks_if_missing_artifacts(self, run_dir):
+        """generate_cases raises ValueError when reviewed artifacts are missing."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem, ClarifiedTestBasis, FactItem
-        from testcase_agent.review_pipeline.artifacts.io import write_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="s1",
-            requirement_key="REQ_CTX",
-            approved_intents=[
-                CaseIntentItem(
-                    intent_id="intent-1",
-                    coverage_dimension="fault_or_protection",
-                    intent_text="Verify over-voltage detection after debounce timing",
-                    confidence_score=0.8,
-                ),
-            ],
-        )
-        basis = ClarifiedTestBasis(
-            requirement_key="REQ_CTX",
-            review_session_id="s1",
-            source_description="The BMS shall set BMS_CellOV_Flag when CellVoltage exceeds r_CellOV_Threshold.",
-            function_name="Overvoltage Protection",
-            supplementary_info="Debounce parameter: t_CellOV_Debounce.",
-            facts=[
-                FactItem(
-                    item_id="fact-1",
-                    fact_text="BMS_CellOV_Flag is set when CellVoltage exceeds r_CellOV_Threshold.",
-                    source_text="The BMS shall set BMS_CellOV_Flag when CellVoltage exceeds r_CellOV_Threshold.",
-                )
-            ],
-            resolved_ambiguities=[
-                {
-                    "item_id": "amb-1",
-                    "decision": "mark_needs_review",
-                    "ambiguity_type": "timing",
-                    "affected_text": "when CellVoltage exceeds r_CellOV_Threshold",
-                    "clarified_value": "",
-                    "reason_codes": ["missing_timing"],
-                }
-            ],
-        )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
-        write_json(run_dir / "clarified_test_basis.json", basis.model_dump())
-
-        class PromptAssertingProvider:
-            def complete(self, system_prompt: str, user_prompt: str) -> str:
-                assert "The BMS shall set BMS_CellOV_Flag" in user_prompt
-                assert "Debounce parameter: t_CellOV_Debounce." in user_prompt
-                assert "Known Test Basis Facts" in user_prompt
-                assert "Critical Missing Information" in user_prompt
-                assert "timing" in user_prompt
-                assert "Set the condition. Wait required timing. Check observable response." in system_prompt
-                return json.dumps({
-                    "case_id": "case-intent-1",
-                    "title": "Cell over-voltage detection sets flag",
-                    "objective": "Verify over-voltage detection after debounce timing.",
-                    "pre_condition": "BMS initialized, all parameters within normal operating range, no active faults.",
-                    "steps": [
-                        {"step_number": 1, "action": "Set CellVoltage above r_CellOV_Threshold.", "expected_result": "null"},
-                        {"step_number": 2, "action": "Wait [NEEDS REVIEW].", "expected_result": "null"},
-                        {"step_number": 3, "action": "Check over-voltage response.", "expected_result": "BMS_CellOV_Flag == 1"},
-                    ],
-                    "post_condition": "System returned to normal operating state.",
-                })
-
-        case_set = generate_cases(str(run_dir), provider=PromptAssertingProvider())
-
-        assert case_set.cases[0].title == "Cell over-voltage detection sets flag"
+        with pytest.raises(ValueError, match="Cannot generate cases"):
+            generate_cases(str(run_dir))
 
 
 # ── Issue 11: Review Memory SQLite ─────────────────────────────────────────
@@ -1178,19 +1065,20 @@ class TestReviewMemoryRetrieval:
 
 class TestEvaluation:
     def test_evaluate_run(self, run_dir):
+        """evaluate_run reads generated_cases.json and produces evaluation_results and summary."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
         from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="eval-1", requirement_key="REQ_001",
-            approved_intents=[
-                CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
-                               intent_text="Verify normal", confidence_score=0.8),
-            ],
+        basis = ExtractedTestBasis(requirement_key="REQ_001")
+        intents = CaseIntentSet(
+            requirement_key="REQ_001",
+            intents=[CaseIntentItem(intent_id="i1", coverage_dimension="normal_behavior",
+                                     intent_text="Verify normal")],
         )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
         generate_cases(str(run_dir))
 
         evaluate_run(str(run_dir))
@@ -1203,24 +1091,26 @@ class TestEvaluation:
             evaluate_run(str(run_dir))
 
     def test_evaluation_traceability_preserved(self, run_dir):
+        """evaluation results should include intent_id from GeneratedCase, not approved_intent_id."""
         from testcase_agent.review_pipeline.stages.write_cases import generate_cases
         from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
-        from testcase_agent.review_pipeline.artifacts.models import ApprovedCasePlan, CaseIntentItem
+        from testcase_agent.review_pipeline.artifacts.models import ExtractedTestBasis, CaseIntentSet, CaseIntentItem
         from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
 
-        plan = ApprovedCasePlan(
-            review_session_id="trace-1", requirement_key="REQ_001",
-            approved_intents=[
-                CaseIntentItem(intent_id="i1", coverage_dimension="observability",
-                               intent_text="Verify obs", confidence_score=0.9),
-            ],
+        basis = ExtractedTestBasis(requirement_key="REQ_001")
+        intents = CaseIntentSet(
+            requirement_key="REQ_001",
+            intents=[CaseIntentItem(intent_id="trace-i1", coverage_dimension="observability",
+                                     intent_text="Verify obs")],
         )
-        write_json(run_dir / "approved_case_plan.json", plan.model_dump())
+        write_json(run_dir / "reviewed_extracted_test_basis.json", basis.model_dump())
+        write_json(run_dir / "reviewed_case_intents.json", intents.model_dump())
         generate_cases(str(run_dir))
         evaluate_run(str(run_dir))
 
         results = read_json(run_dir / "evaluation_results.json")
         assert results[0]["requirement_key"] == "REQ_001"
+        assert "intent_id" in results[0]
         assert "coverage_dimension" in results[0]
 
 
@@ -1228,14 +1118,12 @@ class TestEvaluation:
 
 class TestEndToEnd:
     def test_full_pipeline_with_fake_providers(self, run_dir):
-        """Complete offline fixture: decompose → review → plan → review → write → evaluate."""
-        from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
-        from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
-        from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
-        from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-        from testcase_agent.review_pipeline.stages.write_cases import generate_cases
+        """Complete offline fixture: extract → accept-extraction → plan-intents → accept-intents → generate-cases → accept-cases → evaluate."""
+        from testcase_agent.review_pipeline.stages.extract_test_basis import extract_test_basis, accept_extraction
+        from testcase_agent.review_pipeline.stages.plan_case_intents import plan_intents, accept_intents
+        from testcase_agent.review_pipeline.stages.write_cases import generate_cases, accept_cases
         from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
-        from testcase_agent.review_pipeline.artifacts.io import write_json, read_json
+        from testcase_agent.review_pipeline.artifacts.io import write_json
 
         # 1. Create requirement input
         req_json = run_dir / "requirements.json"
@@ -1246,60 +1134,38 @@ class TestEndToEnd:
             "supplementary_info": "Max temp: 60C",
         }])
 
-        # 2. Prepare clarification review (uses placeholder, no LLM)
-        prepare_clarification_review(str(req_json), str(run_dir))
-        assert (run_dir / "clarification_review.json").exists()
-        assert (run_dir / "clarification_review.html").exists()
+        # 2. LLM-A: Extract test basis (uses placeholder, no LLM)
+        basis = extract_test_basis(str(req_json), str(run_dir))
+        assert (run_dir / "extracted_test_basis.json").exists()
+        assert basis.requirement_key == "E2E_REQ_001"
 
-        # 3. Human "edits" the review (auto-approve for fixture)
-        data = read_json(run_dir / "clarification_review.json")
-        data["decisions"] = [{"item_id": a["item_id"], "decision": "approve"}
-                             for a in data["decomposition"]["ambiguities"]]
-        write_json(run_dir / "clarification_review.json", data)
+        # 3. Accept All: reviewed_extracted_test_basis.json
+        accept_extraction(str(run_dir))
+        assert (run_dir / "reviewed_extracted_test_basis.json").exists()
 
-        # 4. Validate clarification review
-        result, basis = validate_clarification_review(str(run_dir / "clarification_review.json"))
-        assert result.is_valid
-        assert (run_dir / "clarified_test_basis.json").exists()
+        # 4. LLM-B: Plan intents (uses placeholder, no LLM)
+        intent_set = plan_intents(str(run_dir))
+        assert (run_dir / "case_intents.json").exists()
+        assert len(intent_set.intents) >= 1
 
-        # 5. Prepare intent review
-        prepare_intent_review(str(run_dir))
-        assert (run_dir / "case_intent_review.json").exists()
-        assert (run_dir / "case_intent_review.html").exists()
+        # 5. Accept All: reviewed_case_intents.json
+        accept_intents(str(run_dir))
+        assert (run_dir / "reviewed_case_intents.json").exists()
 
-        # 6. Human "edits" intent review
-        intent_data = read_json(run_dir / "case_intent_review.json")
-        intent_data["decisions"] = [
-            {"intent_id": i["intent_id"], "decision": "approve"}
-            for i in intent_data["plan"]["intents"]
-        ]
-        # Add one reject and one merge for diversity
-        if len(intent_data["decisions"]) >= 2:
-            intent_data["decisions"][1]["decision"] = "reject"
-            intent_data["decisions"][1]["reason_codes"] = ["duplicate_expected_behavior"]
-            intent_data["decisions"][1]["reason_text"] = "Duplicate"
-        write_json(run_dir / "case_intent_review.json", intent_data)
-
-        # 7. Validate intent review
-        result2, approved = validate_case_intent_review(str(run_dir / "case_intent_review.json"))
-        assert result2.is_valid
-        assert (run_dir / "approved_case_plan.json").exists()
-
-        # 8. Generate cases
+        # 6. LLM-C: Generate cases (uses placeholder, no LLM)
         case_set = generate_cases(str(run_dir))
         assert (run_dir / "generated_cases.json").exists()
-        assert len(case_set.cases) == len(approved.approved_intents)
+        assert len(case_set.cases) == len(intent_set.intents)
 
-        # 9. Evaluate
+        # 7. Accept All: reviewed_cases.json
+        reviewed = accept_cases(str(run_dir))
+        assert (run_dir / "reviewed_cases.json").exists()
+        assert len(reviewed.cases) == len(case_set.cases)
+
+        # 8. Evaluate
         evaluate_run(str(run_dir))
         assert (run_dir / "evaluation_results.json").exists()
         assert (run_dir / "evaluation_summary.json").exists()
-
-        # 10. Verify no self_check was called
-        html = (run_dir / "clarification_review.html").read_text(encoding="utf-8")
-        assert "self_check" not in html.lower()
-        html2 = (run_dir / "case_intent_review.html").read_text(encoding="utf-8")
-        assert "self_check" not in html2.lower()
 
     def test_confidence_colors_in_html(self, run_dir):
         from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
@@ -1359,16 +1225,16 @@ class TestCLI:
     def test_subcommand_help(self):
         from testcase_agent.review_pipeline.cli import main
         try:
-            ret = main(["prepare-clarification-review", "--help"])
+            ret = main(["extract", "--help"])
         except SystemExit as e:
             ret = e.code if e.code is not None else 0
         assert ret == 0
 
-    def test_prepare_clarification_review_mock_flag(self, run_dir, sample_requirement_json):
+    def test_extract_mock_command(self, run_dir, sample_requirement_json):
         from testcase_agent.review_pipeline.cli import main
 
         ret = main([
-            "prepare-clarification-review",
+            "extract",
             "--input",
             str(sample_requirement_json),
             "--out",
@@ -1380,7 +1246,7 @@ class TestCLI:
         # Auto-numbered: files land in run_NNN/ subdirectory
         run_subdirs = [d for d in run_dir.iterdir() if d.is_dir() and d.name.startswith("run_")]
         assert len(run_subdirs) == 1
-        assert (run_subdirs[0] / "clarification_review.json").exists()
+        assert (run_subdirs[0] / "extracted_test_basis.json").exists()
 
     def test_validate_missing_file(self):
         from testcase_agent.review_pipeline.cli import main

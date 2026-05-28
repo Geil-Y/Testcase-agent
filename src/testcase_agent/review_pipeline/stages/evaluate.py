@@ -23,9 +23,13 @@ def evaluate_run(run_dir: str) -> None:
     if not cases_path.exists():
         raise FileNotFoundError(f"generated_cases.json not found in {run_dir}")
 
-    cases = read_json(cases_path)
-    if not isinstance(cases, list):
-        cases = [cases]
+    data = read_json(cases_path)
+    if isinstance(data, dict) and "cases" in data:
+        cases = data["cases"]
+    elif isinstance(data, list):
+        cases = data
+    else:
+        cases = [data]
 
     # Run hard-rule evaluation on each case
     eval_results = []
@@ -120,7 +124,7 @@ def _evaluate_single_case(case_data: dict) -> dict:
         "case_id": case_data.get("case_id", "unknown"),
         "title": title,
         "requirement_key": case_data.get("requirement_key", ""),
-        "approved_intent_id": case_data.get("approved_intent_id", ""),
+        "intent_id": case_data.get("intent_id", ""),
         "coverage_dimension": case_data.get("coverage_dimension", ""),
         "review_session_id": case_data.get("review_session_id", ""),
         "passed": all_passed,
