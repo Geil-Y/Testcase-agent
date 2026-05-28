@@ -1,23 +1,8 @@
-"""CLI for batch generation and optimization loop support.
+"""CLI for evaluation and legacy optimization helpers.
 
-Usage:
-    python -m optimization.cli run \
-        --excel path/to/requirements.xlsx \
-        --sample 20 \
-        --output-dir optimization_runs/run_20260518_140000/round_01
-
-    python -m optimization.cli run \
-        --excel path/to/requirements.xlsx \
-        --requirement-set optimization_runs/requirement_sets/prompt_eval_v1.json \
-        --output-dir optimization_runs/run_20260519_eval/round_01
-
-The script:
-1. Reads the Excel, separating heading/info rows (kept as context) from requirement rows.
-2. Selects requirements via random --sample or a fixed --requirement-set.
-3. Injects preceding heading/info as supplementary context.
-4. Saves current prompt files to <round_dir>/prompts/ for archival.
-5. Runs the pipeline for each requirement.
-6. Saves generated_cases.json in the round directory.
+The old batch generation command has been removed. Use
+``python -m testcase_agent.review_pipeline.cli`` for new clarification-first generation runs.
+Existing report/evaluation helpers remain for reading completed rounds.
 """
 
 from __future__ import annotations
@@ -361,15 +346,15 @@ def select_by_requirement_set(
 
 
 def archive_prompts(round_dir: Path) -> None:
-    """Copy current prompt files into round_dir/prompts/ for archival."""
+    """Copy current review-pipeline prompt files into round_dir/prompts/."""
     prompts_dir = round_dir / "prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
     project_root = Path(__file__).resolve().parents[1]
-    source_dir = project_root / "prompts"
+    source_dir = project_root / "src" / "testcase_agent" / "review_pipeline" / "prompts"
 
     for src in sorted(source_dir.glob("*.html")):
-        # Strip .html extension for the archived copy (e.g. generate_case.system.html -> generate_case.system.md)
+        # Strip .html extension for the archived copy.
         dest_name = src.stem + ".md"
         shutil.copy2(src, prompts_dir / dest_name)
         print(f"  Archived prompt: {src.name} -> {dest_name}")
@@ -419,11 +404,10 @@ def run_batch(
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
-    """Run pipeline for all requirements and save results.
+    """Legacy batch generation entry point.
 
-    When requirement_set_data is provided, each requirement entry in
-    generated_cases.json is enriched with evaluation_bucket,
-    expected_missing_categories, and requirement_set_note from the set.
+    Kept only as an importable guard for older helper code. New generation must
+    start from ``python -m testcase_agent.review_pipeline.cli prepare-clarification-review``.
     """
     settings = get_settings()
     provider = create_provider(settings)
@@ -780,65 +764,10 @@ def main():
     args = parser.parse_args()
 
     if args.command == "run":
-        requirement_set_data: dict | None = None
-
-        if args.requirement_set:
-            set_path = args.requirement_set
-            if not Path(set_path).is_absolute():
-                set_path = str(_PROJECT_ROOT / set_path)
-            requirement_set_data = load_requirement_set(set_path)
-            requirement_set_data["_source_path"] = set_path
-            name = requirement_set_data["name"]
-            count = len(requirement_set_data["entries"])
-            print(f"Using requirement set: {name} ({count} entries)")
-
-            # Prefer inline content from self-contained sets
-            if requirement_set_data["entries"][0].get("description", "").strip():
-                selected = build_requirements_from_set(requirement_set_data)
-                if args.limit is not None and args.limit < len(selected):
-                    selected = selected[:args.limit]
-                    print(f"Loaded {len(selected)}/{count} requirements from set (limited)")
-                else:
-                    print(f"Loaded {len(selected)} requirements from set (inline content)")
-            elif args.excel:
-                # Fallback: match by key from Excel
-                rows = read_excel(
-                    args.excel,
-                    requirement_key_col=args.key_col,
-                    description_col=args.desc_col,
-                    type_col=args.type_col,
-                    function_name_col=args.func_col,
-                )
-                all_inputs = build_requirement_inputs(rows)
-                selected = select_by_requirement_set(all_inputs, requirement_set_data)
-                print(f"Matched {len(selected)}/{count} requirements from Excel")
-            else:
-                parser.error(
-                    "Requirement set entries lack inline 'description'. "
-                    "Provide --excel to pull requirement content from an Excel file."
-                )
-        elif args.excel:
-            print(f"Reading: {args.excel}")
-            rows = read_excel(
-                args.excel,
-                requirement_key_col=args.key_col,
-                description_col=args.desc_col,
-                type_col=args.type_col,
-                function_name_col=args.func_col,
-            )
-            all_inputs = build_requirement_inputs(rows)
-            print(f"Parsed {len(all_inputs)} requirements from {len(rows)} total rows")
-            selected = sample_requirements(all_inputs, args.sample, args.seed)
-            print(f"Sampled {len(selected)} requirements (seed={args.seed})")
-        else:
-            parser.error("Either --excel or --requirement-set must be provided.")
-
-        run_batch(
-            selected,
-            Path(args.output_dir),
-            sanitize=not args.no_sanitize,
-            requirement_set_data=requirement_set_data,
-            run_eval=args.eval,
+        parser.error(
+            "optimization.cli run was removed with the legacy generation "
+            "pipeline. Use python -m testcase_agent.review_pipeline.cli "
+            "prepare-clarification-review instead."
         )
 
     elif args.command == "evaluate":
