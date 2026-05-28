@@ -198,11 +198,10 @@ export default function ExtractionReviewPage({ runDir, onAdvanced }: Props) {
                         <label>Status</label>
                         <select
                           value={newItem.status || 'known'}
-                          onChange={(e) => setNewItem({ ...newItem, status: e.target.value })}
+                          onChange={(e) => setNewItem({ ...newItem, status: e.target.value as SectionItem['status'] })}
                         >
                           <option value="known">known</option>
-                          <option value="unknown">unknown</option>
-                          <option value="assumed">assumed</option>
+                          <option value="needs_review">needs_review</option>
                         </select>
                       </div>
                       <div className="form-group">
@@ -250,7 +249,7 @@ export default function ExtractionReviewPage({ runDir, onAdvanced }: Props) {
                         onClick={() => setSelectedItem({ section, item })}
                       >
                         <span className="queue-item-id">{item.item_id}</span>
-                        <span className={`queue-decision ${item.status === 'known' ? 'dec-approve' : item.status === 'unknown' ? 'dec-reject' : 'dec-clarify'}`}>
+                        <span className={`queue-decision ${item.status === 'known' ? 'dec-approve' : 'dec-reject'}`}>
                           {item.status}
                         </span>
                         <span className="queue-type text-muted" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>

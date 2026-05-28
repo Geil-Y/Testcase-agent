@@ -26,8 +26,7 @@ export default function ExtractionItemEditor({ item, onEdit }: Props) {
                 onChange={(e) => onEdit({ status: e.target.value as SectionItem['status'] })}
               >
                 <option value="known">known</option>
-                <option value="unknown">unknown</option>
-                <option value="assumed">assumed</option>
+                <option value="needs_review">needs_review</option>
               </select>
             ) : field === 'content' || field === 'need' ? (
               <textarea

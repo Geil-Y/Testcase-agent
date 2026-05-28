@@ -91,7 +91,7 @@ export interface ArtifactSummary {
 
 export interface SectionItem {
   item_id: string
-  status: 'known' | 'unknown' | 'assumed'
+  status: 'known' | 'needs_review'
   content: string
   need: string
   source_text: string
