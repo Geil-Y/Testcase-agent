@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from testcase_agent.review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.legacy_models import (
     ClarificationReview,
     ClarificationDecision,
     CaseIntentReview,

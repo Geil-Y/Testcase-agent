@@ -13,8 +13,8 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
-from testcase_agent.review_pipeline.artifacts.models import (
-    RequirementInput,
+from testcase_agent.review_pipeline.artifacts.models import RequirementInput
+from testcase_agent.review_pipeline.artifacts.legacy_models import (
     RequirementDecomposition,
     ClarificationReview,
     ClarificationDecision,
