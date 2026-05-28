@@ -1652,6 +1652,245 @@ class TestUnchangedUpstreamReuse:
             assert (run_dir / "reviewed_case_intents.json").exists()
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Issue #50: A/B review surfaces — inline edit, add, remove, block
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestExtractionReviewActions:
+    """Extraction review supports edit, add, remove, and block actions."""
+
+    def test_save_extraction_edit_action(self, tmp_path):
+        """Edit action modifies an item and writes reviewed_extracted_test_basis.json."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {
+                "signals": [{"item_id": "s1", "status": "known", "content": "orig", "need": "", "source_text": "test"}],
+                "thresholds": [], "timing": [], "states": [], "observations": [],
+            },
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "edit-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_extraction_review("edit-run", [
+                {"item_id": "s1", "section": "signals", "action": "edit",
+                 "edited_item": {"item_id": "s1", "status": "known", "content": "edited", "need": "", "source_text": "test"}},
+            ])
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            reviewed = json.loads((tmp_path / "reviewed_extracted_test_basis.json").read_text(encoding="utf-8"))
+            assert reviewed["sections"]["signals"][0]["content"] == "edited"
+
+    def test_save_extraction_add_action(self, tmp_path):
+        """Add action adds a new item to the section."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {
+                "signals": [],
+                "thresholds": [], "timing": [], "states": [], "observations": [],
+            },
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "add-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_extraction_review("add-run", [
+                {"item_id": "new-sig", "section": "signals", "action": "add",
+                 "new_item": {"item_id": "new-sig", "status": "known", "content": "CellVoltage", "need": "", "source_text": ""}},
+            ])
+            assert result["saved"] is True
+            reviewed = json.loads((tmp_path / "reviewed_extracted_test_basis.json").read_text(encoding="utf-8"))
+            assert len(reviewed["sections"]["signals"]) == 1
+            assert reviewed["sections"]["signals"][0]["content"] == "CellVoltage"
+
+    def test_save_extraction_remove_action(self, tmp_path):
+        """Remove action removes an item from the section."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {
+                "signals": [{"item_id": "s1", "status": "known", "content": "CellVoltage", "need": "", "source_text": "test"}],
+                "thresholds": [], "timing": [], "states": [], "observations": [],
+            },
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "remove-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_extraction_review("remove-run", [
+                {"item_id": "s1", "section": "signals", "action": "remove"},
+            ])
+            assert result["saved"] is True
+            reviewed = json.loads((tmp_path / "reviewed_extracted_test_basis.json").read_text(encoding="utf-8"))
+            assert len(reviewed["sections"]["signals"]) == 0
+
+    def test_save_extraction_blocking_gaps_prevent_accept_all(self, tmp_path):
+        """Accept All on extraction with blocking_gaps fails."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {"signals": [], "thresholds": [], "timing": [], "states": [], "observations": []},
+            "blocking_gaps": ["Non-testable requirement"],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "blocked-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            with pytest.raises(ValueError, match="blocking"):
+                accept_extraction_all("blocked-run")
+
+
+class TestIntentReviewActions:
+    """Intent review supports edit, add, remove, and block actions."""
+
+    def test_save_intent_edit_action(self, tmp_path):
+        """Edit action modifies an intent and writes reviewed_case_intents.json."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [{"intent_id": "i1", "coverage_dimension": "normal_behavior", "intent_text": "Original text"}],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "edit-intent-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_intent_review("edit-intent-run", [
+                {"intent_id": "i1", "action": "edit",
+                 "edited_intent": {"intent_id": "i1", "coverage_dimension": "normal_behavior", "intent_text": "Edited text"}},
+            ])
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            reviewed = json.loads((tmp_path / "reviewed_case_intents.json").read_text(encoding="utf-8"))
+            assert reviewed["intents"][0]["intent_text"] == "Edited text"
+
+    def test_save_intent_add_action(self, tmp_path):
+        """Add action adds a new intent."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "add-intent-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_intent_review("add-intent-run", [
+                {"intent_id": "new-i", "action": "add",
+                 "new_intent": {"intent_id": "new-i", "coverage_dimension": "fault_or_protection", "intent_text": "New intent"}},
+            ])
+            assert result["saved"] is True
+            reviewed = json.loads((tmp_path / "reviewed_case_intents.json").read_text(encoding="utf-8"))
+            assert len(reviewed["intents"]) == 1
+            assert reviewed["intents"][0]["intent_text"] == "New intent"
+
+    def test_save_intent_remove_action(self, tmp_path):
+        """Remove action removes an intent."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [{"intent_id": "i1", "coverage_dimension": "normal_behavior", "intent_text": "Test"}],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "remove-intent-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_intent_review("remove-intent-run", [
+                {"intent_id": "i1", "action": "remove"},
+            ])
+            assert result["saved"] is True
+            reviewed = json.loads((tmp_path / "reviewed_case_intents.json").read_text(encoding="utf-8"))
+            assert len(reviewed["intents"]) == 0
+
+    def test_save_intent_blocking_gaps_prevent_accept_all(self, tmp_path):
+        """Accept All on intents with blocking_gaps fails."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [],
+            "blocking_gaps": ["Planning blocked"],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "blocked-intent-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            with pytest.raises(ValueError, match="blocking"):
+                accept_intents_all("blocked-intent-run")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Issue #51: C review — edit and regenerate-with-comment
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCaseReviewEdit:
+    """Case review supports edit and regenerate-with-comment."""
+
+    def test_edit_cases_writes_reviewed(self, tmp_path):
+        """Editing cases writes reviewed_cases.json with same schema."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "generated_cases.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "cases": [{"case_id": "c1", "title": "Original", "objective": "Test",
+                        "pre_condition": "", "post_condition": "",
+                        "requirement_key": "REQ-TEST-001", "intent_id": "i1",
+                        "coverage_dimension": "normal_behavior", "steps": []}],
+        }))
+        (tmp_path / "reviewed_extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {"signals": [], "thresholds": [], "timing": [], "states": [], "observations": []},
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "edit-case-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = save_case_edit("edit-case-run", [
+                {"case_id": "c1", "title": "Edited", "objective": "Edited obj",
+                 "requirement_key": "REQ-TEST-001", "intent_id": "i1",
+                 "coverage_dimension": "normal_behavior", "steps": []},
+            ])
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            reviewed = json.loads((tmp_path / "reviewed_cases.json").read_text(encoding="utf-8"))
+            assert "cases" in reviewed
+            assert reviewed["cases"][0]["title"] == "Edited"
+
+    def test_regenerate_uses_reviewed_artifacts(self, tmp_path):
+        """Regenerate requires reviewed_extracted_test_basis.json and reviewed_case_intents.json."""
+        write_run_input(tmp_path, REQUIREMENT_FIXTURE)
+        (tmp_path / "reviewed_extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {"signals": [], "thresholds": [], "timing": [], "states": [], "observations": []},
+        }))
+        (tmp_path / "reviewed_case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [{"intent_id": "i1", "coverage_dimension": "normal_behavior", "intent_text": "Test"}],
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {"run_dir": "regen-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
+            result = regenerate_cases("regen-run", [
+                {"case_id": "c1", "intent_id": "i1", "review_comment": "Improve step clarity"},
+            ])
+            assert result["saved"] is True
+            assert result["regenerated"] is True
+            assert result["reviewed"] is True
+            assert (tmp_path / "reviewed_cases.json").exists()
+            reviewed = json.loads((tmp_path / "reviewed_cases.json").read_text(encoding="utf-8"))
+            assert "cases" in reviewed
+            # Placeholder mode generates one case
+            assert len(reviewed["cases"]) == 1
+
+    def test_regenerate_rejects_empty_comment(self, tmp_path):
+        """RegenerateRequest requires non-empty review_comment."""
+        from src.testcase_agent.review_pipeline.artifacts.models import RegenerateRequest
+        with pytest.raises(Exception):
+            RegenerateRequest(case_id="c1", intent_id="i1", review_comment="")
+
+    def test_no_remove_or_block_at_case_review(self):
+        """Case review does not support Remove or Block Run."""
+        # These actions are not in the case review API — verify the endpoints exist:
+        # /cases/edit, /cases/accept-all, /cases/regenerate — but NOT /cases/remove or /cases/block
+        from src.testcase_agent.pipeline_console.router import router
+        routes = [r.path for r in router.routes]
+        case_routes = [r for r in routes if '/cases/' in r]
+        assert not any('remove' in r for r in case_routes)
+        assert not any('block' in r for r in case_routes)
+        assert any('edit' in r for r in case_routes)
+        assert any('regenerate' in r for r in case_routes)
+
+
 class TestAssetServingSecurity:
     """P0: Asset serving must be safe from path traversal and return correct MIME types."""
 
