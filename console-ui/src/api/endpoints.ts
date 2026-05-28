@@ -37,7 +37,7 @@ export const getMode = () => get<ConsoleMode>('/mode')
 
 // Jobs
 export const getCurrentJob = () => get<JobState>('/jobs/current')
-export const checkJobRunning = () => get<{ running: boolean }>('/jobs/is-running')
+
 export const retryJob = () => post<{ status: string; job: JobState['job'] }>('/jobs/retry')
 
 // Runs

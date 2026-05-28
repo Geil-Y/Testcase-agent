@@ -14,30 +14,30 @@ const mockTrace: TraceData = {
   events: [
     {
       timestamp: 1716829200,
-      stage: 'clarify',
+      stage: 'extraction',
       event: 'stage_started',
-      message: 'Starting requirement decomposition',
+      message: 'Starting requirement extraction',
     },
     {
       timestamp: 1716829201,
-      stage: 'clarify',
+      stage: 'extraction',
       event: 'llm_done',
       provider: 'ollama',
       model: 'qwen2.5:7b',
       duration_ms: 1500,
-      message: 'Requirement decomposition complete',
+      message: 'Requirement extraction complete',
     },
     {
       timestamp: 1716829202,
-      stage: 'clarify',
+      stage: 'extraction',
       event: 'artifact_written',
-      message: 'Written clarification_review.json',
+      message: 'Written extracted_test_basis.json',
     },
     {
       timestamp: 1716829203,
-      stage: 'clarify',
+      stage: 'extraction',
       event: 'completed',
-      message: 'Clarification review ready',
+      message: 'Extraction review ready',
     },
   ],
 }
@@ -64,7 +64,7 @@ describe('ProgressTrace', () => {
   it('renders trace events', async () => {
     renderTrace()
     await waitFor(() => {
-      expect(screen.getByText('Starting requirement decomposition')).toBeInTheDocument()
+      expect(screen.getByText('Starting requirement extraction')).toBeInTheDocument()
     })
   })
 
@@ -78,7 +78,7 @@ describe('ProgressTrace', () => {
   it('renders stage labels for each event', async () => {
     renderTrace()
     await waitFor(() => {
-      expect(screen.getAllByText('Clarification').length).toBeGreaterThanOrEqual(4)
+      expect(screen.getAllByText('Extraction').length).toBeGreaterThanOrEqual(4)
     })
   })
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 
 from ..config import get_settings
 from ..provider.factory import create_provider
@@ -51,17 +51,6 @@ from .runs import (
 from .trace import read_trace_events
 
 router = APIRouter()
-
-_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
-
-
-# -- Non-API: Console UI shell ------------------------------------------------
-
-def console_html() -> str:
-    html_path = _TEMPLATE_DIR / "console.html"
-    if html_path.exists():
-        return html_path.read_text(encoding="utf-8")
-    return "<html><body><h1>Console not found</h1></body></html>"
 
 
 # -- Import batch API --------------------------------------------------------
@@ -519,14 +508,6 @@ def export_run(run_dir_name: str, include_archived: bool = False):
                 bundle["archived_artifacts"].append(entry)
 
     return bundle
-
-
-# -- Legacy endpoints (kept for backward compat, redirect to extraction) -----
-
-@router.get("/runs/{run_dir_name}/clarification")
-def get_clarification_redirect(run_dir_name: str):
-    """[DEPRECATED] Redirect to extraction endpoint."""
-    return get_extraction(run_dir_name)
 
 
 def _list_active(run_path: Path) -> list[str]:

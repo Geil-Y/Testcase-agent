@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
-from .pipeline_console.router import console_html, router as console_router
+from .pipeline_console.router import router as console_router
 
 root_router = APIRouter()
 
@@ -41,31 +41,31 @@ def create_app() -> FastAPI:
     if _CONSOLE_UI_DIST.exists():
         assets_dir = _CONSOLE_UI_DIST / "assets"
         if assets_dir.exists():
-            # StaticFiles handles path resolution and rejects traversal internally
             app.mount("/console/assets", StaticFiles(directory=str(assets_dir)), name="console_assets")
 
         @app.get("/console", response_class=HTMLResponse)
         @app.get("/console/{rest_path:path}", response_class=HTMLResponse)
         def serve_console(rest_path: str = ""):
-            """Serve the React Console shell.
-
-            If the Vite build exists at console-ui/dist/index.html, serve it.
-            Otherwise fall back to the legacy single-file console.html template.
-
-            Routes defined AFTER the /console/assets mount, so asset requests
-            are handled by StaticFiles before the catch-all.
-            """
+            """Serve the React Console shell from the Vite build output."""
             index_path = _CONSOLE_UI_DIST / "index.html"
             if index_path.exists():
                 html = index_path.read_text(encoding="utf-8")
                 return HTMLResponse(html)
-            return HTMLResponse(console_html())
+            return HTMLResponse(
+                "<html><body><h1>Console not found</h1>"
+                "<p>Run <code>npm run build</code> in <code>console-ui/</code> to build the React Console.</p>"
+                "</body></html>"
+            )
 
     else:
         @app.get("/console", response_class=HTMLResponse)
         @app.get("/console/{rest_path:path}", response_class=HTMLResponse)
         def serve_console_legacy(rest_path: str = ""):
-            return HTMLResponse(console_html())
+            return HTMLResponse(
+                "<html><body><h1>Console not found</h1>"
+                "<p>Run <code>npm run build</code> in <code>console-ui/</code> to build the React Console.</p>"
+                "</body></html>"
+            )
 
     return app
 

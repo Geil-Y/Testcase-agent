@@ -7,10 +7,9 @@ interface Props {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  clarify: 'Clarification',
-  intents: 'Case Intents',
-  cases: 'Case Generation',
-  evaluate: 'Evaluation',
+  extraction: 'Extraction',
+  case_intents: 'Case Intents',
+  case_generation: 'Case Generation',
 }
 
 const EVENT_ICONS: Record<string, string> = {
