@@ -1,0 +1,47 @@
+<user-message>
+## Requirement
+
+**Key:** {{ requirement_key }}
+**Description:** {{ description }}
+
+{% if known_signals %}
+### Known BMS Signals
+
+{{ known_signals }}
+{% endif %}
+
+{% if known_thresholds %}
+### Known Thresholds
+
+{{ known_thresholds }}
+{% endif %}
+
+{% if known_timing %}
+### Known Timing Parameters
+
+{{ known_timing }}
+{% endif %}
+
+{% if known_states %}
+### Known BMS States
+
+{{ known_states }}
+{% endif %}
+
+{% if known_observations %}
+### Known Observation Points
+
+{{ known_observations }}
+{% endif %}
+
+{% if unresolved_items %}
+### Unresolved Missing Items
+
+These items still need human clarification. You may reference them in intent
+text with [NEEDS REVIEW] markers, but do not add new missing items.
+
+{{ unresolved_items }}
+{% endif %}
+
+Propose case intents for this requirement. Output only the JSON.
+</user-message>

@@ -1,130 +1,89 @@
-import { useState } from 'react'
-import ValidationSummary from '../components/ValidationSummary'
-import RegenerateDialog from '../components/RegenerateDialog'
+import { useState, useCallback } from 'react'
 import { useIntentReview } from '../hooks/useIntentReview'
 import { useJob } from '../hooks/JobContext'
-import type { IntentReviewItem } from '../api/types'
+import type { CaseIntent } from '../api/types'
 
 interface Props { runDir: string }
 
-const DECISIONS = ['approve', 'reject', 'revise', 'merge', 'split', 'defer']
-const DECISION_LABELS: Record<string, string> = {
-  '': 'All', pending: 'Pending', approve: 'Approve', reject: 'Reject',
-  revise: 'Revise', merge: 'Merge', split: 'Split', defer: 'Defer',
-}
+const COVERAGE_DIMENSIONS = [
+  'normal_behavior',
+  'boundary',
+  'error_handling',
+  'edge_case',
+  'performance',
+  'safety',
+  'interaction',
+]
 
-function IntentDetail({ item, validationErrors, onChange }: {
-  item: IntentReviewItem | null
-  validationErrors: string[]
-  onChange: (c: Partial<IntentReviewItem>) => void
-}) {
-  if (!item) return <div className="card review-detail"><p className="text-muted">Select an item.</p></div>
-
-  const showRevise = item.decision === 'revise'
-  const showMerge = item.decision === 'merge'
-  const showSplit = item.decision === 'split'
-
-  return (
-    <div className="card review-detail">
-      <h3>{item.intent_id}</h3>
-      {validationErrors.length > 0 && (
-        <div className="field-errors">
-          {validationErrors.map((e, i) => <div key={i} className="field-error">{e}</div>)}
-        </div>
-      )}
-      <div className="detail-grid">
-        {item.coverage_dimension && (
-          <div className="detail-field"><label>Coverage Dimension</label><span>{item.coverage_dimension}</span></div>
-        )}
-        {item.intent_text && (
-          <div className="detail-field"><label>Intent Text</label><div className="affected-text">{item.intent_text}</div></div>
-        )}
-        {item.routing_color && (
-          <div className="detail-field"><label>Confidence</label><span className={`routing-dot routing-${item.routing_color}`}></span> {item.routing_color}</div>
-        )}
-        {item.recommended_decision && (
-          <div className="detail-field"><label>Recommended</label><span>{item.recommended_decision}</span></div>
-        )}
-      </div>
-
-      <div className="detail-decisions">
-        <div className="form-group">
-          <label>Decision</label>
-          <select value={item.decision || ''} onChange={(e) => onChange({ decision: e.target.value })}>
-            <option value="">-- Choose --</option>
-            {DECISIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label>Reason Text</label>
-          <textarea value={item.reason_text || ''} onChange={(e) => onChange({ reason_text: e.target.value })} rows={3} />
-        </div>
-
-        {showRevise && (
-          <div className="form-group">
-            <label>Revised Intent Text</label>
-            <textarea value={item.revised_intent_text || ''} onChange={(e) => onChange({ revised_intent_text: e.target.value })} rows={3} />
-          </div>
-        )}
-
-        {showMerge && (
-          <div className="form-group">
-            <label>Merge Target Intent ID</label>
-            <input value={item.merge_target_id || ''} onChange={(e) => onChange({ merge_target_id: e.target.value })} />
-          </div>
-        )}
-
-        {showSplit && (
-          <div className="form-group">
-            <label>Split Children (JSON array)</label>
-            <textarea
-              value={JSON.stringify(item.split_children || [], null, 2)}
-              onChange={(e) => {
-                try { onChange({ split_children: JSON.parse(e.target.value) }) } catch { /* invalid JSON */ }
-              }}
-              rows={4}
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  )
+let nextTempId = 0
+function genTempId(): string {
+  nextTempId += 1
+  return `intent-new-${Date.now()}-${nextTempId}`
 }
 
 export default function IntentReviewPage({ runDir }: Props) {
   const {
-    items, selectedId, selectedItem, loading, error,
-    validationErrors,
-    setSelectedId, updateDraftItem, saveDraft, generate,
-    refetch, isDirty, setValidationErrors,
+    intents,
+    reviewed,
+    loading,
+    saving,
+    error,
+    blockingGaps,
+    saveReview,
+    acceptAll,
+    generate,
+    refetch,
+    isDirty,
+    getCurrentIntents,
+    editIntent,
+    removeIntent,
+    addIntent,
+    setBlockingGapsList,
   } = useIntentReview(runDir)
   const { isLocked, startPolling } = useJob()
-  const [statusMsg, setStatusMsg] = useState<string | null>(null)
-  const [regenerateConfirm, setRegenerateConfirm] = useState(false)
 
-  const handleSaveDraft = async () => {
-    const r = await saveDraft()
-    setStatusMsg(r?.success ? 'Draft saved.' : (r as { error?: string })?.error || 'Save failed')
-    if (r?.success) { refetch(); setValidationErrors(new Map()) }
+  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [newIntent, setNewIntent] = useState<Partial<CaseIntent>>({
+    coverage_dimension: 'normal_behavior',
+    intent_text: '',
+  })
+  const [blockText, setBlockText] = useState('')
+
+  const handleSaveReview = async () => {
+    if (blockText.trim()) {
+      setBlockingGapsList(blockText.split('\n').filter(Boolean))
+    }
+    const r = await saveReview()
+    setStatusMsg(r?.success ? 'Review saved.' : (r as { error?: string })?.error || 'Save failed')
+    if (r?.success) refetch()
+  }
+
+  const handleAcceptAll = async () => {
+    const r = await acceptAll()
+    if (r?.saved) {
+      setStatusMsg('All intents accepted. Reviewed intents saved.')
+      refetch()
+    } else {
+      setStatusMsg((r as { error?: string } | null)?.error || 'Accept all failed')
+    }
   }
 
   const handleGenerate = async () => {
+    if (blockText.trim()) {
+      setBlockingGapsList(blockText.split('\n').filter(Boolean))
+    }
+    if (isDirty) {
+      await saveReview()
+    }
     const raw = await generate()
     if (!raw) return
     const res = raw as Record<string, unknown>
     if (res.status === 'started') {
       startPolling()
-      setStatusMsg('Generation started...')
+      setStatusMsg('Case generation started...')
     } else if (res.validated === false && res.errors) {
-      const errMap = new Map<string, string[]>()
-      for (const e of (res.errors as Array<Record<string, unknown>>)) {
-        const id = String(e.intent_id || e.item_id || 'unknown')
-        const msgs = errMap.get(id) || []
-        msgs.push(String(e.message || ''))
-        errMap.set(id, msgs)
-      }
-      setValidationErrors(errMap)
       setStatusMsg('Validation failed.')
     } else {
       setStatusMsg('Cases generated!')
@@ -132,10 +91,23 @@ export default function IntentReviewPage({ runDir }: Props) {
     }
   }
 
-  if (loading) return <div className="card"><p>Loading intent review...</p></div>
+  const handleAddIntent = () => {
+    if (!newIntent.intent_text?.trim()) return
+    const intent: CaseIntent = {
+      intent_id: newIntent.intent_id || genTempId(),
+      coverage_dimension: newIntent.coverage_dimension || 'normal_behavior',
+      intent_text: newIntent.intent_text,
+    }
+    addIntent(intent)
+    setNewIntent({ coverage_dimension: 'normal_behavior', intent_text: '' })
+    setShowAddForm(false)
+  }
+
+  if (loading) return <div className="card"><p>Loading case intents...</p></div>
   if (error) return <div className="error-msg">{error}</div>
 
-  const itemErrors = selectedId ? validationErrors.get(selectedId) || [] : []
+  const items = getCurrentIntents()
+  const selectedItem = items.find((i) => i.intent_id === selectedId) || null
 
   return (
     <div className="intent-review">
@@ -145,59 +117,160 @@ export default function IntentReviewPage({ runDir }: Props) {
           <button className="btn btn-sm" onClick={() => setStatusMsg(null)}>Dismiss</button>
         </div>
       )}
-      <ValidationSummary errors={validationErrors} onSelectItem={(id) => setSelectedId(id)} />
+
+      {reviewed && (
+        <div className="card" style={{ background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.3)', marginBottom: 12 }}>
+          <span style={{ color: 'var(--color-success)', fontWeight: 500 }}>Case intents have been reviewed and accepted.</span>
+        </div>
+      )}
 
       <div className="review-actions">
-        <button className="btn btn-primary" onClick={handleSaveDraft} disabled={isLocked || !isDirty}>
-          Save Draft
+        <button className="btn btn-primary" onClick={handleAcceptAll} disabled={isLocked || saving}>
+          Accept All
         </button>
-        <button className="btn btn-primary" onClick={handleGenerate} disabled={isLocked || !isDirty}>
-          Save &amp; Generate Cases
+        <button className="btn btn-primary" onClick={handleSaveReview} disabled={isLocked || saving || !isDirty}>
+          {saving ? 'Saving...' : 'Save Review'}
         </button>
-        <button className="btn btn-sm" onClick={() => setRegenerateConfirm(true)} disabled={isLocked}>
-          Regenerate
+        <button className="btn btn-primary" onClick={handleGenerate} disabled={isLocked || saving}>
+          Generate Cases
+        </button>
+        <button className="btn btn-sm" onClick={() => refetch()}>
+          Refresh
         </button>
       </div>
+
+      {intents && (
+        <>
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div className="detail-field">
+              <label>Requirement</label>
+              <span>{intents.requirement_key}</span>
+            </div>
+          </div>
+
+          {/* Blocking Gaps */}
+          <div className="card" style={{ marginBottom: 16 }}>
+            <h3 style={{ fontSize: '0.875rem', marginBottom: 8 }}>Blocking Gaps</h3>
+            <textarea
+              value={blockText || blockingGaps.join('\n')}
+              onChange={(e) => setBlockText(e.target.value)}
+              rows={3}
+              placeholder="Enter blocking gaps (one per line)..."
+            />
+          </div>
+
+          {/* Add Intent */}
+          <div className="card" style={{ marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ fontSize: '0.875rem', fontWeight: 500 }}>Case Intents ({items.length})</h3>
+              <button
+                className="btn btn-sm"
+                onClick={() => { setShowAddForm(!showAddForm); setNewIntent({ coverage_dimension: 'normal_behavior', intent_text: '' }); }}
+              >
+                + Add Intent
+              </button>
+            </div>
+
+            {showAddForm && (
+              <div className="card" style={{ marginBottom: 12, background: 'var(--color-bg-elevated)' }}>
+                <div className="detail-grid">
+                  <div className="form-group">
+                    <label>Intent ID</label>
+                    <input
+                      value={newIntent.intent_id || ''}
+                      onChange={(e) => setNewIntent({ ...newIntent, intent_id: e.target.value })}
+                      placeholder="e.g., intent-5"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Coverage Dimension</label>
+                    <select
+                      value={newIntent.coverage_dimension || 'normal_behavior'}
+                      onChange={(e) => setNewIntent({ ...newIntent, coverage_dimension: e.target.value })}
+                    >
+                      {COVERAGE_DIMENSIONS.map((d) => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Intent Text</label>
+                    <textarea
+                      value={newIntent.intent_text || ''}
+                      onChange={(e) => setNewIntent({ ...newIntent, intent_text: e.target.value })}
+                      rows={3}
+                      placeholder="Describe the test intent..."
+                    />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-primary btn-sm" onClick={handleAddIntent}>
+                    Add
+                  </button>
+                  <button className="btn btn-sm" onClick={() => setShowAddForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="review-body">
         <div className="review-queue">
           <div className="queue-list">
-            {items.map((item) => {
-              const dec = item.decision || 'pending'
-              return (
+            {items.length === 0 && <p className="text-muted">No intents yet.</p>}
+            {items.map((item) => (
+              <button
+                key={item.intent_id}
+                className={`queue-row ${item.intent_id === selectedId ? 'selected' : ''}`}
+                onClick={() => setSelectedId(item.intent_id)}
+              >
+                <span className="queue-item-id">{item.intent_id}</span>
+                <span className="queue-type text-muted">{item.coverage_dimension}</span>
                 <button
-                  key={item.intent_id}
-                  className={`queue-row ${item.intent_id === selectedId ? 'selected' : ''}`}
-                  onClick={() => setSelectedId(item.intent_id)}
+                  className="btn btn-sm btn-danger"
+                  onClick={(e) => { e.stopPropagation(); removeIntent(item.intent_id); if (selectedId === item.intent_id) setSelectedId(null); }}
+                  title="Remove intent"
                 >
-                  <span className={`routing-dot routing-${item.routing_color || 'blue'}`} />
-                  <span className="queue-item-id">{item.intent_id}</span>
-                  <span className={`queue-decision dec-${dec}`}>
-                    {DECISION_LABELS[dec] || dec}
-                  </span>
-                  {item.coverage_dimension && (
-                    <span className="queue-type text-muted">{item.coverage_dimension}</span>
-                  )}
+                  &times;
                 </button>
-              )
-            })}
+              </button>
+            ))}
           </div>
         </div>
 
-        <IntentDetail
-          item={selectedItem}
-          validationErrors={itemErrors}
-          onChange={(changes) => selectedId && updateDraftItem(selectedId, changes)}
-        />
+        {/* Intent detail editor */}
+        <div className="card review-detail">
+          {selectedItem ? (
+            <>
+              <h3>{selectedItem.intent_id}</h3>
+              <div className="detail-grid">
+                <div className="form-group">
+                  <label>Coverage Dimension</label>
+                  <select
+                    value={selectedItem.coverage_dimension || 'normal_behavior'}
+                    onChange={(e) => editIntent(selectedItem.intent_id, { coverage_dimension: e.target.value })}
+                  >
+                    {COVERAGE_DIMENSIONS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Intent Text</label>
+                  <textarea
+                    value={selectedItem.intent_text || ''}
+                    onChange={(e) => editIntent(selectedItem.intent_id, { intent_text: e.target.value })}
+                    rows={5}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <p className="text-muted">Select an intent to edit.</p>
+          )}
+        </div>
       </div>
-
-      <RegenerateDialog
-        open={regenerateConfirm}
-        runDir={runDir}
-        stage="intents"
-        onClose={() => setRegenerateConfirm(false)}
-        onStarted={startPolling}
-      />
     </div>
   )
 }

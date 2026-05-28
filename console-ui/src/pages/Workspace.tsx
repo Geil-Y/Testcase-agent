@@ -2,26 +2,32 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import StageNav from '../components/StageNav'
 import ModeBadge from '../components/ModeBadge'
-import ClarificationReviewPage from './ClarificationReviewPage'
+import ProgressTrace from '../components/ProgressTrace'
+import ExtractionReviewPage from './ExtractionReviewPage'
 import IntentReviewPage from './IntentReviewPage'
 import ResultsPage from './ResultsPage'
 import { useRun } from '../hooks/useRun'
 import { useJob } from '../hooks/JobContext'
 
 const STATUS_LABELS: Record<string, string> = {
-  evaluated: 'Evaluated',
-  cases_ready: 'Cases Ready',
-  intent_ready: 'Intent Ready',
-  clarification_ready: 'Clarification Ready',
-  clarification_blocked: 'Blocked',
   new: 'New',
+  extraction_pending_review: 'Extraction Pending Review',
+  extraction_reviewed: 'Extraction Reviewed',
+  extraction_blocked: 'Extraction Blocked',
+  intents_pending_review: 'Intents Pending Review',
+  intents_reviewed: 'Intents Reviewed',
+  intents_blocked: 'Intents Blocked',
+  cases_pending_review: 'Cases Pending Review',
+  cases_reviewed: 'Cases Reviewed',
+  legacy_unsupported: 'Legacy (Unsupported)',
   failed: 'Failed',
 }
 
 function determineStage(artifacts: Set<string>): string {
-  if (artifacts.has('generated_cases.json') || artifacts.has('evaluation_summary.json')) return 'results'
-  if (artifacts.has('case_intent_review.json')) return 'intents'
-  return 'clarification'
+  if (artifacts.has('generated_cases.json') || artifacts.has('reviewed_cases.json')) return 'cases'
+  if (artifacts.has('case_intents.json')) return 'intents'
+  if (artifacts.has('extracted_test_basis.json')) return 'extraction'
+  return 'extraction'
 }
 
 export default function Workspace() {
@@ -29,20 +35,22 @@ export default function Workspace() {
   const navigate = useNavigate()
   const { run, loading, error, refetch: refetchRun } = useRun(runDir)
   const { isLocked } = useJob()
-  const [activeStage, setActiveStage] = useState('clarification')
+  const [activeStage, setActiveStage] = useState('extraction')
+  const [userSelectedStage, setUserSelectedStage] = useState(false)
 
   useEffect(() => {
-    if (run) {
+    if (run && !userSelectedStage) {
       const arts = new Set(run.artifacts || [])
       setActiveStage(determineStage(arts))
     }
-  }, [run])
+  }, [run, userSelectedStage])
 
   if (loading) return <div className="workspace"><p>Loading run...</p></div>
   if (error) return <div className="workspace"><div className="error-msg">{error}</div></div>
   if (!run) return <div className="workspace"><div className="error-msg">Run not found</div></div>
 
   const handleStageChange = (stage: string) => {
+    setUserSelectedStage(true)
     setActiveStage(stage)
     refetchRun()
   }
@@ -71,8 +79,8 @@ export default function Workspace() {
         <StageNav run={run} activeStage={activeStage} onStageClick={handleStageChange} />
 
         <div className="workspace-content">
-          {activeStage === 'clarification' && runDir && (
-            <ClarificationReviewPage
+          {activeStage === 'extraction' && runDir && (
+            <ExtractionReviewPage
               runDir={runDir}
               onAdvanced={() => { refetchRun(); setActiveStage('intents') }}
             />
@@ -80,11 +88,17 @@ export default function Workspace() {
           {activeStage === 'intents' && runDir && (
             <IntentReviewPage runDir={runDir} />
           )}
-          {activeStage === 'results' && runDir && (
+          {activeStage === 'cases' && runDir && (
             <ResultsPage runDir={runDir} />
           )}
         </div>
       </div>
+
+      {runDir && (
+        <div style={{ marginTop: 24 }}>
+          <ProgressTrace runDir={runDir} />
+        </div>
+      )}
     </div>
   )
 }

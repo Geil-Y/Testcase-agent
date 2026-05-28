@@ -46,6 +46,55 @@ from structured requirements.
 - **Missing Information Category** — one of the canonical semantic gap types:
   signal, threshold, timing, state, or observation.
 
+- **Extracted Test Basis Sections** — the primary structured expression of
+  requirement evidence extracted by LLM-A. They replace separate downstream
+  facts and ambiguities, but they are not a case plan. Canonical sections
+  are signals, thresholds, timing, states, and observations. Each item states
+  whether it is `known` or `needs_review`. After clarification review, these
+  sections become the approved evidence LLM-B uses to plan case intents and
+  LLM-C uses to write executable cases.
+
+- **Extracted Test Basis Section Item** — one entry inside an Extracted Test
+  Basis Section. A `known` item carries explicit requirement-backed content. A
+  `needs_review` item represents required test-basis information that the
+  requirement description implies but does not explicitly provide, such as an
+  unnamed signal, DTC, threshold, timing value, state, or observation point.
+  Each item carries the extracted content when known, the missing need when
+  unresolved, source text for review, and any human clarification that resolves
+  the item. LLM-A actively identifies `needs_review` items only within the five
+  canonical sections; it does not request HIL channels, tool commands, or bench
+  configuration details.
+
+- **Test Basis Section Review Decision** — a human decision attached directly
+  to an Extracted Test Basis Section Item. Section items are the smallest
+  reviewable unit in clarification review because they are the same units that
+  later constrain LLM-B planning and LLM-C generation.
+
+- **Prompt Test Basis View** — the compact, generation-facing rendering of
+  reviewed Test Basis Sections. It separates usable known items from
+  still-missing needs-review items and omits audit fields such as source,
+  original status, and review decision so small local LLMs receive only the
+  information needed for planning and case writing.
+
+- **Resolved Section Item** — a Test Basis Section Item that originally needed
+  review but was completed by a human clarification. Downstream planning and
+  case writing treat the clarified content as known generation authority.
+
+- **Unresolved Section Item** — a Test Basis Section Item that still needs
+  review after clarification review. Downstream planning and case writing may
+  continue when generation is otherwise safe, but must carry the unresolved
+  semantic gap into the generated case as `[NEEDS REVIEW]`.
+  LLM-B and LLM-C may only propagate unresolved items that already exist in the
+  reviewed Extracted Test Basis Sections; they must not identify new missing
+  information or add new `[NEEDS REVIEW]` markers on their own.
+
+- **Blocking Test Basis Gap** — a missing or unclear requirement behavior that
+  prevents a valid test skeleton from being planned, such as an unclear trigger,
+  unclear expected behavior, mutually incompatible interpretations, or a
+  non-testable heading/info row. Missing concrete test data such as a signal
+  name, DTC code, threshold, timing parameter, state, or observation point is
+  normally an Unresolved Section Item, not a Blocking Test Basis Gap.
+
 - **Review Marker Text** — the literal marker shown in generated cases for all
   missing information categories; currently always `[NEEDS REVIEW]`.
 
@@ -61,9 +110,12 @@ from structured requirements.
   when regenerating the case.
 
 - **Supplementary Info** — a catch-all field holding additional Excel column
-  content (signal names, thresholds, timing, etc.) beyond the core requirement
-  fields. Used alongside `description` as input to requirement decomposition
-  and downstream review artifacts.
+  content beyond the core requirement description. It is preserved for human
+  review reference, but it is not analysis or generation authority. Concrete
+  identifiers, thresholds, timing, states, and observations must be grounded in
+  the requirement description or explicitly supplied by human clarification.
+  It is not passed to LLM-A, LLM-B, or LLM-C prompts; future review UI may show
+  it to humans as reference only.
 
 - **Quality Checklist** — a set of 34 evaluation items across 6 categories
   derived from current project prompts and CodeX `case_generation` modules.
@@ -159,6 +211,25 @@ from structured requirements.
 - A **Prompt Evaluation Set Entry** refers to exactly one **Requirement**.
 - A **Requirement** can produce multiple **Test Cases** through the generation
   pipeline.
+- LLM-A extracts **Extracted Test Basis Sections** from a **Requirement**.
+- LLM-B plans **Case Intents** from the requirement description and reviewed
+  **Extracted Test Basis Sections**. The description provides behavior
+  semantics; reviewed sections provide concrete test materials.
+- LLM-C writes **Test Cases** from approved **Case Intents** and reviewed
+  **Extracted Test Basis Sections**. It may read the requirement description
+  for behavior context, but concrete identifiers, parameters, states, timing,
+  and observations must come from reviewed sections or human clarification.
+  The case writer receives the current approved intent plus all reviewed
+  sections, matching the legacy LLM2 pattern; intents do not need item-level
+  basis references in the first implementation.
+- The three-stage pipeline exists to split the legacy LLM1 responsibility:
+  LLM-A extracts five concrete evidence sections and missing needs, while LLM-B
+  plans coverage/case intents. LLM-C remains equivalent to the legacy LLM2 case
+  writer pattern.
+- Each LLM stage output is reviewable. LLM-A output review covers extracted
+  sections and missing items. LLM-B output review covers planned case intents.
+  LLM-C output review covers generated test cases through Accept, Edit, or
+  Regenerate with a review comment.
 - A **Test Case** is evaluated by the **Quality Checklist** and may also receive
   the case-level dimensions of a **Manual Review Score**.
 - A **Hard Gate** can make a **Test Case** unacceptable even when other review

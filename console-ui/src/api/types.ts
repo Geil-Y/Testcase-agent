@@ -1,4 +1,4 @@
-// ── Console API response types ───────────────────────────────────────────
+// ── Console API response types (simplified ABC pipeline) ──────────────────
 
 export interface ImportBatchSummary {
   id: string
@@ -87,105 +87,108 @@ export interface ArtifactSummary {
   message: string
 }
 
-export interface ReviewDecision {
-  item_id?: string
-  intent_id?: string
-  decision: string
-  reason_codes?: string[]
-  reason_text?: string
-  clarified_value?: string
-  edited_content?: Record<string, unknown>
-  revised_intent_text?: string
-  merge_target_id?: string
-  split_children?: unknown[]
-}
+// ── Extraction (Stage A) ──────────────────────────────────────────────────
 
-export interface ReviewItem {
+export interface SectionItem {
   item_id: string
-  decision: string
-  reason_codes: string[]
-  reason_text: string
-  clarified_value: string
-  edited_content: Record<string, unknown>
-  ambiguity_type?: string
-  recommended_decision?: string
-  routing_color?: string
-  affected_text?: string
-  impact?: string
-  severity?: string
-  clarification_question?: string
-  confidence_drivers?: Record<string, number>
-  [key: string]: unknown
+  status: 'known' | 'needs_review'
+  content: string
+  need: string
+  source_text: string
 }
 
-export interface ClarificationReview {
+export interface ExtractionSections {
+  signals: SectionItem[]
+  thresholds: SectionItem[]
+  timing: SectionItem[]
+  states: SectionItem[]
+  observations: SectionItem[]
+}
+
+export interface ExtractedTestBasis {
+  requirement_key: string
+  source_description: string
+  sections: ExtractionSections
+  blocking_gaps: string[]
+}
+
+export interface ExtractionResponse {
   run: RunInfo
-  review: {
-    decisions: ReviewItem[]
-    decomposition?: {
-      facts?: unknown[]
-      ambiguities?: unknown[]
-    }
-    [key: string]: unknown
-  }
+  extraction: ExtractedTestBasis
+  reviewed: boolean
 }
 
-export interface IntentReviewItem {
+// ── Case Intents (Stage B) ────────────────────────────────────────────────
+
+export interface CaseIntent {
   intent_id: string
-  decision: string
-  reason_codes: string[]
-  reason_text: string
-  revised_intent_text: string
-  merge_target_id: string
-  split_children: unknown[]
-  coverage_dimension?: string
-  intent_text?: string
-  routing_color?: string
-  recommended_decision?: string
-  confidence_drivers?: Record<string, number>
-  [key: string]: unknown
+  coverage_dimension: string
+  intent_text: string
 }
 
-export interface IntentReview {
+export interface CaseIntentSet {
+  requirement_key: string
+  intents: CaseIntent[]
+  blocking_gaps: string[]
+}
+
+export interface IntentsResponse {
   run: RunInfo
-  review: {
-    decisions: IntentReviewItem[]
-    [key: string]: unknown
-  }
+  intents: CaseIntentSet
+  reviewed: boolean
 }
 
-export interface ResultsData {
+// ── Cases (Stage C) ───────────────────────────────────────────────────────
+
+export interface GeneratedCase {
+  case_id: string
+  title: string
+  objective: string
+  pre_condition: string
+  steps: string[]
+  post_condition: string
+  requirement_key: string
+  intent_id: string
+  coverage_dimension: string
+}
+
+export interface GeneratedCaseSet {
+  requirement_key: string
+  cases: GeneratedCase[]
+}
+
+export interface CasesResponse {
   run: RunInfo
-  cases: unknown | null
-  evaluation: unknown | null
-  evaluation_detail: unknown | null
-  read_only: boolean
-  note: string
+  cases: GeneratedCaseSet
+  reviewed: boolean
 }
 
-export interface ReasonCodes {
-  review_type: string
-  decisions: string[]
-  reason_codes: Record<string, string[]>
-  decision_requirements: Record<string, { requires_reason_code: boolean; requires_reason_text: boolean }>
+// ── Review Actions ────────────────────────────────────────────────────────
+
+export interface ExtractionReviewAction {
+  item_id: string
+  section: string
+  action: 'edit' | 'add' | 'remove' | 'block'
+  changes?: Partial<SectionItem>
+  new_item?: SectionItem
 }
 
-export interface MemoryHints {
-  run: string
-  hints: string[]
-  adjustment: number
-  advisory_note: string
+export interface IntentReviewAction {
+  intent_id: string
+  action: 'edit' | 'add' | 'remove' | 'block'
+  changes?: Partial<CaseIntent>
+  new_intent?: CaseIntent
 }
 
-export interface AcceptRecommendationsResult {
-  proposed_decisions: { item_id: string; decision: string }[]
-  filled: number
-  high_risk_skipped?: number
-  high_risk_accepted?: number
-  high_risk_items?: string[]
-  requires_confirmation: boolean
-  saved: boolean
-  message: string
+export interface CaseEditRequest {
+  case_id: string
+  changes: Partial<GeneratedCase>
+}
+
+export interface CaseRegenerateRequest {
+  case_id: string
+  intent_id: string
+  review_comment: string
 }
 
 export interface PreviewResult {
@@ -193,6 +196,22 @@ export interface PreviewResult {
   sheets: string[]
   columns: string[]
   tmp_path: string
+}
+
+export interface TraceEvent {
+  timestamp: number
+  stage: string
+  event: string
+  provider?: string | null
+  model?: string | null
+  duration_ms?: number | null
+  message: string
+  detail?: string | null
+}
+
+export interface TraceData {
+  run_dir: string
+  events: TraceEvent[]
 }
 
 export interface ExportBundle {

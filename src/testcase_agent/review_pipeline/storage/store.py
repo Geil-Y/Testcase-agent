@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from testcase_agent.review_pipeline.artifacts.io import read_json
-from testcase_agent.review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.legacy_models import (
     ClarificationReview,
     CaseIntentReview,
     ApprovedCasePlan,

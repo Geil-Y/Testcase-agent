@@ -1,4 +1,4 @@
-// ── Typed endpoint functions ──────────────────────────────────────────────
+// ── Typed endpoint functions (simplified ABC pipeline) ───────────────────
 
 import { get, post, upload } from './client'
 import type {
@@ -7,16 +7,17 @@ import type {
   ConsoleMode,
   JobState,
   RunInfo,
-  ClarificationReview,
-  IntentReview,
-  ResultsData,
-  ReasonCodes,
-  MemoryHints,
-  AcceptRecommendationsResult,
+  ExtractionResponse,
+  IntentsResponse,
+  CasesResponse,
   PreviewResult,
   ExportBundle,
   ValidationErrorItem,
-  ArtifactSummary,
+  TraceData,
+  ExtractionReviewAction,
+  IntentReviewAction,
+  CaseEditRequest,
+  CaseRegenerateRequest,
 } from './types'
 
 // Imports
@@ -36,7 +37,7 @@ export const getMode = () => get<ConsoleMode>('/mode')
 
 // Jobs
 export const getCurrentJob = () => get<JobState>('/jobs/current')
-export const checkJobRunning = () => get<{ running: boolean }>('/jobs/is-running')
+
 export const retryJob = () => post<{ status: string; job: JobState['job'] }>('/jobs/retry')
 
 // Runs
@@ -45,56 +46,54 @@ export const getRun = (runDir: string) => get<RunInfo>(`/runs/${runDir}`)
 export const startRun = (data: { requirement_key: string; batch_id: string }) =>
   post<{ status: string; job: JobState['job'] }>('/runs/start', data)
 
-// Clarification Review
-export const getClarificationReview = (runDir: string) =>
-  get<ClarificationReview>(`/runs/${runDir}/clarification`)
-export const getFilteredClarification = (
-  runDir: string,
-  params: { decision_filter?: string; routing_filter?: string; search?: string; sort?: string }
-) => {
-  const qs = new URLSearchParams()
-  Object.entries(params).forEach(([k, v]) => { if (v) qs.set(k, v) })
-  return get<ClarificationReview & { filters: Record<string, string>; total: number }>(
-    `/runs/${runDir}/clarification/filtered?${qs}`
-  )
-}
-export const saveClarificationDraft = (runDir: string, decisions: unknown[]) =>
-  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/clarification/draft`, { decisions })
-export const advanceClarification = (runDir: string, decisions: unknown[]) =>
-  post<{ status: string; job: JobState['job'] }>(`/runs/${runDir}/clarification/advance`, { decisions })
-export const acceptRecommendations = (runDir: string, confirmHighRisk = false) =>
-  post<AcceptRecommendationsResult>(`/runs/${runDir}/clarification/accept-recommendations`, {
-    confirm_high_risk: confirmHighRisk,
-  })
+// ── Extraction (Stage A) ─────────────────────────────────────────────────
 
-// Reason Codes
-export const getReasonCodes = (reviewType = 'clarification') =>
-  get<ReasonCodes>(`/reason-codes?review_type=${reviewType}`)
+export const getExtraction = (runDir: string) =>
+  get<ExtractionResponse>(`/runs/${runDir}/extraction`)
 
-// Memory Hints
-export const getMemoryHints = (runDir: string) => get<MemoryHints>(`/runs/${runDir}/memory-hints`)
+export const acceptAllExtraction = (runDir: string) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/extraction/accept-all`)
 
-// Case Intent Review
-export const getIntentReview = (runDir: string) => get<IntentReview>(`/runs/${runDir}/intents`)
-export const saveIntentDraft = (runDir: string, decisions: unknown[]) =>
-  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/intents/draft`, { decisions })
-export const generateCases = (runDir: string, decisions: unknown[]) =>
-  post<{ status: string; job: JobState['job'] }>(`/runs/${runDir}/intents/generate`, { decisions })
+export const saveExtractionReview = (runDir: string, actions: ExtractionReviewAction[]) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/extraction/review`, { actions })
 
-// Results
-export const getResults = (runDir: string) => get<ResultsData>(`/runs/${runDir}/results`)
-export const downloadArtifact = (runDir: string, artifactName: string) =>
-  get<{ artifact: string; content: unknown }>(`/runs/${runDir}/artifacts/${artifactName}`)
+// ── Case Intents (Stage B) ───────────────────────────────────────────────
+
+export const planIntents = (runDir: string) =>
+  post<{ status: string; job: JobState['job'] }>(`/runs/${runDir}/intents/plan`)
+
+export const getIntents = (runDir: string) =>
+  get<IntentsResponse>(`/runs/${runDir}/intents`)
+
+export const acceptAllIntents = (runDir: string) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/intents/accept-all`)
+
+export const saveIntentReview = (runDir: string, actions: IntentReviewAction[]) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/intents/review`, { actions })
+
+// ── Cases (Stage C) ──────────────────────────────────────────────────────
+
+export const generateCases = (runDir: string) =>
+  post<{ status: string; job: JobState['job'] }>(`/runs/${runDir}/cases/generate`)
+
+export const getCases = (runDir: string) =>
+  get<CasesResponse>(`/runs/${runDir}/cases`)
+
+export const acceptAllCases = (runDir: string) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/cases/accept-all`)
+
+export const editCases = (runDir: string, edits: CaseEditRequest[]) =>
+  post<{ saved: boolean; run: RunInfo }>(`/runs/${runDir}/cases/edit`, { edits })
+
+export const regenerateCase = (runDir: string, requests: CaseRegenerateRequest[]) =>
+  post<{ status: string; job: JobState['job'] }>(`/runs/${runDir}/cases/regenerate`, { requests })
+
+// Trace
+export const getTrace = (runDir: string) => get<TraceData>(`/runs/${runDir}/trace`)
+
+// Export
 export const exportRun = (runDir: string, includeArchived = false) =>
   get<ExportBundle>(`/runs/${runDir}/export?include_archived=${includeArchived}`)
-export const importMemory = (runDir: string) =>
-  post<{ imported: boolean; run: string; message: string }>(`/runs/${runDir}/import-memory`)
-
-// Regenerate
-export const regenerateConfirm = (runDir: string, stage: string) =>
-  post<ArtifactSummary & { confirmation_required: boolean }>(`/runs/${runDir}/regenerate`, { stage, confirm: false })
-export const regenerateExecute = (runDir: string, stage: string) =>
-  post<{ status: string; job: JobState['job']; archived: string[] }>(`/runs/${runDir}/regenerate`, { stage, confirm: true })
 
 // Re-export validation error type
 export type { ValidationErrorItem }

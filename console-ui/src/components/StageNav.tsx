@@ -7,9 +7,9 @@ interface StageDef {
 }
 
 const STAGES: StageDef[] = [
-  { key: 'clarification', label: 'Clarification Review', artifact: 'clarification_review.json' },
-  { key: 'intents', label: 'Case Intent Review', artifact: 'case_intent_review.json' },
-  { key: 'results', label: 'Results', artifact: 'generated_cases.json' },
+  { key: 'extraction', label: 'Extraction', artifact: 'extracted_test_basis.json' },
+  { key: 'intents', label: 'Case Intents', artifact: 'case_intents.json' },
+  { key: 'cases', label: 'Cases', artifact: 'generated_cases.json' },
 ]
 
 interface Props {
@@ -23,12 +23,12 @@ export default function StageNav({ run, activeStage, onStageClick }: Props) {
 
   const isAvailable = (stage: StageDef): boolean => {
     switch (stage.key) {
-      case 'clarification':
-        return artifacts.has('clarification_review.json')
+      case 'extraction':
+        return artifacts.has('extracted_test_basis.json')
       case 'intents':
-        return artifacts.has('case_intent_review.json') || artifacts.has('clarified_test_basis.json')
-      case 'results':
-        return artifacts.has('generated_cases.json') || artifacts.has('evaluation_summary.json')
+        return artifacts.has('case_intents.json')
+      case 'cases':
+        return true // Always available — shows results if cases exist
       default:
         return false
     }
@@ -37,12 +37,12 @@ export default function StageNav({ run, activeStage, onStageClick }: Props) {
   const missingReason = (stage: StageDef): string => {
     if (isAvailable(stage)) return ''
     switch (stage.key) {
-      case 'clarification':
-        return 'Start a run or prepare clarification review'
+      case 'extraction':
+        return 'Start a run or wait for extraction'
       case 'intents':
-        return 'Complete Clarification Review and advance'
-      case 'results':
-        return 'Complete Case Intent Review and generate cases'
+        return 'Complete Extraction review and plan intents'
+      case 'cases':
+        return 'Not available'
       default:
         return 'Not available'
     }

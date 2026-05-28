@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
-from testcase_agent.review_pipeline.artifacts.models import (
+from testcase_agent.review_pipeline.artifacts.legacy_models import (
     ClarificationReview,
     ClarificationDecision,
     ClarifiedTestBasis,
