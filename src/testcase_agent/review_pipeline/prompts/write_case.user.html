@@ -4,30 +4,59 @@
 **Key:** {{ requirement_key }}
 **Description:** {{ description }}
 
-{% if facts_summary %}
-### Known Test Basis Facts
-
-{{ facts_summary }}
-{% endif %}
-
 ## Approved Intent
 
 **ID:** {{ intent_id }}
 **Coverage Dimension:** {{ coverage_dimension }}
 **Intent:** {{ intent_text }}
 
-{% if supplementary_info %}
-### Supplementary Information
+{% if known_signals %}
+### Known BMS Signals
 
-{{ supplementary_info }}
+{{ known_signals }}
 {% endif %}
 
-{% if missing_info %}
-### Critical Missing Information
+{% if known_thresholds %}
+### Known Thresholds
 
-Use `[NEEDS REVIEW]` placeholders only where these missing semantics are needed:
+{{ known_thresholds }}
+{% endif %}
 
-{{ missing_info }}
+{% if known_timing %}
+### Known Timing Parameters
+
+{{ known_timing }}
+{% endif %}
+
+{% if known_states %}
+### Known BMS States
+
+{{ known_states }}
+{% endif %}
+
+{% if known_observations %}
+### Known Observation Points
+
+{{ known_observations }}
+{% endif %}
+
+{% if unresolved_items %}
+### Critical Missing Information / Unresolved Items
+
+Use ``[NEEDS REVIEW]`` placeholders ONLY for these specific unresolved items.
+Do NOT add ``[NEEDS REVIEW]`` for anything else.
+
+{{ unresolved_items }}
+{% endif %}
+
+{% if review_comment %}
+### Review Comment
+
+The reviewer provided this guidance. Use it to guide wording, step structure,
+and use of approved materials. Do not introduce new signals, thresholds, timing,
+states, observations, or case intents beyond what is already approved above.
+
+{{ review_comment }}
 {% endif %}
 
 Write one test case for this intent. Output only the JSON.
