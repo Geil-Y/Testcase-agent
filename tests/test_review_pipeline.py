@@ -162,10 +162,10 @@ class TestIssue15LegacyPipelineRemoval:
                     intent_id="i1", coverage_dimension="normal_behavior")],
         )
         path = run_dir / "test_cases.json"
-        write_json(path, [c.model_dump() for c in case_set.cases])
+        write_json(path, case_set.model_dump())
         reloaded = read_json(path)
-        assert len(reloaded) == 1
-        assert reloaded[0]["case_id"] == "c1"
+        assert len(reloaded["cases"]) == 1
+        assert reloaded["cases"][0]["case_id"] == "c1"
 
     def test_invalid_json_returns_error(self, run_dir):
         from testcase_agent.review_pipeline.artifacts.io import read_json

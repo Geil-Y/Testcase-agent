@@ -156,10 +156,10 @@ class TestExtractedTestBasisSchema:
         )
 
         path = run_dir / "generated_cases.json"
-        write_json(path, [c.model_dump() for c in case_set.cases])
+        write_json(path, case_set.model_dump())
         reloaded = read_json(path)
-        assert len(reloaded) == 1
-        assert reloaded[0]["case_id"] == "case-1"
+        assert len(reloaded["cases"]) == 1
+        assert reloaded["cases"][0]["case_id"] == "case-1"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
