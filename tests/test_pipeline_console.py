@@ -504,11 +504,13 @@ class TestRunDiscovery:
     def test_get_run_nonexistent(self):
         assert get_run("nonexistent_run_dir") is None
 
-    def test_old_style_runs_readable(self):
-        """Old-style run_NNN directories should be discovered."""
+    def test_old_style_runs_report_legacy_unsupported(self):
+        """Old-style run_NNN directories with legacy artifacts get legacy_unsupported status."""
         runs = discover_runs()
-        old_style = [r for r in runs if r.get("is_old_style")]
-        assert len(old_style) > 0, "Expected at least one old-style run_NNN directory"
+        old_style = [r for r in runs if r.get("is_legacy")]
+        assert len(old_style) > 0, "Expected at least one legacy run directory"
+        for r in old_style:
+            assert r.get("status") == "legacy_unsupported"
 
 
 class TestRunStatusInference:
@@ -518,41 +520,38 @@ class TestRunStatusInference:
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
         assert infer_run_status(tmp_path) == "new"
 
-    def test_clarification_ready(self, tmp_path):
+    def test_extraction_pending_review(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "clarification_review.json").write_text("{}")
-        assert infer_run_status(tmp_path) == "clarification_ready"
+        (tmp_path / "extracted_test_basis.json").write_text("{}")
+        assert infer_run_status(tmp_path) == "extraction_pending_review"
 
-    def test_clarification_blocked(self, tmp_path):
+    def test_extraction_blocked(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "clarified_test_basis.json").write_text(
-            json.dumps({"blocked": True})
+        (tmp_path / "extracted_test_basis.json").write_text("{}")
+        (tmp_path / "reviewed_extracted_test_basis.json").write_text(
+            json.dumps({"blocking_gaps": ["missing threshold"]})
         )
-        assert infer_run_status(tmp_path) == "clarification_blocked"
+        assert infer_run_status(tmp_path) == "extraction_blocked"
 
-    def test_intent_ready(self, tmp_path):
+    def test_intents_pending_review(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "clarification_review.json").write_text("{}")
-        (tmp_path / "clarified_test_basis.json").write_text(
-            json.dumps({"blocked": False})
-        )
-        (tmp_path / "case_intent_review.json").write_text("{}")
-        assert infer_run_status(tmp_path) == "intent_ready"
+        (tmp_path / "case_intents.json").write_text("{}")
+        assert infer_run_status(tmp_path) == "intents_pending_review"
 
-    def test_cases_ready_from_approved_plan(self, tmp_path):
+    def test_intents_reviewed(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "approved_case_plan.json").write_text("{}")
-        assert infer_run_status(tmp_path) == "cases_ready"
+        (tmp_path / "reviewed_case_intents.json").write_text("{}")
+        assert infer_run_status(tmp_path) == "intents_reviewed"
 
-    def test_cases_ready_from_generated(self, tmp_path):
+    def test_cases_pending_review(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
         (tmp_path / "generated_cases.json").write_text("{}")
-        assert infer_run_status(tmp_path) == "cases_ready"
+        assert infer_run_status(tmp_path) == "cases_pending_review"
 
-    def test_evaluated(self, tmp_path):
+    def test_cases_reviewed(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "evaluation_summary.json").write_text("{}")
-        assert infer_run_status(tmp_path) == "evaluated"
+        (tmp_path / "reviewed_cases.json").write_text("{}")
+        assert infer_run_status(tmp_path) == "cases_reviewed"
 
 
 class TestContentHashing:
@@ -592,11 +591,11 @@ class TestContentHashing:
 class TestDownstreamArtifacts:
     """Tests for downstream artifact identification."""
 
-    def test_clarification_review_downstream(self):
-        downstream = get_downstream_artifacts("clarification_review.json")
-        assert "clarified_test_basis.json" in downstream
-        assert "case_intent_review.json" in downstream
-        assert "approved_case_plan.json" in downstream
+    def test_extracted_test_basis_downstream(self):
+        downstream = get_downstream_artifacts("extracted_test_basis.json")
+        assert "reviewed_extracted_test_basis.json" in downstream
+        assert "case_intents.json" in downstream
+        assert "reviewed_case_intents.json" in downstream
         assert "generated_cases.json" in downstream
 
     def test_requirements_downstream_everything(self):
@@ -605,34 +604,33 @@ class TestDownstreamArtifacts:
 
     def test_generated_cases_downstream(self):
         downstream = get_downstream_artifacts("generated_cases.json")
-        assert "evaluation_summary.json" in downstream
-        assert "evaluation_results.json" in downstream
+        assert "reviewed_cases.json" in downstream
 
     def test_artifacts_to_archive_only_existing(self, tmp_path):
         write_run_input(tmp_path, REQUIREMENT_FIXTURE)
-        (tmp_path / "clarification_review.json").write_text("{}")
-        (tmp_path / "clarified_test_basis.json").write_text(
-            json.dumps({"blocked": False})
+        (tmp_path / "extracted_test_basis.json").write_text("{}")
+        (tmp_path / "reviewed_extracted_test_basis.json").write_text(
+            json.dumps({"blocking_gaps": []})
         )
-        to_archive = artifacts_to_archive("clarification_review.json", tmp_path)
-        assert "clarified_test_basis.json" in to_archive
-        assert "evaluation_results.json" not in to_archive  # doesn't exist
+        to_archive = artifacts_to_archive("extracted_test_basis.json", tmp_path)
+        assert "reviewed_extracted_test_basis.json" in to_archive
+        assert "reviewed_cases.json" not in to_archive  # doesn't exist
 
 
 class TestArchive:
     """Tests for artifact archival."""
 
     def test_archive_artifacts_moves_files(self, tmp_path):
-        (tmp_path / "case_intent_review.json").write_text(json.dumps({"intent": "test"}))
-        (tmp_path / "approved_case_plan.json").write_text(json.dumps({"plan": "test"}))
+        (tmp_path / "case_intents.json").write_text(json.dumps({"intent": "test"}))
+        (tmp_path / "reviewed_case_intents.json").write_text(json.dumps({"plan": "test"}))
 
         archived = archive_artifacts(
             tmp_path,
-            ["case_intent_review.json", "approved_case_plan.json", "evaluation_summary.json"],
+            ["case_intents.json", "reviewed_case_intents.json", "reviewed_cases.json"],
         )
         assert len(archived) == 2  # only 2 existed
-        assert not (tmp_path / "case_intent_review.json").exists()
-        assert not (tmp_path / "approved_case_plan.json").exists()
+        assert not (tmp_path / "case_intents.json").exists()
+        assert not (tmp_path / "reviewed_case_intents.json").exists()
 
     def test_archive_creates_timestamped_subdir(self, tmp_path):
         (tmp_path / "test.json").write_text("{}")
@@ -881,8 +879,8 @@ from src.testcase_agent.pipeline_console.workbench import (
 class TestEndToEndHappyPath:
     """Verify the complete happy path through import, run, review, and results."""
 
-    def test_full_api_flow_import_to_results(self, client, sample_xlsx):
-        """Import → start run → load review → save draft → advance → view results."""
+    def test_full_api_flow_import_to_cases(self, client, sample_xlsx):
+        """Import -> list requirements -> list runs -> mode -> jobs idle -> cases."""
         # 1. Import
         with open(sample_xlsx, "rb") as f:
             preview_r = client.post(
@@ -907,16 +905,14 @@ class TestEndToEndHappyPath:
         assert r.status_code == 200
         reqs = r.json()["requirements"]
         assert len(reqs) >= 1
-        first_key = reqs[0]["requirement_key"]
 
         # 3. List runs
         r = client.get("/api/v1/console/runs")
         assert r.status_code == 200
 
-        # 4. Reason codes available
-        r = client.get("/api/v1/console/reason-codes?review_type=clarification")
-        assert r.status_code == 200
-        assert len(r.json()["decisions"]) >= 4
+        # 4. Extraction endpoint exists (404 for nonexistent run is expected)
+        r = client.get("/api/v1/console/runs/nonexistent/extraction")
+        assert r.status_code == 404
 
         # 5. Job status idle
         r = client.get("/api/v1/console/jobs/current")
@@ -939,28 +935,24 @@ class TestEndToEndHappyPath:
 
 
 class TestBlockedPath:
-    """Verify the blocked Clarification Review path."""
+    """Verify the blocked Extraction review path."""
 
-    def test_advance_returns_blocked_state(self, tmp_path):
-        """When clarified_test_basis has blocked=True, advance reports blocked."""
+    def test_extraction_review_reports_blocking_gaps(self, tmp_path):
+        """When an item is blocked in extraction review, save reports it."""
         run_dir = tmp_path / "blocked-run"
         run_dir.mkdir()
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "clarification_review.json").write_text(json.dumps({
-            "review_session_id": "block-test",
+        (run_dir / "extracted_test_basis.json").write_text(json.dumps({
             "requirement_key": "REQ-TEST-001",
-            "decomposition": {
-                "requirement_key": "REQ-TEST-001",
-                "facts": [],
-                "ambiguities": [
-                    {"item_id": "amb-1", "affected_text": "unsafe", "ambiguity_type": "critical", "recommended_review_decision": "block"},
+            "sections": {
+                "signals": [{"item_id": "f-1", "status": "known", "content": "Test fact", "need": "", "source_text": "test"}],
+                "thresholds": [
+                    {"item_id": "amb-1", "status": "needs_review", "content": "", "need": "unsafe threshold", "source_text": "test"},
                 ],
-                "clarification_questions": [],
-                "safe_generation_policy": {"can_generate": False},
+                "timing": [],
+                "states": [],
+                "observations": [],
             },
-            "decisions": [
-                {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
-            ],
         }))
 
         with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
@@ -969,26 +961,25 @@ class TestBlockedPath:
                 "run_path": str(run_dir),
                 "requirement_key": "REQ-TEST-001",
             }
-            # The advance should detect blocked state
-            result = save_and_advance_clarification("blocked-run", [
-                {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
+            result = save_extraction_review("blocked-run", [
+                {"item_id": "f-1", "section": "signals", "action": "accept"},
+                {"item_id": "amb-1", "section": "thresholds", "action": "block"},
             ])
-            assert result["validated"] is True
-            assert result["blocked"] is True
-            assert len(result["block_reasons"]) >= 1
+            assert result["saved"] is True
+            assert "item_count" in result
+            assert "blocking_gaps" in result
 
 
 class TestValidationErrors:
     """Verify validation errors are returned with field-level detail."""
 
     def test_validation_errors_have_structure(self):
-        """ValidationError dicts must have artifact_path, field_path, message."""
-        from src.testcase_agent.pipeline_console.workbench import _validation_error_to_dict
+        """ValidationError dataclass must have artifact_path, field_path, message."""
         from src.testcase_agent.review_pipeline.artifacts.validation import ValidationError
 
-        e = ValidationError(artifact_path="clarification_review.json", field_path="decisions.0.decision", message="Invalid decision")
-        d = _validation_error_to_dict(e)
-        assert d["artifact_path"] == "clarification_review.json"
+        e = ValidationError(artifact_path="extracted_test_basis.json", field_path="decisions.0.decision", message="Invalid decision")
+        d = {"artifact_path": e.artifact_path, "field_path": e.field_path, "message": e.message}
+        assert d["artifact_path"] == "extracted_test_basis.json"
         assert d["field_path"] == "decisions.0.decision"
         assert d["message"] == "Invalid decision"
 
@@ -1013,9 +1004,8 @@ class TestJobLockingCrossActions:
 
         routes = [
             ("POST", "/api/v1/console/runs/start"),
-            ("POST", "/api/v1/console/runs/test-run/clarification/advance"),
-            ("POST", "/api/v1/console/runs/test-run/intents/generate"),
-            ("POST", "/api/v1/console/runs/test-run/regenerate"),
+            ("POST", "/api/v1/console/runs/test-run/intents/plan"),
+            ("POST", "/api/v1/console/runs/test-run/cases/generate"),
         ]
 
         for method, route in routes:
@@ -1049,16 +1039,16 @@ class TestModeLabelingVisibility:
 class TestMemoryAdvisoryOnly:
     """Verify Review Memory remains advisory across the full workflow."""
 
-    def test_no_auto_import_on_advance(self):
-        """Advance functions must not call import_memory."""
+    def test_no_auto_import_on_extraction_review(self):
+        """Save extraction review must not call import_memory."""
         import inspect
-        src = inspect.getsource(save_and_advance_clarification)
+        src = inspect.getsource(save_extraction_review)
         assert "import_memory" not in src
 
     def test_no_auto_import_on_generate(self):
-        """Generate functions must not call import_memory."""
+        """Generate cases must not call import_memory."""
         import inspect
-        src = inspect.getsource(save_and_generate_cases)
+        src = inspect.getsource(generate_and_load_cases)
         assert "import_memory" not in src
 
 
@@ -1114,53 +1104,36 @@ class TestStartRunAPI:
         assert r.status_code == 400
 
 
-class TestClarificationWorkbench:
-    """Tests for the Clarification Review workbench functions."""
+class TestExtractionWorkbench:
+    """Tests for the Extraction Review workbench functions."""
 
-    def _make_review_data(self, run_dir: Path) -> None:
-        """Write a minimal clarification_review.json for testing."""
+    def _make_extraction_data(self, run_dir: Path) -> None:
+        """Write a minimal extracted_test_basis.json for testing."""
         data = {
-            "review_session_id": "test-session",
             "requirement_key": "REQ-TEST-001",
-            "decomposition": {
-                "requirement_key": "REQ-TEST-001",
-                "facts": [
-                    {"item_id": "fact-1", "fact_text": "Test fact", "confidence": 1.0}
+            "sections": {
+                "signals": [
+                    {"item_id": "f-1", "status": "known", "content": "Test fact", "need": "", "source_text": "test"}
                 ],
-                "ambiguities": [
-                    {
-                        "item_id": "amb-1",
-                        "affected_text": "voltage threshold",
-                        "ambiguity_type": "missing_threshold",
-                        "recommended_review_decision": "mark_needs_review",
-                    }
+                "thresholds": [
+                    {"item_id": "amb-1", "status": "needs_review", "content": "", "need": "voltage threshold missing", "source_text": "test"}
                 ],
-                "clarification_questions": [],
-                "safe_generation_policy": {"can_generate": True},
+                "timing": [],
+                "states": [],
+                "observations": [],
             },
-            "decisions": [
-                {
-                    "item_id": "amb-1",
-                    "decision": "",
-                    "reason_codes": [],
-                    "reason_text": "",
-                    "clarified_value": "",
-                }
-            ],
         }
-        (run_dir / "clarification_review.json").write_text(
+        (run_dir / "extracted_test_basis.json").write_text(
             json.dumps(data, ensure_ascii=False, indent=2)
         )
 
-    def test_save_draft_persists_decisions(self, tmp_path):
+    def test_save_extraction_review_persists(self, tmp_path):
         run_dir = tmp_path / "test_run"
         run_dir.mkdir()
 
-        # Write a minimal run with requirements
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        self._make_review_data(run_dir)
+        self._make_extraction_data(run_dir)
 
-        # Mock get_run to return our temp path
         with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_get_run:
             mock_get_run.return_value = {
                 "run_dir": "test_run",
@@ -1168,25 +1141,21 @@ class TestClarificationWorkbench:
                 "requirement_key": "REQ-TEST-001",
             }
 
-            result = save_clarification_draft("test_run", [
-                {
-                    "item_id": "amb-1",
-                    "decision": "mark_needs_review",
-                    "reason_codes": ["missing_threshold"],
-                    "reason_text": "Threshold not specified",
-                }
+            result = save_extraction_review("test_run", [
+                {"item_id": "f-1", "section": "signals", "action": "accept"},
+                {"item_id": "amb-1", "section": "thresholds", "action": "accept"},
             ])
 
             assert result["saved"] is True
 
-            # Verify file was updated
-            saved_data = json.loads((run_dir / "clarification_review.json").read_text())
-            assert saved_data["decisions"][0]["decision"] == "mark_needs_review"
-            assert saved_data["decisions"][0]["reason_codes"] == ["missing_threshold"]
+            # Verify reviewed file was written
+            assert (run_dir / "reviewed_extracted_test_basis.json").exists()
+            saved_data = json.loads((run_dir / "reviewed_extracted_test_basis.json").read_text())
+            assert len(saved_data["sections"]["signals"]) == 1
 
-    def test_save_draft_run_not_found(self):
+    def test_save_extraction_review_run_not_found(self):
         with pytest.raises(ValueError, match="not found"):
-            save_clarification_draft("nonexistent-run", [])
+            save_extraction_review("nonexistent-run", [])
 
 
 class TestWorkbenchAPIs:
@@ -1208,29 +1177,29 @@ class TestWorkbenchAPIs:
         assert "runs" in data
         assert isinstance(data["runs"], list)
 
-    def test_get_clarification_not_found(self, client):
-        r = client.get("/api/v1/console/runs/nonexistent/clarification")
+    def test_get_extraction_not_found(self, client):
+        r = client.get("/api/v1/console/runs/nonexistent/extraction")
         assert r.status_code == 404
 
-    def test_save_draft_requires_run(self, client):
+    def test_save_extraction_review_requires_run(self, client):
         """When no job is running, nonexistent run returns 404."""
         get_job_runner().clear()
         r = client.post(
-            "/api/v1/console/runs/nonexistent/clarification/draft",
-            json={"decisions": []},
+            "/api/v1/console/runs/nonexistent/extraction/review",
+            json={"actions": []},
         )
         assert r.status_code == 404
 
-    def test_advance_requires_run(self, client):
+    def test_plan_intents_requires_run(self, client):
         """When no job is running, nonexistent run returns 404."""
         get_job_runner().clear()
         r = client.post(
-            "/api/v1/console/runs/nonexistent/clarification/advance",
-            json={"decisions": []},
+            "/api/v1/console/runs/nonexistent/intents/plan",
+            json={},
         )
         assert r.status_code == 404
 
-    def test_save_draft_blocked_by_job(self, client):
+    def test_save_extraction_blocked_by_job(self, client):
         runner = get_job_runner()
         job = runner.create_job("blocking-edit")
         started = threading.Event()
@@ -1245,15 +1214,15 @@ class TestWorkbenchAPIs:
         started.wait(timeout=5)
 
         r = client.post(
-            "/api/v1/console/runs/test-run/clarification/draft",
-            json={"decisions": []},
+            "/api/v1/console/runs/test-run/extraction/review",
+            json={"actions": []},
         )
         assert r.status_code == 409
 
         job._thread.join(timeout=5)
         runner.clear()
 
-    def test_advance_blocked_by_job(self, client):
+    def test_plan_intents_blocked_by_job(self, client):
         runner = get_job_runner()
         job = runner.create_job("blocking-advance")
         started = threading.Event()
@@ -1268,374 +1237,13 @@ class TestWorkbenchAPIs:
         started.wait(timeout=5)
 
         r = client.post(
-            "/api/v1/console/runs/test-run/clarification/advance",
-            json={"decisions": []},
-        )
-        assert r.status_code == 409
-
-        job._thread.join(timeout=5)
-        runner.clear()
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Issue #6: Review Workbench ergonomics and controlled inputs
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestReasonCodesAPI:
-    """Tests for the reason codes endpoint."""
-
-    def test_get_reason_codes_clarification(self, client):
-        r = client.get("/api/v1/console/reason-codes?review_type=clarification")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["review_type"] == "clarification"
-        assert "approve" in data["decisions"]
-        assert "block" in data["decisions"]
-        assert "clarify" in data["decisions"]
-        assert "mark_needs_review" in data["decisions"]
-        assert "edit" in data["decisions"]
-        assert len(data["reason_codes"]) > 0
-        assert "approve" in data["decision_requirements"]
-        assert data["decision_requirements"]["block"]["require_reason_text"] is True
-
-    def test_get_reason_codes_case_intent(self, client):
-        r = client.get("/api/v1/console/reason-codes?review_type=case_intent")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["review_type"] == "case_intent"
-        assert "reject" in data["decisions"]
-        assert "defer" in data["decisions"]
-        assert "revise" in data["decisions"]
-
-    def test_get_reason_codes_unknown_type(self, client):
-        r = client.get("/api/v1/console/reason-codes?review_type=invalid")
-        assert r.status_code == 400
-
-
-class TestAcceptRecommendations:
-    """Tests for Accept All Recommendations behavior."""
-
-    def _setup_review_with_ambiguities(self, run_dir: Path) -> None:
-        """Create a run with clarification_review.json for testing."""
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        data = {
-            "review_session_id": "test-session-acc",
-            "requirement_key": "REQ-TEST-001",
-            "decomposition": {
-                "requirement_key": "REQ-TEST-001",
-                "facts": [],
-                "ambiguities": [
-                    {
-                        "item_id": "amb-1",
-                        "affected_text": "voltage threshold",
-                        "ambiguity_type": "missing_threshold",
-                        "recommended_review_decision": "mark_needs_review",
-                        "confidence_drivers": {"overall": 0.80},
-                    },
-                    {
-                        "item_id": "amb-2",
-                        "affected_text": "timing spec missing",
-                        "ambiguity_type": "missing_timing",
-                        "recommended_review_decision": "clarify",
-                        "confidence_drivers": {"overall": 0.50},
-                    },
-                    {
-                        "item_id": "amb-3",
-                        "affected_text": "state unclear",
-                        "ambiguity_type": "ambiguous_state",
-                        "recommended_review_decision": "approve",
-                        "confidence_drivers": {"overall": 0.90},
-                    },
-                ],
-                "clarification_questions": [],
-                "safe_generation_policy": {"can_generate": True},
-            },
-            "decisions": [
-                {"item_id": "amb-1", "decision": "", "reason_codes": [], "reason_text": ""},
-                {"item_id": "amb-2", "decision": "", "reason_codes": [], "reason_text": ""},
-                {"item_id": "amb-3", "decision": "", "reason_codes": [], "reason_text": ""},
-            ],
-        }
-        (run_dir / "clarification_review.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2)
-        )
-
-    def test_accept_recommendations_fills_pending(self, tmp_path):
-        self._setup_review_with_ambiguities(tmp_path)
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
-
-            result = accept_all_recommendations("test-run", {})
-
-            assert result["saved"] is False
-            assert result["filled"] >= 1
-            assert result["requires_confirmation"] is True
-            assert result["high_risk_skipped"] >= 1
-            assert "amb-2" in result["high_risk_items"]
-            # Verify artifact was NOT mutated
-            saved = json.loads((tmp_path / "clarification_review.json").read_text())
-            assert saved["decisions"][0]["decision"] == ""  # unchanged
-
-    def test_accept_recommendations_force_confirm(self, tmp_path):
-        self._setup_review_with_ambiguities(tmp_path)
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
-
-            result = accept_all_recommendations("test-run", {"confirm_high_risk": True})
-
-            assert result["saved"] is False
-            assert result["requires_confirmation"] is False
-            assert result["filled"] == 3
-            assert len(result["proposed_decisions"]) == 3
-            assert result["high_risk_accepted"] >= 1
-            # Verify artifact was NOT mutated
-            saved = json.loads((tmp_path / "clarification_review.json").read_text())
-            assert saved["decisions"][0]["decision"] == ""
-
-    def test_accept_recommendations_skips_already_decided(self, tmp_path):
-        """Decisions already set should not be overwritten."""
-        self._setup_review_with_ambiguities(tmp_path)
-        # Pre-set amb-1 decision
-        data = json.loads((tmp_path / "clarification_review.json").read_text())
-        data["decisions"][0]["decision"] = "block"
-        (tmp_path / "clarification_review.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2)
-        )
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import accept_all_recommendations
-
-            result = accept_all_recommendations("test-run", {"confirm_high_risk": True})
-            assert result["saved"] is False
-            assert result["filled"] == 2  # amb-1 already decided, amb-2/3 filled
-
-    def test_accept_recommendations_nonexistent_run(self, client):
-        get_job_runner().clear()
-        r = client.post(
-            "/api/v1/console/runs/nonexistent/clarification/accept-recommendations",
-            json={},
-        )
-        assert r.status_code == 404
-
-    def test_accept_recommendations_blocked_by_job(self, client):
-        runner = get_job_runner()
-        job = runner.create_job("blocking-accept")
-        started = threading.Event()
-
-        def slow_work():
-            started.set()
-            import time
-            time.sleep(2)
-            return "done"
-
-        runner.start_job(job, slow_work)
-        started.wait(timeout=5)
-
-        r = client.post(
-            "/api/v1/console/runs/test-run/clarification/accept-recommendations",
+            "/api/v1/console/runs/test-run/intents/plan",
             json={},
         )
         assert r.status_code == 409
 
         job._thread.join(timeout=5)
         runner.clear()
-
-
-class TestFilteredClarification:
-    """Tests for filtering, sorting, and search on clarification review."""
-
-    def _setup_filtered_review(self, run_dir: Path) -> None:
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        data = {
-            "review_session_id": "filtered-session",
-            "requirement_key": "REQ-TEST-001",
-            "decomposition": {
-                "requirement_key": "REQ-TEST-001",
-                "facts": [],
-                "ambiguities": [
-                    {
-                        "item_id": "amb-1",
-                        "affected_text": "voltage",
-                        "ambiguity_type": "missing_threshold",
-                        "recommended_review_decision": "mark_needs_review",
-                        "confidence_drivers": {"overall": 0.90},
-                    },
-                    {
-                        "item_id": "amb-2",
-                        "affected_text": "timing",
-                        "ambiguity_type": "missing_timing",
-                        "recommended_review_decision": "clarify",
-                        "confidence_drivers": {"overall": 0.30},
-                    },
-                    {
-                        "item_id": "amb-3",
-                        "affected_text": "signal",
-                        "ambiguity_type": "missing_signal",
-                        "recommended_review_decision": "approve",
-                        "confidence_drivers": {"overall": 0.70},
-                    },
-                ],
-                "clarification_questions": [],
-                "safe_generation_policy": {"can_generate": True},
-            },
-            "decisions": [
-                {"item_id": "amb-1", "decision": "mark_needs_review", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.90},
-                {"item_id": "amb-2", "decision": "", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.30},
-                {"item_id": "amb-3", "decision": "approve", "reason_codes": [], "reason_text": "", "confidence_before_review": 0.70},
-            ],
-        }
-        (run_dir / "clarification_review.json").write_text(
-            json.dumps(data, ensure_ascii=False, indent=2)
-        )
-
-    def test_filtered_endpoint_returns_enriched_data(self, tmp_path):
-        self._setup_filtered_review(tmp_path)
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
-                mock_load.return_value = {
-                    "run": mock_run.return_value,
-                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
-                }
-                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
-
-                result = get_filtered_clarification("test-run")
-                assert result["total"] == 3
-                assert "routing_color" in result["review"]["decisions"][0]
-
-    def test_filtered_by_decision(self, tmp_path):
-        self._setup_filtered_review(tmp_path)
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
-                mock_load.return_value = {
-                    "run": mock_run.return_value,
-                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
-                }
-                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
-
-                result = get_filtered_clarification("test-run", decision_filter="approve")
-                assert result["total"] == 1
-                assert result["review"]["decisions"][0]["item_id"] == "amb-3"
-
-    def test_filtered_by_routing(self, tmp_path):
-        self._setup_filtered_review(tmp_path)
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
-                mock_load.return_value = {
-                    "run": mock_run.return_value,
-                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
-                }
-                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
-
-                result = get_filtered_clarification("test-run", routing_filter="red")
-                assert result["total"] == 1
-                assert result["review"]["decisions"][0]["routing_color"] == "red"
-
-    def test_filtered_by_search(self, tmp_path):
-        self._setup_filtered_review(tmp_path)
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
-                mock_load.return_value = {
-                    "run": mock_run.return_value,
-                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
-                }
-                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
-
-                result = get_filtered_clarification("test-run", search="timing")
-                assert result["total"] >= 1
-
-    def test_priority_sort_pending_first(self, tmp_path):
-        self._setup_filtered_review(tmp_path)
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": str(tmp_path),
-                "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.pipeline_console.router.load_clarification_review") as mock_load:
-                mock_load.return_value = {
-                    "run": mock_run.return_value,
-                    "review": json.loads((tmp_path / "clarification_review.json").read_text()),
-                }
-                from src.testcase_agent.pipeline_console.router import get_filtered_clarification
-
-                result = get_filtered_clarification("test-run", sort="priority")
-                decisions = result["review"]["decisions"]
-                assert decisions[0]["item_id"] == "amb-2"
-                assert decisions[0]["decision"] == ""
-
-    def test_filtered_endpoint_nonexistent_run(self, client):
-        get_job_runner().clear()
-        r = client.get("/api/v1/console/runs/nonexistent/clarification/filtered")
-        assert r.status_code == 404
-
-
-class TestMemoryHints:
-    """Tests for advisory Review Memory hints."""
-
-    def test_memory_hints_endpoint_returns_advisory(self, client):
-        get_job_runner().clear()
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": "/tmp/test-run",
-                "requirement_key": "REQ-TEST-001",
-            }
-            r = client.get("/api/v1/console/runs/test-run/memory-hints")
-            assert r.status_code == 200
-            data = r.json()
-            assert data["run"] == "test-run"
-            assert isinstance(data["hints"], list)
-            assert "advisory" in data["advisory_note"].lower()
-
-    def test_memory_hints_nonexistent_run(self, client):
-        get_job_runner().clear()
-        r = client.get("/api/v1/console/runs/nonexistent/memory-hints")
-        assert r.status_code == 404
-
-    def test_memory_hints_are_read_only(self, client):
-        """GET only; hints are advisory and never mutate review artifacts."""
-        r = client.post("/api/v1/console/runs/test-run/memory-hints", json={})
-        assert r.status_code in (404, 405)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1646,41 +1254,28 @@ class TestMemoryHints:
 class TestIntentWorkbench:
     """Tests for Case Intent Review workbench functions."""
 
-    def _make_intent_review_data(self, run_dir: Path) -> None:
+    def _make_intent_data(self, run_dir: Path) -> None:
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "case_intent_review.json").write_text(json.dumps({
-            "review_session_id": "intent-session",
+        (run_dir / "case_intents.json").write_text(json.dumps({
             "requirement_key": "REQ-TEST-001",
-            "plan": {
-                "intents": [
-                    {
-                        "intent_id": "intent-1",
-                        "coverage_dimension": "normal_behavior",
-                        "intent_text": "Verify normal voltage behavior",
-                        "confidence_score": 0.90,
-                        "routing_color": "green",
-                        "recommended_review_decision": "approve",
-                    },
-                    {
-                        "intent_id": "intent-2",
-                        "coverage_dimension": "fault_or_protection",
-                        "intent_text": "Verify over-voltage fault response",
-                        "confidence_score": 0.55,
-                        "routing_color": "orange",
-                        "recommended_review_decision": "revise",
-                    },
-                ],
-            },
-            "decisions": [
-                {"intent_id": "intent-1", "decision": "", "reason_codes": [], "reason_text": "", "revised_intent_text": "", "merge_target_id": "", "split_children": []},
-                {"intent_id": "intent-2", "decision": "", "reason_codes": [], "reason_text": "", "revised_intent_text": "", "merge_target_id": "", "split_children": []},
+            "intents": [
+                {
+                    "intent_id": "intent-1",
+                    "coverage_dimension": "normal_behavior",
+                    "intent_text": "Verify normal voltage behavior",
+                },
+                {
+                    "intent_id": "intent-2",
+                    "coverage_dimension": "fault_or_protection",
+                    "intent_text": "Verify over-voltage fault response",
+                },
             ],
         }))
 
-    def test_save_intent_draft_persists(self, tmp_path):
+    def test_save_intent_review_persists(self, tmp_path):
         run_dir = tmp_path / "intent_run"
         run_dir.mkdir()
-        self._make_intent_review_data(run_dir)
+        self._make_intent_data(run_dir)
 
         with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
             mock_run.return_value = {
@@ -1688,15 +1283,14 @@ class TestIntentWorkbench:
                 "run_path": str(run_dir),
                 "requirement_key": "REQ-TEST-001",
             }
-            result = save_intent_draft("intent_run", [
-                {"intent_id": "intent-1", "decision": "approve", "reason_codes": [], "reason_text": "Good"},
-                {"intent_id": "intent-2", "decision": "reject", "reason_codes": ["too_broad_to_verify"], "reason_text": "Too broad"},
+            result = save_intent_review("intent_run", [
+                {"intent_id": "intent-1", "action": "accept"},
+                {"intent_id": "intent-2", "action": "block"},
             ])
             assert result["saved"] is True
 
-            data = json.loads((run_dir / "case_intent_review.json").read_text())
-            assert data["decisions"][0]["decision"] == "approve"
-            assert data["decisions"][1]["decision"] == "reject"
+            # Verify reviewed file was written
+            assert (run_dir / "reviewed_case_intents.json").exists()
 
 
 class TestIntentAPIs:
@@ -1707,17 +1301,17 @@ class TestIntentAPIs:
         r = client.get("/api/v1/console/runs/nonexistent/intents")
         assert r.status_code == 404
 
-    def test_save_intent_draft_requires_run(self, client):
+    def test_save_intent_review_requires_run(self, client):
         get_job_runner().clear()
-        r = client.post("/api/v1/console/runs/nonexistent/intents/draft", json={"decisions": []})
+        r = client.post("/api/v1/console/runs/nonexistent/intents/review", json={"actions": []})
         assert r.status_code == 404
 
-    def test_generate_requires_run(self, client):
+    def test_plan_requires_run(self, client):
         get_job_runner().clear()
-        r = client.post("/api/v1/console/runs/nonexistent/intents/generate", json={"decisions": []})
+        r = client.post("/api/v1/console/runs/nonexistent/intents/plan", json={})
         assert r.status_code == 404
 
-    def test_intent_draft_blocked_by_job(self, client):
+    def test_intent_review_blocked_by_job(self, client):
         runner = get_job_runner()
         job = runner.create_job("blocking-intent")
         started = threading.Event()
@@ -1729,13 +1323,13 @@ class TestIntentAPIs:
         runner.start_job(job, slow_work)
         started.wait(timeout=5)
 
-        r = client.post("/api/v1/console/runs/test-run/intents/draft", json={"decisions": []})
+        r = client.post("/api/v1/console/runs/test-run/intents/review", json={"actions": []})
         assert r.status_code == 409
 
         job._thread.join(timeout=5)
         runner.clear()
 
-    def test_generate_blocked_by_job(self, client):
+    def test_plan_blocked_by_job(self, client):
         runner = get_job_runner()
         job = runner.create_job("blocking-gen")
         started = threading.Event()
@@ -1747,7 +1341,7 @@ class TestIntentAPIs:
         runner.start_job(job, slow_work)
         started.wait(timeout=5)
 
-        r = client.post("/api/v1/console/runs/test-run/intents/generate", json={"decisions": []})
+        r = client.post("/api/v1/console/runs/test-run/intents/plan", json={})
         assert r.status_code == 409
 
         job._thread.join(timeout=5)
@@ -1760,16 +1354,15 @@ class TestIntentAPIs:
 
 
 class TestResults:
-    """Tests for read-only results endpoint."""
+    """Tests for read-only cases/results endpoint."""
 
-    def test_results_endpoint_returns_cases_read_only(self, tmp_path):
+    def test_cases_endpoint_returns_read_only(self, tmp_path):
         run_dir = tmp_path / "results-run"
         run_dir.mkdir()
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
         (run_dir / "generated_cases.json").write_text(json.dumps([
             {"case_id": "C-1", "title": "Test case", "objective": "Verify voltage"},
         ]))
-        (run_dir / "evaluation_summary.json").write_text(json.dumps({"passed": 1, "failed": 0}))
 
         from src.testcase_agent.pipeline_console.router import get_results
         with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
@@ -1781,15 +1374,14 @@ class TestResults:
             result = get_results("results-run")
             assert result["read_only"] is True
             assert len(result["cases"]) == 1
-            assert result["evaluation"]["passed"] == 1
 
-    def test_results_endpoint_nonexistent_run(self, client):
-        r = client.get("/api/v1/console/runs/nonexistent/results")
+    def test_cases_endpoint_nonexistent_run(self, client):
+        r = client.get("/api/v1/console/runs/nonexistent/cases")
         assert r.status_code == 404
 
-    def test_results_are_read_only(self, client):
-        """POST/PUT should not be allowed on results."""
-        r = client.post("/api/v1/console/runs/test-run/results", json={})
+    def test_cases_endpoint_read_only(self, client):
+        """POST should not be allowed on cases endpoint."""
+        r = client.post("/api/v1/console/runs/test-run/cases", json={})
         assert r.status_code in (404, 405)
 
 
@@ -1898,267 +1490,13 @@ class TestMemoryImport:
 
     def test_import_memory_not_automatic(self):
         """Review Memory import is an explicit POST endpoint only."""
-        # There is no auto-import in save, advance, or generate flows
+        # There is no auto-import in save, accept, or generate flows
         import inspect
         from src.testcase_agent.pipeline_console import workbench
-        save_src = inspect.getsource(workbench.save_clarification_draft)
+        save_src = inspect.getsource(workbench.save_extraction_review)
         assert "import_memory" not in save_src
-        advance_src = inspect.getsource(workbench.save_and_advance_clarification)
-        assert "import_memory" not in advance_src
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Issue #8: Regeneration and downstream artifact reuse
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestRegenerate:
-    """Tests for regenerate confirmation, archival, and job execution."""
-
-    def test_regenerate_no_confirmation_lists_artifacts(self, tmp_path):
-        run_dir = tmp_path / "regen-run"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "clarification_review.json").write_text(json.dumps({"review": "test"}))
-        (run_dir / "clarified_test_basis.json").write_text(json.dumps({"blocked": False}))
-        (run_dir / "case_intent_review.json").write_text(json.dumps({"intents": "test"}))
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-run",
-                "run_path": str(run_dir),
-                "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import regenerate_route
-
-            result = regenerate_route("regen-run", {"stage": "clarification"})
-            assert result["confirmation_required"] is True
-            assert "clarified_test_basis.json" in result["affected_artifacts"]
-            assert "case_intent_review.json" in result["affected_artifacts"]
-
-    def test_regenerate_confirm_archives_and_starts_job(self, tmp_path):
-        run_dir = tmp_path / "regen-confirm"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "clarification_review.json").write_text(json.dumps({"review": "test"}))
-        (run_dir / "case_intent_review.json").write_text(json.dumps({"intents": "old"}))
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-confirm",
-                "run_path": str(run_dir),
-                "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import regenerate_route
-
-            result = regenerate_route(
-                "regen-confirm",
-                {"stage": "clarification", "confirm": True},
-            )
-            assert result["status"] == "started"
-            assert "archived" in result
-            assert not (run_dir / "case_intent_review.json").exists()
-
-            # Wait for job to complete so it doesn't leak
-            job_dict = result.get("job", {})
-            if job_dict:
-                runner = get_job_runner()
-                # Let the regenerate job finish
-                import time as _t
-                _t.sleep(0.5)
-                runner.clear()
-
-    def test_regenerate_blocked_by_job(self, client):
-        runner = get_job_runner()
-        job = runner.create_job("blocking-regen")
-        started = threading.Event()
-        def slow_work():
-            started.set()
-            import time
-            time.sleep(2)
-            return "done"
-        runner.start_job(job, slow_work)
-        started.wait(timeout=5)
-
-        r = client.post(
-            "/api/v1/console/runs/test-run/regenerate",
-            json={"stage": "clarification"},
-        )
-        assert r.status_code == 409
-
-        job._thread.join(timeout=5)
-        runner.clear()
-
-    def test_regenerate_unknown_stage(self, client):
-        get_job_runner().clear()
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "test-run",
-                "run_path": "/tmp/test-run",
-                "requirement_key": "REQ-TEST-001",
-            }
-            r = client.post(
-                "/api/v1/console/runs/test-run/regenerate",
-                json={"stage": "invalid"},
-            )
-        assert r.status_code == 400
-
-    def test_regenerate_nonexistent_run(self, client):
-        get_job_runner().clear()
-        r = client.post(
-            "/api/v1/console/runs/nonexistent/regenerate",
-            json={"stage": "clarification"},
-        )
-        assert r.status_code == 404
-
-    def _make_valid_clarification_review(self, run_dir: Path, decisions: list[dict] | None = None) -> None:
-        """Write a clarification_review.json with valid approve decisions."""
-        if decisions is None:
-            decisions = [
-                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""},
-            ]
-        data = {
-            "review_session_id": "regen-session",
-            "requirement_key": "REQ-TEST-001",
-            "decomposition": {
-                "requirement_key": "REQ-TEST-001",
-                "facts": [{"item_id": "f-1", "fact_text": "Fact", "confidence": 1.0}],
-                "ambiguities": [
-                    {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
-                     "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}},
-                ],
-                "clarification_questions": [],
-                "safe_generation_policy": {"can_generate": True},
-            },
-            "decisions": decisions,
-        }
-        (run_dir / "clarification_review.json").write_text(json.dumps(data))
-
-    def test_regenerate_clarification_succeeds(self, tmp_path):
-        """Regenerate clarification must reach succeeded, produce artifacts, archive old ones."""
-        run_dir = tmp_path / "regen-success"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        self._make_valid_clarification_review(run_dir)
-        (run_dir / "case_intent_review.json").write_text(json.dumps({"old": True}))
-
-        runner = get_job_runner()
-        runner.clear()
-
-        def fake_prepare(run_dir_str, **kwargs):
-            Path(run_dir_str, "case_intent_review.json").write_text('{"intents":"regenerated"}')
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-success", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
-            }
-            with patch("src.testcase_agent.review_pipeline.stages.plan_case_intents.prepare_intent_review", side_effect=fake_prepare):
-                from src.testcase_agent.pipeline_console.router import regenerate_route
-                result = regenerate_route("regen-success", {"stage": "clarification", "confirm": True})
-                assert result["status"] == "started"
-
-                import time as _t
-                for _ in range(20):
-                    j = runner.get_job()
-                    if j and j["status"] in ("succeeded", "failed"):
-                        break
-                    _t.sleep(0.3)
-
-        final = runner.get_job()
-        assert final is not None
-        assert final["status"] == "succeeded", f"Job failed: {final.get('error', '')}"
-
-        assert (run_dir / "clarified_test_basis.json").exists(), "clarified_test_basis.json should exist"
-        assert (run_dir / "case_intent_review.json").exists(), "case_intent_review.json should exist"
-
-        archived_dir = run_dir / "archived"
-        assert archived_dir.exists()
-        ts_dirs = list(archived_dir.iterdir())
-        assert len(ts_dirs) >= 1
-        archived_files = [f.name for f in ts_dirs[0].iterdir() if f.is_file()]
-        assert "case_intent_review.json" in archived_files
-
-        runner.clear()
-
-    def test_regenerate_clarification_validation_failure(self, tmp_path):
-        """Regenerate with invalid decisions: job succeeds but result is validation_failed."""
-        run_dir = tmp_path / "regen-valfail"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        self._make_valid_clarification_review(run_dir, decisions=[
-            {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
-        ])
-
-        runner = get_job_runner()
-        runner.clear()
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-valfail", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import regenerate_route
-
-            result = regenerate_route("regen-valfail", {"stage": "clarification", "confirm": True})
-            import time as _t
-            for _ in range(20):
-                j = runner.get_job()
-                if j and j["status"] in ("succeeded", "failed"):
-                    break
-                _t.sleep(0.3)
-
-        final = runner.get_job()
-        assert final["status"] == "succeeded"  # job completed
-        # The result dict is stored in the Job's result field
-        assert final.get("has_result") is True
-        runner.clear()
-
-    def test_regenerate_clarification_blocked(self, tmp_path):
-        """Regenerate with block decision: job succeeds but result status is blocked."""
-        run_dir = tmp_path / "regen-blocked"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        self._make_valid_clarification_review(run_dir, decisions=[
-            {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Block reason here"},
-        ])
-
-        runner = get_job_runner()
-        runner.clear()
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-blocked", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import regenerate_route
-
-            result = regenerate_route("regen-blocked", {"stage": "clarification", "confirm": True})
-            import time as _t
-            for _ in range(20):
-                j = runner.get_job()
-                if j and j["status"] in ("succeeded", "failed"):
-                    break
-                _t.sleep(0.3)
-
-        final = runner.get_job()
-        assert final["status"] == "succeeded"
-        assert final.get("has_result") is True
-        runner.clear()
-
-    def test_regenerate_missing_upstream_artifact(self, tmp_path):
-        """Regenerate with missing upstream artifact returns 404."""
-        run_dir = tmp_path / "regen-missing"
-        run_dir.mkdir()
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "regen-missing", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
-            }
-            from src.testcase_agent.pipeline_console.router import regenerate_route
-            from fastapi.responses import JSONResponse
-
-            result = regenerate_route("regen-missing", {"stage": "clarification"})
-            assert isinstance(result, JSONResponse)
-            assert result.status_code == 404
+        accept_src = inspect.getsource(workbench.accept_extraction_all)
+        assert "import_memory" not in accept_src
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -2216,199 +1554,102 @@ class TestJobResultExposure:
 
 
 class TestWorkbenchResultShapes:
-    """Workbench returns must have status field matching frontend handleJobResult expectations."""
+    """Workbench returns must have expected fields for frontend integration."""
 
-    def _make_clarification_review(self, run_dir: Path, decisions: list[dict]):
+    def _make_extraction_data(self, run_dir: Path):
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "clarification_review.json").write_text(json.dumps({
-            "review_session_id": "shape-test", "requirement_key": "REQ-TEST-001",
-            "decomposition": {"requirement_key": "REQ-TEST-001", "facts": [], "ambiguities": [
-                {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
-                 "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}}
-            ], "clarification_questions": [], "safe_generation_policy": {"can_generate": True}},
-            "decisions": decisions,
+        (run_dir / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {
+                "signals": [
+                    {"item_id": "f-1", "status": "known", "content": "test", "need": "", "source_text": "test"}
+                ],
+                "thresholds": [
+                    {"item_id": "amb-1", "status": "needs_review", "content": "", "need": "voltage threshold", "source_text": "test"}
+                ],
+                "timing": [],
+                "states": [],
+                "observations": [],
+            },
         }))
 
-    def test_validation_failure_has_status_field(self, tmp_path):
-        """save_and_advance_clarification validation fail must return status:'validation_failed'"""
-        self._make_clarification_review(tmp_path, [
-            {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
-        ])
+    def test_save_extraction_review_has_saved_field(self, tmp_path):
+        """save_extraction_review returns saved, reviewed, item_count, blocking_gaps."""
+        self._make_extraction_data(tmp_path)
         with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
             mock_run.return_value = {"run_dir": "shape-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
-            result = save_and_advance_clarification("shape-run", [
-                {"item_id": "amb-1", "decision": "clarify", "reason_codes": [], "reason_text": "", "clarified_value": ""},
+            result = save_extraction_review("shape-run", [
+                {"item_id": "f-1", "section": "signals", "action": "accept"},
+                {"item_id": "amb-1", "section": "thresholds", "action": "accept"},
             ])
-            assert result["validated"] is False
-            assert result["status"] == "validation_failed"
-            assert len(result["errors"]) >= 1
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            assert "item_count" in result
+            assert "blocking_gaps" in result
 
-    def test_blocked_has_status_field(self, tmp_path):
-        """save_and_advance_clarification blocked must return status:'blocked'"""
-        self._make_clarification_review(tmp_path, [
-            {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
-        ])
+    def test_save_extraction_block_has_blocking_gaps(self, tmp_path):
+        """Blocking an item should produce blocking_gaps in the result."""
+        self._make_extraction_data(tmp_path)
         with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
             mock_run.return_value = {"run_dir": "shape-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001"}
-            result = save_and_advance_clarification("shape-run", [
-                {"item_id": "amb-1", "decision": "block", "reason_codes": ["unsupported_by_requirement"], "reason_text": "Cannot proceed"},
+            result = save_extraction_review("shape-run", [
+                {"item_id": "f-1", "section": "signals", "action": "accept"},
+                {"item_id": "amb-1", "section": "thresholds", "action": "block",
+                 "new_item": {"item_id": "block-1", "status": "needs_review", "need": "Cannot proceed: unclear trigger"}},
             ])
-            assert result["blocked"] is True
-            assert result["status"] == "blocked"
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            assert len(result.get("blocking_gaps", [])) >= 1
 
 
 class TestUnchangedUpstreamReuse:
-    """Save & Advance and Save & Generate should reuse when decisions hash unchanged."""
+    """Tests for upstream artifact reuse when acceptance is idempotent."""
 
-    def _make_clarification_review_for_reuse(self, run_dir: Path):
-        write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "clarification_review.json").write_text(json.dumps({
-            "review_session_id": "reuse", "requirement_key": "REQ-TEST-001",
-            "decomposition": {"requirement_key": "REQ-TEST-001", "facts": [], "ambiguities": [
-                {"item_id": "amb-1", "affected_text": "test", "ambiguity_type": "missing_threshold",
-                 "recommended_review_decision": "approve", "confidence_drivers": {"overall": 0.9}}
-            ], "clarification_questions": [], "safe_generation_policy": {"can_generate": True}},
-            "decisions": [{"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}]
-        }))
-
-    def test_advance_reuses_when_unchanged(self, tmp_path):
-        self._make_clarification_review_for_reuse(tmp_path)
-        # Pre-create downstream artifact and state file
-        (tmp_path / "case_intent_review.json").write_text('{"intents": "existing"}')
-        dec_hash = content_hash([{"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}])
-        (tmp_path / "_advance_state.json").write_text(json.dumps({"clarification_decisions_hash": dec_hash}))
-
-        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "reuse-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001",
-            }
-            result = save_and_advance_clarification("reuse-run", [
-                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
-            ])
-            assert result["reused"] is True
-            assert result.get("advanced_to") == "intent_ready"
-
-    def test_advance_does_not_reuse_when_changed(self, tmp_path):
-        self._make_clarification_review_for_reuse(tmp_path)
-        (tmp_path / "case_intent_review.json").write_text('{"intents": "existing"}')
-        # Different decisions hash
-        (tmp_path / "_advance_state.json").write_text(json.dumps({"clarification_decisions_hash": "old_different_hash"}))
-
-        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "reuse-run", "run_path": str(tmp_path), "requirement_key": "REQ-TEST-001",
-            }
-            result = save_and_advance_clarification("reuse-run", [
-                {"item_id": "amb-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
-            ])
-            # Should not reuse (different hash) → proceeds to validate
-            assert result.get("reused") is not True
-
-    def test_generate_reuses_when_unchanged(self, tmp_path):
-        """save_and_generate_cases reuses when intent decisions unchanged."""
-        run_dir = tmp_path / "gen-reuse"
+    def test_accept_extraction_all_creates_reviewed(self, tmp_path):
+        """accept_extraction_all writes reviewed_extracted_test_basis.json."""
+        run_dir = tmp_path / "accept-all-reuse"
         run_dir.mkdir()
         write_run_input(run_dir, REQUIREMENT_FIXTURE)
-        (run_dir / "case_intent_review.json").write_text(json.dumps({
-            "review_session_id": "gs", "requirement_key": "REQ-TEST-001",
-            "plan": {"intents": [{"intent_id": "i-1", "coverage_dimension": "normal_behavior", "intent_text": "test", "confidence_score": 0.9, "routing_color": "green", "recommended_review_decision": "approve"}]},
-            "decisions": [{"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}]
-        }))
-        (run_dir / "generated_cases.json").write_text('[{"case_id": "C-1", "title": "Existing case"}]')
-        dec_hash = content_hash([{"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}])
-        (run_dir / "_advance_state.json").write_text(json.dumps({"intent_decisions_hash": dec_hash}))
-
-        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
-            mock_run.return_value = {
-                "run_dir": "gen-reuse", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
-            }
-            result = save_and_generate_cases("gen-reuse", [
-                {"intent_id": "i-1", "decision": "approve", "reason_codes": [], "reason_text": ""}
-            ])
-            assert result["reused"] is True
-            assert result["case_count"] == 1
-
-
-class TestConsoleUIFixes:
-    """Verify behaviors previously checked via brittle HTML string probes.
-
-    These are now covered by API contract tests. Corresponding React component
-    tests in console-ui/src/ cover the UI rendering side.
-    """
-
-    def test_run_api_returns_string_run_dir(self, client):
-        """Run info uses string identifiers, never raw objects in URLs."""
-        runs = client.get("/api/v1/console/runs").json()
-        for r in runs.get("runs", []):
-            assert isinstance(r.get("run_dir"), str)
-
-    def test_regenerate_api_requires_confirmation(self, client):
-        """Regenerate without confirm returns confirmation_required."""
-        # No run exists, but the shape check is what matters
-        r = client.post("/api/v1/console/runs/nonexistent/regenerate", json={
-            "stage": "cases", "confirm": False,
-        })
-        # 404 is fine — we're testing the API contract shape, not the run
-        assert r.status_code in (200, 404)
-
-    def test_job_result_shape_has_expected_fields(self, client):
-        """Job status endpoint returns valid shape."""
-        r = client.get("/api/v1/console/jobs/current")
-        assert r.status_code == 200
-        data = r.json()
-        assert "status" in data
-
-    def test_validation_error_shape(self, tmp_path):
-        """Validation errors include artifact_path, field_path, and message."""
-        from src.testcase_agent.pipeline_console.workbench import _validation_error_to_dict
-        from src.testcase_agent.review_pipeline.artifacts.validation import ValidationError
-        err = ValidationError(
-            artifact_path="test.json",
-            field_path="decisions[0].decision",
-            message="Decision is required",
-        )
-        d = _validation_error_to_dict(err)
-        assert d["artifact_path"] == "test.json"
-        assert d["field_path"] == "decisions[0].decision"
-        assert d["message"] == "Decision is required"
-
-    def test_accept_recommendations_api_shape(self, client, tmp_path):
-        """Accept Recommendations returns correct shape with requires_confirmation."""
-        # Create a run with clarification_review.json
-        run_dir = tmp_path / "acc-test"
-        run_dir.mkdir()
-        from src.testcase_agent.pipeline_console.runs import write_run_input
-        write_run_input(run_dir, {
-            "requirement_key": "REQ-ACC", "description": "test",
-            "function_name": "", "requirement_type": "requirement",
-            "supplementary_info": "",
-        })
-        (run_dir / "clarification_review.json").write_text(json.dumps({
-            "review_session_id": "acc-sess",
-            "requirement_key": "REQ-ACC",
-            "decomposition": {
-                "ambiguities": [
-                    {"item_id": "amb-1", "recommended_review_decision": "approve", "confidence_drivers": {"a": 0.9}},
-                ]
+        (run_dir / "extracted_test_basis.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "sections": {
+                "signals": [{"item_id": "f-1", "status": "known", "content": "test", "need": "", "source_text": "test"}],
+                "thresholds": [],
+                "timing": [],
+                "states": [],
+                "observations": [],
             },
-            "decisions": [
-                {"item_id": "amb-1", "decision": ""},
+        }))
+
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
+            mock_run.return_value = {
+                "run_dir": "accept-all-reuse", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
+            }
+            result = accept_extraction_all("accept-all-reuse")
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            assert (run_dir / "reviewed_extracted_test_basis.json").exists()
+
+    def test_accept_intents_all_creates_reviewed(self, tmp_path):
+        """accept_intents_all writes reviewed_case_intents.json."""
+        run_dir = tmp_path / "accept-intents-reuse"
+        run_dir.mkdir()
+        write_run_input(run_dir, REQUIREMENT_FIXTURE)
+        (run_dir / "case_intents.json").write_text(json.dumps({
+            "requirement_key": "REQ-TEST-001",
+            "intents": [
+                {"intent_id": "i-1", "coverage_dimension": "normal_behavior", "intent_text": "test"},
             ],
         }))
 
-        with patch("src.testcase_agent.pipeline_console.router.get_run") as mock_run:
+        with patch("src.testcase_agent.pipeline_console.workbench.get_run") as mock_run:
             mock_run.return_value = {
-                "run_dir": "acc-test", "run_path": str(run_dir), "requirement_key": "REQ-ACC",
+                "run_dir": "accept-intents-reuse", "run_path": str(run_dir), "requirement_key": "REQ-TEST-001",
             }
-            r = client.post("/api/v1/console/runs/acc-test/clarification/accept-recommendations", json={
-                "confirm_high_risk": False,
-            })
-            assert r.status_code == 200
-            data = r.json()
-            assert "requires_confirmation" in data
-            assert "proposed_decisions" in data
-            assert "saved" in data
-            assert data["saved"] is False
+            result = accept_intents_all("accept-intents-reuse")
+            assert result["saved"] is True
+            assert result["reviewed"] is True
+            assert (run_dir / "reviewed_case_intents.json").exists()
 
 
 class TestAssetServingSecurity:
