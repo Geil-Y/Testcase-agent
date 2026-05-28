@@ -25,6 +25,90 @@ from testcase_agent.review_pipeline.artifacts.models import RequirementInput  # 
 _VALID_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
 
+def _case_to_dict(case) -> dict:
+    """Convert a GeneratedCase dataclass to a dict for evaluate_case()."""
+    return {
+        "title": case.title,
+        "objective": case.objective,
+        "precondition": case.precondition,
+        "postcondition": case.postcondition,
+        "related_requirement": case.related_requirement,
+        "steps": [{"order": s.order, "action": s.action, "expected": s.expected} for s in case.steps],
+        "raw_html": case.raw_html or "",
+    }
+
+
+def _build_review_comment(hard_fails: list[str]) -> str:
+    """Build a review comment from failed checklist item IDs."""
+    parts: list[str] = []
+    for item_id in hard_fails:
+        desc = CHECKLIST.get(item_id, (item_id, ""))[0]
+        parts.append(f"{item_id}: {desc}")
+    return "Previous case failed hard-gate checks. Fix these issues: " + "; ".join(parts)
+
+
+def _build_req_info_for_eval(
+    req: RequirementInput,
+    analysis,
+    set_meta: dict | None,
+) -> dict:
+    """Build the req_info dict needed by evaluate_case()."""
+    signals = analysis.signals if analysis else []
+    thresholds = analysis.thresholds if analysis else []
+    timing = [t for t in (analysis.timing if analysis else [])
+              if t.strip().lower() != "none found"]
+
+    # Expected missing categories: prefer requirement set, fall back to LLM#1 analysis
+    expected_missing: list[str] = []
+    if set_meta and "expected_missing_categories" in set_meta:
+        expected_missing = set_meta["expected_missing_categories"]
+    elif analysis and analysis.missing_info_items:
+        expected_missing = [mi.category for mi in analysis.missing_info_items if mi.category]
+
+    return {
+        "signals": signals,
+        "thresholds": thresholds,
+        "timing": timing,
+        "case_coverage": "",
+        "requirement_description": req.description,
+        "supplementary_info": req.supplementary_info,
+        "accepted_test_basis": set_meta.get("accepted_test_basis", "") if set_meta else "",
+        "expected_missing_categories": expected_missing,
+    }
+
+
+def _self_check_case(case, analysis, provider) -> tuple:
+    """Run LLM self-check for invented identifiers.
+
+    Returns (corrected_case, had_changes: bool).
+    If the LLM call fails or parsing fails, returns the original case unchanged.
+    """
+    if not analysis or not (analysis.signals or analysis.observations or analysis.states):
+        return case, False
+
+    try:
+        known_signals = ", ".join(analysis.signals) if analysis.signals else "(none)"
+        known_observations = ", ".join(analysis.observations) if analysis.observations else "(none)"
+        known_states = ", ".join(analysis.states) if analysis.states else "(none)"
+        case_html = case.raw_html or ""
+
+        sys_prompt, usr_prompt = render_prompt(
+            "self_check",
+            known_signals=known_signals,
+            known_observations=known_observations,
+            known_states=known_states,
+            case_html=case_html,
+        )
+        output = provider.complete(sys_prompt, usr_prompt)
+        corrected = parse_generated_case(output)
+        if corrected and corrected.steps and corrected.title:
+            return corrected, True
+    except Exception:
+        pass
+
+    return case, False
+
+
 def _cell_str(row: tuple, index: int) -> str:
     if index < 0 or index >= len(row):
         return ""
@@ -273,11 +357,13 @@ def _serialize_case_for_output(
     case,
     report,
     *,
-    sanitize_enabled: bool,
-    sanitize_replacements: list[str],
+    retry_meta: dict | None = None,
+    sanitize_enabled: bool = False,
+    sanitize_replacements: list[str] | None = None,
 ) -> dict:
     """Serialize one generated case for generated_cases.json."""
-    return {
+    replacements = sanitize_replacements or []
+    out: dict = {
         "title": case.title,
         "objective": case.objective,
         "precondition": case.precondition,
@@ -290,8 +376,8 @@ def _serialize_case_for_output(
         "raw_html": case.raw_html,
         "sanitize": {
             "enabled": sanitize_enabled,
-            "replacement_count": len(sanitize_replacements),
-            "replacements": sanitize_replacements,
+            "replacement_count": len(replacements),
+            "replacements": replacements,
         },
         "quality": {
             "passed": report.passed,
@@ -299,12 +385,15 @@ def _serialize_case_for_output(
             "warnings": report.warnings,
         },
     }
+    if retry_meta:
+        out["retry"] = retry_meta
+    return out
 
 
 def run_batch(
     requirements: list[RequirementInput],
     output_dir: Path,
-    sanitize: bool = False,
+    sanitize: bool = True,
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
@@ -342,7 +431,8 @@ def main():
     eval_parser = sub.add_parser("evaluate", help="Run AI evaluation against checklist_v2.md")
     eval_parser.add_argument("--round-dir", required=True, help="Path to a round directory containing generated_cases.json")
     eval_parser.add_argument("--model", default=None, help="Model ID (default: from ANTHROPIC_MODEL env or deepseek-v4-flash[1m])")
-    eval_parser.add_argument("--delay", type=float, default=0.5, help="Seconds between API calls (default: 0.5)")
+    eval_parser.add_argument("--delay", type=float, default=0.1, help="Seconds between API submissions (default: 0.1)")
+    eval_parser.add_argument("--concurrency", type=int, default=5, help="Max parallel scoring calls (default: 5)")
     eval_parser.add_argument("--report", action="store_true", help="Regenerate cases_report.html from existing evaluation files")
 
     args = parser.parse_args()
@@ -368,6 +458,7 @@ def main():
                 round_dir,
                 model=args.model or DEFAULT_MODEL,
                 delay=args.delay,
+                max_concurrency=args.concurrency,
             )
 
 
