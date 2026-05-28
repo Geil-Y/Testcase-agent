@@ -1,88 +1,168 @@
 import { useEffect, useState, useCallback } from 'react'
-import { getIntentReview, saveIntentDraft, generateCases, getReasonCodes } from '../api/endpoints'
-import type { IntentReviewItem, ReasonCodes } from '../api/types'
+import { getIntents, saveIntentReview, acceptAllIntents, generateCases } from '../api/endpoints'
+import type { CaseIntent, CaseIntentSet, IntentReviewAction } from '../api/types'
 
 export function useIntentReview(runDir: string | undefined) {
-  const [items, setItems] = useState<IntentReviewItem[]>([])
-  const [draft, setDraft] = useState<Map<string, IntentReviewItem>>(new Map())
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [intents, setIntents] = useState<CaseIntentSet | null>(null)
+  const [reviewed, setReviewed] = useState(false)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [reasonCodes, setReasonCodes] = useState<ReasonCodes | null>(null)
-  const [validationErrors, setValidationErrors] = useState<Map<string, string[]>>(new Map())
+
+  // Track edits: keyed by intent_id
+  const [edits, setEdits] = useState<Map<string, Partial<CaseIntent>>>(new Map())
+  // Track removed intents: set of intent_id
+  const [removed, setRemoved] = useState<Set<string>>(new Set())
+  // Track added intents
+  const [added, setAdded] = useState<CaseIntent[]>([])
+  // Blocking gaps
+  const [blockingGaps, setBlockingGaps] = useState<string[]>([])
 
   const load = useCallback(() => {
     if (!runDir) return
     setLoading(true)
-    getIntentReview(runDir)
+    setError(null)
+    getIntents(runDir)
       .then((data) => {
-        const decisions = data.review?.decisions || []
-        setItems(decisions)
-        const d = new Map<string, IntentReviewItem>()
-        for (const item of decisions) {
-          if (item.decision) d.set(item.intent_id, { ...item })
-        }
-        setDraft(d)
-        if (decisions.length > 0 && !selectedId) setSelectedId(decisions[0].intent_id)
+        setIntents(data.intents)
+        setReviewed(data.reviewed)
+        setBlockingGaps(data.intents.blocking_gaps || [])
+        setEdits(new Map())
+        setRemoved(new Set())
+        setAdded([])
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [runDir, selectedId])
-
-  useEffect(() => { load() }, [load])
-  useEffect(() => {
-    if (!runDir) return
-    getReasonCodes('case_intent').then(setReasonCodes).catch(() => {})
   }, [runDir])
 
-  const updateDraftItem = useCallback((intentId: string, changes: Partial<IntentReviewItem>) => {
-    setDraft((prev) => {
+  useEffect(() => { load() }, [load])
+
+  // Get current intents (original + added - removed, with edits applied)
+  const getCurrentIntents = useCallback((): CaseIntent[] => {
+    if (!intents) return []
+    const original = intents.intents || []
+
+    const result = original
+      .filter((item) => !removed.has(item.intent_id))
+      .map((item) => {
+        const edit = edits.get(item.intent_id)
+        return edit ? { ...item, ...edit } : item
+      })
+
+    for (const item of added) {
+      result.push(item)
+    }
+
+    return result
+  }, [intents, edits, removed, added])
+
+  const editIntent = useCallback((intentId: string, changes: Partial<CaseIntent>) => {
+    setEdits((prev) => {
       const next = new Map(prev)
-      const current = next.get(intentId) || items.find((i) => i.intent_id === intentId) || { intent_id: intentId } as IntentReviewItem
+      const current = next.get(intentId) || {}
       next.set(intentId, { ...current, ...changes })
       return next
     })
-  }, [items])
+  }, [])
 
-  const selectedItem = selectedId
-    ? (draft.get(selectedId) || items.find((i) => i.intent_id === selectedId) || null)
-    : null
+  const removeIntent = useCallback((intentId: string) => {
+    setRemoved((prev) => new Set([...prev, intentId]))
+    // If it was added, remove from added instead
+    setAdded((prev) => prev.filter((i) => i.intent_id !== intentId))
+  }, [])
 
-  const isDirty = draft.size > 0
+  const addIntent = useCallback((intent: CaseIntent) => {
+    setAdded((prev) => [...prev, intent])
+  }, [])
 
-  const saveDraft = useCallback(async () => {
+  const setBlockingGapsList = useCallback((gaps: string[]) => {
+    setBlockingGaps(gaps)
+  }, [])
+
+  const isDirty =
+    edits.size > 0 || removed.size > 0 || added.length > 0 ||
+    JSON.stringify(blockingGaps) !== JSON.stringify(intents?.blocking_gaps || [])
+
+  const buildActions = useCallback((): IntentReviewAction[] => {
+    const actions: IntentReviewAction[] = []
+
+    for (const [intentId, changes] of edits) {
+      actions.push({ intent_id: intentId, action: 'edit', changes })
+    }
+
+    for (const intentId of removed) {
+      actions.push({ intent_id: intentId, action: 'remove' })
+    }
+
+    for (const newIntent of added) {
+      actions.push({ intent_id: newIntent.intent_id, action: 'add', new_intent: newIntent })
+    }
+
+    if (blockingGaps.length > 0) {
+      actions.push({ intent_id: 'blocking_gaps', action: 'block' })
+    }
+
+    return actions
+  }, [edits, removed, added, blockingGaps])
+
+  const saveReview = useCallback(async () => {
     if (!runDir) return { success: false, error: 'No run' }
     setSaving(true)
     try {
-      const decisions = Array.from(draft.values())
-      await saveIntentDraft(runDir, decisions)
-      return { success: true }
+      const actions = buildActions()
+      const res = await saveIntentReview(runDir, actions)
+      return { success: res.saved }
     } catch (e: unknown) {
       return { success: false, error: e instanceof Error ? e.message : 'Save failed' }
     } finally {
       setSaving(false)
     }
-  }, [runDir, draft])
+  }, [runDir, buildActions])
+
+  const acceptAll = useCallback(async () => {
+    if (!runDir) return null
+    setSaving(true)
+    try {
+      const res = await acceptAllIntents(runDir)
+      return res
+    } catch (e: unknown) {
+      return { saved: false, error: e instanceof Error ? e.message : 'Accept all failed' }
+    } finally {
+      setSaving(false)
+    }
+  }, [runDir])
 
   const generate = useCallback(async () => {
     if (!runDir) return null
     setSaving(true)
     try {
-      const decisions = Array.from(draft.values())
-      return await generateCases(runDir, decisions)
+      return await generateCases(runDir)
     } catch (e: unknown) {
       return { status: 'error', error: e instanceof Error ? e.message : 'Generation failed' }
     } finally {
       setSaving(false)
     }
-  }, [runDir, draft])
+  }, [runDir])
 
   return {
-    items, draft, selectedId, selectedItem, loading, saving, error,
-    reasonCodes, validationErrors, filters: {} as Record<string, string>,
-    setSelectedId, updateDraftItem, saveDraft, generate,
-    setFilterParams: () => {}, refetch: () => load(),
-    isDirty, setValidationErrors,
+    intents,
+    reviewed,
+    loading,
+    saving,
+    error,
+    edits,
+    removed,
+    added,
+    blockingGaps,
+    saveReview,
+    acceptAll,
+    generate,
+    refetch: load,
+    isDirty,
+    getCurrentIntents,
+    editIntent,
+    removeIntent,
+    addIntent,
+    setBlockingGapsList,
   }
 }

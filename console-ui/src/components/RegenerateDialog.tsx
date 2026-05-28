@@ -1,73 +1,58 @@
-import { useState, useEffect } from 'react'
-import { regenerateConfirm, regenerateExecute } from '../api/endpoints'
+import { useState } from 'react'
+import { regenerateCase } from '../api/endpoints'
 
 interface Props {
   open: boolean
   runDir: string
-  stage: string
+  caseId: string
+  intentId: string
   onClose: () => void
   onStarted: () => void
 }
 
-export default function RegenerateDialog({ open, runDir, stage, onClose, onStarted }: Props) {
-  const [confirming, setConfirming] = useState(false)
-  const [info, setInfo] = useState<{
-    confirmation_required: boolean
-    affected_artifacts?: string[]
-    message?: string
-  } | null>(null)
+export default function RegenerateDialog({ open, runDir, caseId, intentId, onClose, onStarted }: Props) {
+  const [reviewComment, setReviewComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      setInfo(null)
-      setConfirming(false)
-      regenerateConfirm(runDir, stage)
-        .then(setInfo)
-        .catch(() => onClose())
-    }
-  }, [open, runDir, stage, onClose])
+  if (!open) return null
 
-  const handleConfirm = async () => {
-    setConfirming(true)
+  const handleSubmit = async () => {
+    setSubmitting(true)
     try {
-      const res = await regenerateExecute(runDir, stage)
+      const res = await regenerateCase(runDir, [{ case_id: caseId, intent_id: intentId, review_comment: reviewComment }])
       if (res.status === 'started') {
         onStarted()
         onClose()
       }
     } catch {
-      setConfirming(false)
+      setSubmitting(false)
     }
   }
-
-  if (!open) return null
 
   return (
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h3>Regenerate {stage}</h3>
-        {!info ? (
-          <p>Loading confirmation...</p>
-        ) : (
-          <>
-            <p>{info.message || 'This will archive downstream artifacts and regenerate.'}</p>
-            {info.affected_artifacts && info.affected_artifacts.length > 0 && (
-              <ul className="dialog-details">
-                {info.affected_artifacts.map((a) => <li key={a}>{a}</li>)}
-              </ul>
-            )}
-            <div className="dialog-actions">
-              <button
-                className="btn btn-danger"
-                onClick={handleConfirm}
-                disabled={confirming}
-              >
-                {confirming ? 'Regenerating...' : 'Confirm Regenerate'}
-              </button>
-              <button className="btn" onClick={onClose}>Cancel</button>
-            </div>
-          </>
-        )}
+        <h3>Regenerate Case: {caseId}</h3>
+        <p>Provide a review comment describing what should change in the regenerated case.</p>
+        <div className="form-group">
+          <label>Review Comment</label>
+          <textarea
+            value={reviewComment}
+            onChange={(e) => setReviewComment(e.target.value)}
+            rows={4}
+            placeholder="e.g., Add missing edge case for timeout scenario..."
+          />
+        </div>
+        <div className="dialog-actions">
+          <button
+            className="btn btn-primary"
+            onClick={handleSubmit}
+            disabled={submitting || !reviewComment.trim()}
+          >
+            {submitting ? 'Regenerating...' : 'Regenerate'}
+          </button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
       </div>
     </div>
   )

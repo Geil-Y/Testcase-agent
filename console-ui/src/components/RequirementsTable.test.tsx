@@ -48,10 +48,10 @@ describe('RequirementsTable', () => {
 
   it('shows run status when available', () => {
     const runMap = new Map([
-      ['REQ-001', { status: 'evaluated', time: '2026-01-01T00:00:00', dir: 'run-1' }],
+      ['REQ-001', { status: 'cases_reviewed', time: '2026-01-01T00:00:00', dir: 'run-1' }],
     ])
     renderTable(runMap)
-    expect(screen.getByText('Evaluated')).toBeInTheDocument()
+    expect(screen.getByText('Cases Reviewed')).toBeInTheDocument()
     expect(screen.getByText('Open')).toBeInTheDocument()
   })
 
@@ -85,7 +85,7 @@ describe('RequirementsTable', () => {
 
   it('renders Open and Start New Run buttons for rows with a run', () => {
     const runMap = new Map([
-      ['REQ-001', { status: 'evaluated', time: '2026-01-01T00:00:00', dir: 'run-1' }],
+      ['REQ-001', { status: 'cases_reviewed', time: '2026-01-01T00:00:00', dir: 'run-1' }],
     ])
     renderTable(runMap)
     expect(screen.getByText('Open')).toBeInTheDocument()

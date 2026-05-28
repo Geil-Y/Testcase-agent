@@ -11,12 +11,16 @@ interface Props {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  evaluated: 'Evaluated',
-  cases_ready: 'Cases Ready',
-  intent_ready: 'Intent Ready',
-  clarification_ready: 'Clarification Ready',
-  clarification_blocked: 'Blocked',
   new: 'New',
+  extraction_pending_review: 'Extraction Pending',
+  extraction_reviewed: 'Extraction Reviewed',
+  extraction_blocked: 'Extraction Blocked',
+  intents_pending_review: 'Intents Pending',
+  intents_reviewed: 'Intents Reviewed',
+  intents_blocked: 'Intents Blocked',
+  cases_pending_review: 'Cases Pending',
+  cases_reviewed: 'Cases Reviewed',
+  legacy_unsupported: 'Legacy',
 }
 
 export default function RequirementsTable({ requirements, runMap, batchId }: Props) {
