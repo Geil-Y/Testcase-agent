@@ -842,3 +842,112 @@ class TestModelHelpers:
 
         all_needs = basis.all_needs_review_items()
         assert len(all_needs) == 2
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Issue #48: Legacy CLI and artifact unsupported tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLegacyCLIUnsupported:
+    """Legacy CLI commands return unsupported message with exit code 1."""
+
+    def test_prepare_clarification_review_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["prepare-clarification-review", "--input", "x.json", "--out", "out"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_validate_review_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["validate-review", "--file", "does-not-exist.json"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_prepare_intent_review_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["prepare-intent-review", "--run-dir", "some/run"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_evaluate_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["evaluate", "--run-dir", "some/run"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_generate_report_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["generate-report", "--run-dir", "some/run"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_import_memory_unsupported(self):
+        from testcase_agent.review_pipeline.cli import main
+        try:
+            ret = main(["import-memory", "--run-dir", "some/run"])
+        except SystemExit as e:
+            ret = e.code if e.code is not None else 0
+        assert ret == 1
+
+    def test_new_cli_commands_exist(self):
+        from testcase_agent.review_pipeline.cli import build_parser
+        subcommands = list(build_parser()._subparsers._group_actions[0].choices.keys())
+        for cmd in ["extract", "accept-extraction", "plan-intents", "accept-intents",
+                     "generate-cases", "accept-cases", "regenerate", "list-runs"]:
+            assert cmd in subcommands, f"Missing CLI command: {cmd}"
+
+
+class TestLegacyRunDetection:
+    """Run directories with legacy artifacts are detected as unsupported."""
+
+    def test_legacy_clarification_review_detected(self, run_dir):
+        from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
+        assert not is_legacy_run_dir(run_dir)
+        (run_dir / "clarification_review.json").write_text("{}")
+        assert is_legacy_run_dir(run_dir)
+
+    def test_legacy_clarified_basis_detected(self, run_dir):
+        from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
+        (run_dir / "clarified_test_basis.json").write_text("{}")
+        assert is_legacy_run_dir(run_dir)
+
+    def test_legacy_case_intent_review_detected(self, run_dir):
+        from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
+        (run_dir / "case_intent_review.json").write_text("{}")
+        assert is_legacy_run_dir(run_dir)
+
+    def test_legacy_approved_case_plan_detected(self, run_dir):
+        from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
+        (run_dir / "approved_case_plan.json").write_text("{}")
+        assert is_legacy_run_dir(run_dir)
+
+    def test_new_artifacts_not_legacy(self, run_dir):
+        from testcase_agent.review_pipeline.artifacts.validation import is_legacy_run_dir
+        (run_dir / "extracted_test_basis.json").write_text("{}")
+        (run_dir / "reviewed_extracted_test_basis.json").write_text("{}")
+        (run_dir / "case_intents.json").write_text("{}")
+        (run_dir / "generated_cases.json").write_text("{}")
+        assert not is_legacy_run_dir(run_dir)
+
+    def test_run_status_legacy_unsupported(self, run_dir):
+        from testcase_agent.pipeline_console.runs import infer_run_status, write_run_input
+
+        write_run_input(run_dir, {
+            "requirement_key": "REQ_001", "description": "Test",
+            "function_name": "fn", "requirement_type": "requirement",
+            "supplementary_info": "",
+        })
+        (run_dir / "clarification_review.json").write_text("{}")
+
+        status = infer_run_status(str(run_dir))
+        assert status == "legacy_unsupported"
