@@ -3,125 +3,74 @@ Write a single test case based on the requirement and case intent provided.
 
 A test case is a timeline of operations.
 Each action advances the system state.
-Expected results only go on the steps where the requirement outcome becomes valid — not every step.
+Expected results only go on the steps where the requirement outcome becomes valid, not every step.
 
-
-
-CRITICAL — Do NOT invent numeric values.
+CRITICAL: Do not invent numeric values.
 Use numeric values only when they appear in the selected requirement or in explicitly allowed known sections.
 Use symbolic parameter names directly when they appear in the selected requirement or allowed known sections.
-Do not use numeric values that appear only in supplementary information.
-
-
 
 Rules:
-
 - Write in English.
+- Use only selected-requirement values, symbols, relations, and allowed known sections.
+- Do not invent signal names, thresholds, timing values, states, diagnostics, observations, HIL channel names, tool commands, bench configuration, or concrete test points.
+- Preserve requirement relations symbolically instead of replacing them with representative numbers.
 
-- Action: one concrete operation per step.
-  Valid: set an input to a requirement-derived value or relation; wait for a
-  requirement-derived duration or timing relation; trigger a requirement-defined mode.
-  Use only values, symbols, or relations from the selected requirement or LLM#1
-  allowed lists. If a required detail is unclear in the requirement wording,
-  preserve that wording and append [NEEDS REVIEW] at the exact unclear point.
-  Do not invent concrete values.
-  Do not describe intent or say why.
+Action:
+- An action describes an operation performed by the tester or test system.
+- An action may contain multiple related setup operations when they belong to the same test setup point.
+- Valid actions include setting requirement-derived input conditions, waiting for requirement-derived timing or event maturity, triggering a requirement-defined mode, restoring inputs, or collecting evidence.
+- Do not describe intent or say why.
+- Do not use Check or Verify as action verbs.
+- Read, Record, Observe, Monitor, and Capture may be actions only when they describe evidence collection and do not contain pass/fail judgment.
 
-- Expected: short and judgeable.
-  If the selected requirement gives a concrete signal, state, DTC, CAN field,
-  log, metric, or observation point, use that exact object.
-  If the selected requirement gives only a natural-language outcome, preserve
-  that outcome. If that outcome is unclear, append [NEEDS REVIEW] at the exact
-  unclear point.
-  Use & to join multiple outcomes that are expected after the same action/wait.
-  No paragraphs.
+Expected:
+- Expected describes the pass/fail condition valid after the action and any required wait or event.
+- If the selected requirement gives a concrete signal, state, DTC, CAN field, log, metric, or observation point, use that exact object.
+- If the selected requirement gives only a natural-language outcome, preserve that outcome.
+- Use & to join multiple outcomes that are expected after the same action, wait, or evidence collection point.
+- No paragraphs.
+- If no expected result belongs to a step, write <expected>null</expected>.
 
-- Add expected only where the expectation becomes valid.
-  A wait-for-response step may have an expected result.
+Step structure:
+- A test case may have as many steps as needed. Do not force a three-step structure.
+- Do not expect the required BMS response immediately in the same step that applies the triggering stimulus.
+- After a stimulus intended to trigger BMS behavior, use a separate wait, event, or evidence collection step before judging the BMS response when the requirement implies timing, maturation, propagation, or delayed validity.
+- A stimulus setup step may confirm only the applied stimulus/input condition, not the BMS response.
+- Restoration steps usually have <expected>null</expected> unless the selected requirement explicitly defines a recovery outcome.
 
-- Separate steps:
-  Step 1 sets or changes the input stimulus.
-    Expected may only confirm the stimulus/input condition, not BMS response.
-  Step 2 waits for response/debounce/confirmation timing.
-    Expected describes the BMS response after the wait.
-  Step 3 restores state or sets the next condition only when needed.
-    Expected is usually null unless the selected requirement explicitly defines a recovery outcome.
-
-- Never expect BMS response immediately in the same step that sets the stimulus.
-  Abstract format only; do not copy this wording.
-  Bad:
-    Action: Set requirement stimulus
-    Expected: requirement response
-  Good:
-    Action: Set requirement stimulus
-    Expected: stimulus condition is active
-    Action: Wait for requirement-derived timing
-    Expected: requirement response
-
-- Action vs Expected boundaries:
-  "Check", "Verify", "Read", "Observe", "Monitor", "Capture" are not HIL operations —
-  they belong in expected, never in action.
-  If an action would just be "Check X" with no actual set/wait/trigger operation,
-  that step is unnecessary. Move its content into the expected of the
-  nearest preceding step that has a real operation.
-
-- [NEEDS REVIEW] ONLY for missing signal, threshold, timing, state, or observation.
-  Use a bare [NEEDS REVIEW] — never write [NEEDS REVIEW: timing] or any category suffix.
-
-
-
-A draft case must be honest when the selected requirement is underspecified.
-If a step needs a stimulus, judgment point, timing, state, or observable result
-that the selected requirement only describes generically, preserve the selected
-requirement wording and append bare [NEEDS REVIEW] at the unclear point.
-Do not mark bench details such as HIL channel names, tool commands, or test
-equipment configuration.
-Do not invent a new gap; only mark a gap that exists in the selected requirement
-wording or was reported by LLM#1.
-Do not replace requirement wording with a generic placeholder, and do not invent
-a concrete value.
-
-
+[NEEDS REVIEW]:
+- Use [NEEDS REVIEW] only for missing signal, threshold, timing, state, or observation information needed by this case.
+- Use a bare [NEEDS REVIEW]; never write a category suffix.
+- Do not mark HIL channel names, tool commands, test equipment setup, or bench configuration as missing information.
+- Do not invent a new gap. Only mark a gap that exists in the selected requirement wording or typed test basis.
 
 Precondition / Postcondition:
-
-ALL cases use this precondition:
-"BMS initialized, all parameters within normal operating range, no active faults."
-
-ALL cases use this postcondition:
-"System returned to normal operating state."
-
-
+- ALL cases use this precondition: "BMS initialized, all parameters within normal operating range, no active faults."
+- ALL cases use this postcondition: "System returned to normal operating state."
 
 Output the test case in the HTML structure below.
 Do not output anything outside the HTML.
 
 <testcase>
-<title>Condition under test → expected BMS behavior</title>
+<title>Condition under test -> expected BMS behavior</title>
 <objective>One sentence what this case verifies</objective>
 <related_requirement>{{ requirement_key }}</related_requirement>
 <precondition>BMS initialized, all parameters within normal operating range, no active faults.</precondition>
 <steps>
 <step order="1">
-<action>Set a requirement-derived input condition</action>
+<action>Set requirement-derived input condition</action>
 <expected>Input stimulus matches the action condition</expected>
 </step>
 <step order="2">
-<action>Wait only if the requirement provides or requires timing</action>
-<expected>Expected BMS response after the wait</expected>
-</step>
-<step order="3">
-<action>Restore inputs to normal if required</action>
-<expected>null</expected>
+<action>Wait for requirement-derived timing or event when needed</action>
+<expected>Expected BMS response after it becomes valid</expected>
 </step>
 </steps>
 <postcondition>System returned to normal operating state.</postcondition>
 </testcase>
 
-
-
 REMINDER:
-No invented numbers. Use only selected-requirement values or allowed known parameters.
-Expected only where it becomes valid.
-Set step expected may only confirm stimulus. BMS response belongs after wait.
-Use bare [NEEDS REVIEW] only — no category suffix.
+No invented values.
+Use allowed known sections only when needed by this case intent.
+Expected results belong where the requirement outcome becomes valid.
+Use bare [NEEDS REVIEW] only.
