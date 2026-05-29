@@ -88,13 +88,22 @@ def _evaluate_single_case(case_data: dict) -> dict:
             "detail": "No test steps defined",
         })
     else:
+        any_expected = False
         for i, step in enumerate(steps):
             has_action = bool(step.get("action", "").strip())
             has_expected = bool(step.get("expected_result", "").strip())
+            if has_expected:
+                any_expected = True
             checks.append({
                 "rule": f"step_{i+1}_complete",
-                "passed": has_action and has_expected,
-                "detail": "OK" if (has_action and has_expected) else f"Step {i+1} missing action or expected result",
+                "passed": has_action,
+                "detail": "OK" if has_action else f"Step {i+1} missing action",
+            })
+        if not any_expected:
+            checks.append({
+                "rule": "expected_result_any",
+                "passed": False,
+                "detail": "All steps have empty expected_result; at least one step must have an observable pass/fail judgment",
             })
 
     # Hard rule: post_condition must exist
