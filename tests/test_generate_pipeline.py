@@ -371,4 +371,5 @@ def test_run_pipeline_llm_c_parse_failure_recorded():
     result = run_pipeline(req, BadCProvider())
 
     assert len(result.cases) == 2
+    assert result.generation_failures == [0]
     assert result.cases[1].title == "Fault detection"

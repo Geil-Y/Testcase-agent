@@ -165,23 +165,9 @@ class TestParseTestBasisJson:
         with pytest.raises(ValueError, match="must be an object"):
             parse_test_basis_json(raw)
 
-    def test_coerces_dict_list_items_to_string(self):
+    def test_rejects_non_string_list_items(self):
         raw = """{
             "requirement_key": "REQ-009",
-            "allowed_signals": [{"name": "BMS_CellOV_Detect"}],
-            "allowed_thresholds": [],
-            "allowed_timing": [],
-            "allowed_states": [],
-            "allowed_observations": [],
-            "missing_info": []
-        }"""
-
-        basis = parse_test_basis_json(raw)
-        assert basis.allowed_signals == ["BMS_CellOV_Detect"]
-
-    def test_coerces_non_string_list_items_to_string(self):
-        raw = """{
-            "requirement_key": "REQ-010",
             "allowed_signals": [123],
             "allowed_thresholds": [],
             "allowed_timing": [],
@@ -190,8 +176,22 @@ class TestParseTestBasisJson:
             "missing_info": []
         }"""
 
-        basis = parse_test_basis_json(raw)
-        assert basis.allowed_signals == ["123"]
+        with pytest.raises(ValueError, match="allowed_signals\\[0\\] must be a string"):
+            parse_test_basis_json(raw)
+
+    def test_rejects_dict_list_items(self):
+        raw = """{
+            "requirement_key": "REQ-010",
+            "allowed_signals": [{"name": "BMS_CellOV_Detect"}],
+            "allowed_thresholds": [],
+            "allowed_timing": [],
+            "allowed_states": [],
+            "allowed_observations": [],
+            "missing_info": []
+        }"""
+
+        with pytest.raises(ValueError, match="allowed_signals\\[0\\] must be a string"):
+            parse_test_basis_json(raw)
 
 
 class TestParseCaseIntentsJson:

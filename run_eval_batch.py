@@ -408,8 +408,11 @@ def _render_batch_html(summary: dict, pipeline_mode: str) -> str:
             color = rate_color(pr)
             status_cell = f'<td style="color:{color};font-weight:600">{pr:.0%}</td>'
             rate_cell = f'<td style="color:{color}">{pr:.0%}</td>'
-            report_path = f"{Path(run_dir).name}/review_report.html"
-            detail_link = f'<td><a href="{report_path}" target="_blank">View report</a></td>'
+            if pipeline_mode == "minimal":
+                report_path = f"{Path(run_dir).name}/generated_cases.json"
+            else:
+                report_path = f"{Path(run_dir).name}/review_report.html"
+            detail_link = f'<td><a href="{report_path}" target="_blank">View cases</a></td>'
 
         rows_html += f"""
         <tr>

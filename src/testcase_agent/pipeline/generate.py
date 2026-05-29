@@ -104,10 +104,14 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
         try:
             html_c = provider.complete(sys_c, usr_c)
             case = parse_generated_case(html_c)
+            if "<testcase>" not in html_c:
+                raise ValueError("LLM-C output missing <testcase> tag")
         except Exception:
             case = GeneratedCase(
                 title=intent.intent_text[:80],
                 objective=intent.intent_text,
+                precondition="",
+                postcondition="",
                 steps=[],
                 raw_html="",
             )

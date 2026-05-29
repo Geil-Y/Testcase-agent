@@ -151,22 +151,7 @@ def _require_str(data: dict, key: str, label: str = "") -> str:
 def _str_list(val, label: str) -> list[str]:
     if not isinstance(val, list):
         raise ValueError(f"{label} must be a list")
-    result: list[str] = []
     for i, item in enumerate(val):
-        if isinstance(item, str):
-            result.append(item)
-        elif isinstance(item, dict):
-            result.append(_flatten_dict_item(item, label, i))
-        else:
-            result.append(str(item))
-    return result
-
-
-def _flatten_dict_item(item: dict, label: str, idx: int) -> str:
-    """Extract a string from a dict where a plain string was expected."""
-    for key in ("name", "signal", "threshold", "value", "description", "text"):
-        v = item.get(key)
-        if isinstance(v, str) and v.strip():
-            return v
-    import json as _json
-    return _json.dumps(item, ensure_ascii=False)
+        if not isinstance(item, str):
+            raise ValueError(f"{label}[{i}] must be a string, got {type(item).__name__}")
+    return val
