@@ -28,20 +28,20 @@ class FactItem(BaseModel):
     item_id: str
     fact_text: str
     source_text: str = ""
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    confidence: Any = 1.0
 
 
 class AmbiguityItem(BaseModel):
     item_id: str
     affected_text: str
     ambiguity_type: str
-    impact: str = ""
-    severity: str = "medium"
-    clarification_question: str = ""
-    safe_generation_policy: str = ""
-    recommended_review_decision: str = "mark_needs_review"
-    confidence_drivers: dict[str, float] = Field(default_factory=dict)
-    reasons: list[str] = Field(default_factory=list)
+    impact: Any = ""
+    severity: Any = "medium"
+    clarification_question: Any = ""
+    safe_generation_policy: Any = ""
+    recommended_review_decision: Any = "mark_needs_review"
+    confidence_drivers: Any = Field(default_factory=dict)
+    reasons: Any = Field(default_factory=list)
 
 
 class ClarificationQuestion(BaseModel):

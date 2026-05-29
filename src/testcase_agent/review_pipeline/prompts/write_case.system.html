@@ -73,7 +73,9 @@ Expected: short and judgeable.
   outcome.
 - Use `&` to join multiple outcomes expected after the same action/wait.
 - No paragraphs.
-- For setup and wait steps with no observation, use an empty string `""`.
+- Step 1 expected must confirm the stimulus condition is active (e.g. the
+  signal value matches what was set). Do not leave step 1 expected empty.
+- Step 3 expected may be empty if no recovery outcome is defined.
 
 ### [NEEDS REVIEW]
 
