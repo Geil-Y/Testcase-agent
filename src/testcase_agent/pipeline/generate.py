@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..parser.html_parser import AnalysisResult, GeneratedCase, parse_analysis, parse_generated_case
+from ..parser.html_parser import AnalysisResult, GeneratedCase, parse_generated_case
+from ..parser.json_parser import (
+    CaseIntentPlan,
+    MissingInfoItem,
+    TestBasis,
+    parse_case_intents_json,
+    parse_test_basis_json,
+)
 from ..prompts import render_prompt
 from ..provider.base import LlmProvider
-
-_GENERATION_SUPPLEMENTARY_INFO = ""
 
 
 @dataclass
@@ -20,6 +25,8 @@ class RequirementInput:
 @dataclass
 class GenerationResult:
     analysis: AnalysisResult | None = None
+    test_basis: TestBasis | None = None
+    intent_plan: CaseIntentPlan | None = None
     cases: list[GeneratedCase] = field(default_factory=list)
     error: str = ""
     generation_failures: list[int] = field(default_factory=list)
@@ -28,50 +35,63 @@ class GenerationResult:
 def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> GenerationResult:
     result = GenerationResult()
 
-    # LLM#1: analyze + plan
-    sys1, usr1 = render_prompt(
-        "analyze_and_plan",
+    # ── LLM-A: analyze test basis → JSON ────────────────────────────────
+    sys_a, usr_a = render_prompt(
+        "analyze_test_basis",
         requirement_key=requirement.requirement_key,
         description=requirement.description,
-        function_name=requirement.function_name,
-        supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
     )
-    for attempt in range(2):
-        try:
-            html1 = provider.complete(sys1, usr1)
-            break
-        except Exception:
-            if attempt == 1:
-                result.error = "LLM#1 failed after retry"
-                return result
-    analysis = parse_analysis(html1)
-    result.analysis = analysis
+    try:
+        raw_a = provider.complete(sys_a, usr_a)
+        test_basis = parse_test_basis_json(raw_a)
+    except Exception as e:
+        result.error = f"LLM-A failed: {e}"
+        return result
+    result.test_basis = test_basis
 
-    if not analysis.case_intents:
-        result.error = "LLM#1 produced no case intents"
+    # ── LLM-B: plan case intents → JSON ─────────────────────────────────
+    missing_info_json = _format_missing_info_json(test_basis.missing_info)
+
+    sys_b, usr_b = render_prompt(
+        "plan_case_intents",
+        requirement_key=requirement.requirement_key,
+        description=requirement.description,
+        allowed_signals=_format_list(test_basis.allowed_signals),
+        allowed_thresholds=_format_list(test_basis.allowed_thresholds),
+        allowed_timing=_format_list(test_basis.allowed_timing),
+        allowed_states=_format_list(test_basis.allowed_states),
+        allowed_observations=_format_list(test_basis.allowed_observations),
+        missing_info=missing_info_json,
+    )
+    try:
+        raw_b = provider.complete(sys_b, usr_b)
+        intent_plan = parse_case_intents_json(raw_b)
+    except Exception as e:
+        result.error = f"LLM-B failed: {e}"
+        return result
+    result.intent_plan = intent_plan
+
+    if not intent_plan.case_intents:
+        result.error = "LLM-B produced no case intents"
         return result
 
-    # LLM#2: generate one case per intent, with LLM#1's analysis as context
-    signals_str = ", ".join(analysis.signals) if analysis.signals else ""
-    thresholds_str = ", ".join(analysis.thresholds) if analysis.thresholds else ""
-    timing_str = ", ".join(analysis.timing) if analysis.timing else ""
-    states_str = ", ".join(analysis.states) if analysis.states else ""
-    observations_str = ", ".join(analysis.observations) if analysis.observations else ""
+    # ── LLM-C: generate one case per intent → HTML ──────────────────────
+    signals_str = ", ".join(test_basis.allowed_signals)
+    thresholds_str = ", ".join(test_basis.allowed_thresholds)
+    timing_str = ", ".join(test_basis.allowed_timing)
+    states_str = ", ".join(test_basis.allowed_states)
+    observations_str = ", ".join(test_basis.allowed_observations)
+    missing_str = ", ".join(mi.description for mi in test_basis.missing_info)
+    missing_items_str = _format_missing_items_prompt(test_basis.missing_info)
 
-    # Legacy flat string for backward-compatible prompt rendering
-    missing_str = ", ".join(analysis.missing_critical_info) if analysis.missing_critical_info else ""
-
-    # Categorized missing info for the new prompt format
-    missing_items_str = _format_missing_items(analysis)
-
-    for i, intent in enumerate(analysis.case_intents):
-        sys2, usr2 = render_prompt(
+    for i, intent in enumerate(intent_plan.case_intents):
+        sys_c, usr_c = render_prompt(
             "generate_case",
             requirement_key=requirement.requirement_key,
             description=requirement.description,
-            supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
-            coverage_dimension=intent.coverage,
-            case_intent=intent.description,
+            supplementary_info="",
+            coverage_dimension=intent.coverage_dimension,
+            case_intent=intent.intent_text,
             review_comment="",
             extracted_signals=signals_str,
             extracted_thresholds=thresholds_str,
@@ -82,12 +102,12 @@ def run_pipeline(requirement: RequirementInput, provider: LlmProvider) -> Genera
             missing_info_items=missing_items_str,
         )
         try:
-            html2 = provider.complete(sys2, usr2)
-            case = parse_generated_case(html2)
+            html_c = provider.complete(sys_c, usr_c)
+            case = parse_generated_case(html_c)
         except Exception:
             case = GeneratedCase(
-                title=intent.description[:80],
-                objective=intent.description,
+                title=intent.intent_text[:80],
+                objective=intent.intent_text,
                 steps=[],
                 raw_html="",
             )
@@ -105,20 +125,33 @@ def regenerate_case(
     provider: LlmProvider,
     *,
     analysis: AnalysisResult | None = None,
+    test_basis: TestBasis | None = None,
 ) -> GeneratedCase:
-    signals_str = ", ".join(analysis.signals) if analysis and analysis.signals else ""
-    thresholds_str = ", ".join(analysis.thresholds) if analysis and analysis.thresholds else ""
-    timing_str = ", ".join(analysis.timing) if analysis and analysis.timing else ""
-    states_str = ", ".join(analysis.states) if analysis and analysis.states else ""
-    observations_str = ", ".join(analysis.observations) if analysis and analysis.observations else ""
-    missing_str = ", ".join(analysis.missing_critical_info) if analysis and analysis.missing_critical_info else ""
-    missing_items_str = _format_missing_items(analysis) if analysis else ""
+    if test_basis is not None:
+        signals_str = ", ".join(test_basis.allowed_signals)
+        thresholds_str = ", ".join(test_basis.allowed_thresholds)
+        timing_str = ", ".join(test_basis.allowed_timing)
+        states_str = ", ".join(test_basis.allowed_states)
+        observations_str = ", ".join(test_basis.allowed_observations)
+        missing_str = ", ".join(mi.description for mi in test_basis.missing_info)
+        missing_items_str = _format_missing_items_prompt(test_basis.missing_info)
+    elif analysis is not None:
+        signals_str = ", ".join(analysis.signals)
+        thresholds_str = ", ".join(analysis.thresholds)
+        timing_str = ", ".join(analysis.timing)
+        states_str = ", ".join(analysis.states)
+        observations_str = ", ".join(analysis.observations)
+        missing_str = ", ".join(analysis.missing_critical_info)
+        missing_items_str = _format_missing_items_legacy(analysis)
+    else:
+        signals_str = thresholds_str = timing_str = states_str = observations_str = ""
+        missing_str = missing_items_str = ""
 
     sys2, usr2 = render_prompt(
         "generate_case",
         requirement_key=requirement.requirement_key,
         description=requirement.description,
-        supplementary_info=_GENERATION_SUPPLEMENTARY_INFO,
+        supplementary_info="",
         coverage_dimension=coverage_dimension,
         case_intent=case_intent,
         review_comment=review_comment,
@@ -142,12 +175,35 @@ def regenerate_case(
         )
 
 
-def _format_missing_items(analysis: AnalysisResult) -> str:
-    """Format categorized missing info items for prompt rendering.
+# ── helpers ──────────────────────────────────────────────────────────────
 
-    Categorized items: [timing] response timing not specified
-    Uncategorized items render as plain description without empty brackets.
-    """
+def _format_list(items: list[str]) -> str:
+    return ", ".join(items)
+
+
+def _format_missing_info_json(items: list[MissingInfoItem]) -> str:
+    """Render missing_info as a compact JSON-like string for prompt injection."""
+    if not items:
+        return "[]"
+    parts = [f'{{"category": "{mi.category}", "description": "{mi.description}"}}' for mi in items]
+    return "[" + ", ".join(parts) + "]"
+
+
+def _format_missing_items_prompt(items: list[MissingInfoItem]) -> str:
+    """Format categorized missing info items for prompt rendering."""
+    if not items:
+        return ""
+    lines: list[str] = []
+    for item in items:
+        if item.category:
+            lines.append(f"[{item.category}] {item.description}")
+        else:
+            lines.append(item.description)
+    return "\n".join(lines)
+
+
+def _format_missing_items_legacy(analysis: AnalysisResult) -> str:
+    """Format categorized missing info items from legacy AnalysisResult."""
     if not analysis.missing_info_items:
         return ""
     lines: list[str] = []
