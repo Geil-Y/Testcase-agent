@@ -3,7 +3,6 @@
 
 **Key:** {{ requirement_key }}
 **Function:** {{ function_name }}
-**Type:** {{ requirement_type }}
 
 ### Description
 
@@ -12,9 +11,12 @@
 {% if supplementary_info %}
 ### Supplementary Information
 
+Supplementary information is human review reference only.
+Do NOT extract facts, ambiguities, signals, thresholds, timing, states, or
+observations from this section unless the requirement explicitly refers to them.
+
 {{ supplementary_info }}
 {% endif %}
 
-Please decompose this requirement into facts, ambiguities, clarification
-questions, and a safe generation policy. Output only the JSON.
+Decompose this requirement into facts and ambiguities. Output only the JSON.
 </user-message>

@@ -80,6 +80,11 @@ def _call_write_case_llm(plan: ApprovedCasePlan, intent: CaseIntentItem, basis: 
         intent_text=intent.intent_text,
         supplementary_info=supplementary_info,
         missing_info=missing_info,
+        extracted_signals=", ".join(basis.extracted_signals) if basis and basis.extracted_signals else "",
+        extracted_thresholds=", ".join(basis.extracted_thresholds) if basis and basis.extracted_thresholds else "",
+        extracted_timing=", ".join(basis.extracted_timing) if basis and basis.extracted_timing else "",
+        extracted_states=", ".join(basis.extracted_states) if basis and basis.extracted_states else "",
+        extracted_observations=", ".join(basis.extracted_observations) if basis and basis.extracted_observations else "",
     )
     raw_response = provider.complete(system_prompt, user_prompt)
 

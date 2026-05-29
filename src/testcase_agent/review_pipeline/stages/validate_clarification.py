@@ -66,6 +66,11 @@ def validate_clarification_review(file_path: str) -> tuple[ValidationResult, Cla
         test_basis_hash=_hash_basis(review),
         facts=review.decomposition.facts,
         resolved_ambiguities=resolved_ambiguities,
+        extracted_signals=review.decomposition.extracted_signals,
+        extracted_thresholds=review.decomposition.extracted_thresholds,
+        extracted_timing=review.decomposition.extracted_timing,
+        extracted_states=review.decomposition.extracted_states,
+        extracted_observations=review.decomposition.extracted_observations,
         blocked=has_block,
         block_reasons=block_reasons,
     )

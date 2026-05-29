@@ -30,5 +30,26 @@ Use `[NEEDS REVIEW]` placeholders only where these missing semantics are needed:
 {{ missing_info }}
 {% endif %}
 
+{% if extracted_signals %}
+### Allowed Signals (use only these in action and expected)
+{{ extracted_signals }}
+{% endif %}
+{% if extracted_thresholds %}
+### Allowed Thresholds (reference only these)
+{{ extracted_thresholds }}
+{% endif %}
+{% if extracted_timing %}
+### Allowed Timing (reference only these)
+{{ extracted_timing }}
+{% endif %}
+{% if extracted_states %}
+### Allowed States (use only these)
+{{ extracted_states }}
+{% endif %}
+{% if extracted_observations %}
+### Allowed Observations (verify only these)
+{{ extracted_observations }}
+{% endif %}
+
 Write one test case for this intent. Output only the JSON.
 </user-message>

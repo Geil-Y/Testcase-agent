@@ -83,6 +83,12 @@ def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None
     if not description and review and review.decomposition.facts:
         description = review.decomposition.facts[0].source_text
 
+    signals = basis.extracted_signals
+    thresholds = basis.extracted_thresholds
+    timing = basis.extracted_timing
+    states = basis.extracted_states
+    observations = basis.extracted_observations
+
     system_prompt, user_prompt = render_prompt(
         "plan_case_intents",
         requirement_key=basis.requirement_key,
@@ -91,6 +97,11 @@ def _call_plan_llm(basis: ClarifiedTestBasis, review: ClarificationReview | None
         resolved_ambiguities=amb_summary,
         supplementary_info=basis.supplementary_info,
         memory_hints=str(memory_hints) if memory_hints else "",
+        extracted_signals=", ".join(signals) if signals else "",
+        extracted_thresholds=", ".join(thresholds) if thresholds else "",
+        extracted_timing=", ".join(timing) if timing else "",
+        extracted_states=", ".join(states) if states else "",
+        extracted_observations=", ".join(observations) if observations else "",
     )
     raw_response = provider.complete(system_prompt, user_prompt)
 

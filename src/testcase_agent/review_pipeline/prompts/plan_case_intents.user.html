@@ -22,10 +22,25 @@
 {{ supplementary_info }}
 {% endif %}
 
-{% if memory_hints %}
-### Historical Review Hints (Advisory Only)
-
-{{ memory_hints }}
+{% if extracted_signals %}
+### Extracted Signals (use only these in intents)
+{{ extracted_signals }}
+{% endif %}
+{% if extracted_thresholds %}
+### Extracted Thresholds (use only these in intents)
+{{ extracted_thresholds }}
+{% endif %}
+{% if extracted_timing %}
+### Extracted Timing (use only these in intents)
+{{ extracted_timing }}
+{% endif %}
+{% if extracted_states %}
+### Extracted States (use only these in intents)
+{{ extracted_states }}
+{% endif %}
+{% if extracted_observations %}
+### Extracted Observations (use only these in intents)
+{{ extracted_observations }}
 {% endif %}
 
 Propose case intents for this requirement. Output only the JSON.

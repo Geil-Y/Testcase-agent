@@ -64,6 +64,11 @@ class RequirementDecomposition(BaseModel):
     requirement_key: str
     facts: list[FactItem] = Field(default_factory=list)
     ambiguities: list[AmbiguityItem] = Field(default_factory=list)
+    extracted_signals: list[str] = Field(default_factory=list)
+    extracted_thresholds: list[str] = Field(default_factory=list)
+    extracted_timing: list[str] = Field(default_factory=list)
+    extracted_states: list[str] = Field(default_factory=list)
+    extracted_observations: list[str] = Field(default_factory=list)
     clarification_questions: list[ClarificationQuestion] = Field(default_factory=list)
     safe_generation_policy: SafeGenerationPolicy = Field(default_factory=SafeGenerationPolicy)
     confidence_drivers: dict[str, float] = Field(default_factory=dict)
@@ -111,6 +116,11 @@ class ClarifiedTestBasis(BaseModel):
     test_basis_hash: str = ""
     facts: list[FactItem] = Field(default_factory=list)
     resolved_ambiguities: list[dict[str, Any]] = Field(default_factory=list)
+    extracted_signals: list[str] = Field(default_factory=list)
+    extracted_thresholds: list[str] = Field(default_factory=list)
+    extracted_timing: list[str] = Field(default_factory=list)
+    extracted_states: list[str] = Field(default_factory=list)
+    extracted_observations: list[str] = Field(default_factory=list)
     blocked: bool = False
     block_reasons: list[str] = Field(default_factory=list)
     generated_at: str = Field(default_factory=lambda: datetime.now().isoformat())
