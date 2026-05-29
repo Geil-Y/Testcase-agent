@@ -28,28 +28,78 @@ Respond with a JSON object matching this structure:
 
 ## Rules
 
-1. Write exactly one test case for the given intent.
-2. Write in English.
-3. Do NOT invent numeric values, signal names, thresholds, timing values,
-   states, diagnostics, observations, HIL channel names, tool commands, or bench
-   configuration details.
-4. Symbolic parameters from the requirement or known facts ARE usable values.
-   For example, use `r_CellOV_Threshold` and `t_CellOV_Debounce` directly
-   instead of inventing numbers like `4.2V` or `500ms`.
-5. Each action is one concrete operation: set a specific signal/value, wait a
-   specific duration, enter a mode, clear a condition, or check evidence.
-6. Keep setup, wait, and verification as separate steps. Do not combine a wait
-   and a verification in the same step.
-7. Expected results are short and signal-oriented, such as `SignalName == Value`,
-   `SignalName := State`, or `DTC_name set`. Use `&` to join multiple observable
-   conditions.
-8. Expected results only belong on key observation steps. For setup and wait
-   steps with no observation, use the string `"null"`.
-9. Use `[NEEDS REVIEW]` only for items listed under Critical Missing Information
-   or for a required semantic value that is genuinely absent from the test basis.
-10. Use this exact precondition unless the approved intent requires a stricter
-    state: `BMS initialized, all parameters within normal operating range, no active faults.`
-11. Use this exact postcondition unless cleanup is explicitly different:
-    `System returned to normal operating state.`
-12. Write only the JSON. No commentary.
+Write in English. Write only the JSON. No commentary.
+
+Do NOT invent numeric values. Use numeric values only when they appear in the
+requirement or in explicitly allowed known sections. Use symbolic parameter
+names directly when they appear in the requirement or allowed known sections.
+
+### Step structure
+
+Separate steps:
+- Step 1 sets or changes the input stimulus.
+  Expected may only confirm the stimulus/input condition, not BMS response.
+- Step 2 waits for response/debounce/confirmation timing.
+  Expected describes the BMS response after the wait.
+- Step 3 restores state or sets the next condition only when needed.
+  Expected is usually empty unless the requirement explicitly defines a recovery
+  outcome.
+
+Never expect BMS response immediately in the same step that sets the stimulus.
+
+Bad:
+  Action: Set requirement stimulus
+  Expected: requirement response
+Good:
+  Action: Set requirement stimulus
+  Expected: stimulus condition is active
+  Action: Wait for requirement-derived timing
+  Expected: requirement response
+
+### Action vs Expected boundaries
+
+"Check", "Verify", "Read", "Observe", "Monitor", "Capture" are not HIL
+operations — they belong in expected, never in action. If an action would just
+be "Check X" with no actual set/wait/trigger operation, that step is
+unnecessary. Move its content into the expected of the nearest preceding step
+that has a real operation.
+
+### Expected format
+
+Expected: short and judgeable.
+- If the requirement gives a concrete signal, state, DTC, CAN field, log,
+  metric, or observation point, use that exact object.
+- If the requirement gives only a natural-language outcome, preserve that
+  outcome.
+- Use `&` to join multiple outcomes expected after the same action/wait.
+- No paragraphs.
+- For setup and wait steps with no observation, use an empty string `""`.
+
+### [NEEDS REVIEW]
+
+[NEEDS REVIEW] ONLY for missing signal, threshold, timing, state, or
+observation. Use a bare [NEEDS REVIEW] — never write [NEEDS REVIEW: timing] or
+any category suffix.
+
+A draft case must be honest when the requirement is underspecified. If a step
+needs a stimulus, judgment point, timing, state, or observable result that the
+requirement only describes generically, preserve the requirement wording and
+append bare [NEEDS REVIEW] at the unclear point. Do not mark bench details such
+as HIL channel names, tool commands, or test equipment configuration. Do not
+invent a new gap; only mark a gap that exists in the requirement wording.
+
+### Precondition / Postcondition
+
+ALL cases use this precondition:
+"BMS initialized, all parameters within normal operating range, no active faults."
+
+ALL cases use this postcondition:
+"System returned to normal operating state."
+
+### REMINDER
+
+No invented numbers. Use only requirement values or allowed known parameters.
+Expected only where it becomes valid.
+Set step expected may only confirm stimulus. BMS response belongs after wait.
+Use bare [NEEDS REVIEW] only — no category suffix.
 </system-instruction>

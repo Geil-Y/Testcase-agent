@@ -13,6 +13,18 @@ Focus on preserving the exact semantic material needed by later test planning:
 signals, thresholds, timing parameters, states/modes, observations, diagnostics,
 trigger conditions, clear/recover behavior, and expected BMS outputs.
 
+## Authority rule
+
+Supplementary information is human review reference only.
+Do NOT extract signals, thresholds, timing, states, observations,
+or facts from supplementary information unless the requirement
+explicitly refers to them.
+
+Do not invent information. If a signal name, threshold, timing, state,
+or observation point is not explicitly stated in the requirement,
+do not include it in facts. Symbolic parameter names from the requirement
+ARE concrete information — list them as facts.
+
 ## Output format
 
 Respond with a JSON object matching this structure exactly:
@@ -24,51 +36,16 @@ Respond with a JSON object matching this structure exactly:
     {
       "item_id": "fact-N",
       "fact_text": "Unambiguous fact from the requirement",
-      "source_text": "Original text this fact is derived from",
-      "confidence": 0.0
+      "source_text": "Original text this fact is derived from"
     }
   ],
   "ambiguities": [
     {
       "item_id": "amb-N",
       "affected_text": "The ambiguous phrase",
-      "ambiguity_type": "signal|threshold|timing|state|observation|behavior",
-      "impact": "How this ambiguity affects test generation",
-      "severity": "low|medium|high|critical",
-      "clarification_question": "A question to resolve this ambiguity",
-      "safe_generation_policy": "mark_with_needs_review|skip_dimension|ask_human",
-      "recommended_review_decision": "approve|clarify|mark_needs_review|block",
-      "confidence_drivers": {
-        "trigger_clarity": 0.0,
-        "expected_behavior_clarity": 0.0,
-        "known_info_sufficiency": 0.0,
-        "ambiguity_resolution": 0.0,
-        "historical_pattern_support": 0.5
-      },
-      "reasons": ["reason strings"]
+      "ambiguity_type": "signal|threshold|timing|state|observation|behavior"
     }
-  ],
-  "clarification_questions": [
-    {
-      "item_id": "q-N",
-      "question": "Question for the reviewer",
-      "context": "Why this question matters",
-      "relates_to_ambiguity_ids": ["amb-N"]
-    }
-  ],
-  "safe_generation_policy": {
-    "can_generate": true,
-    "blocked_dimensions": [],
-    "requires_markers": [],
-    "notes": ""
-  },
-  "confidence_drivers": {
-    "trigger_clarity": 0.0,
-    "expected_behavior_clarity": 0.0,
-    "known_info_sufficiency": 0.0,
-    "ambiguity_resolution": 0.0,
-    "historical_pattern_support": 0.5
-  }
+  ]
 }
 ```
 
@@ -93,9 +70,57 @@ Respond with a JSON object matching this structure exactly:
    - Assign severity honestly
    - Propose a concrete clarification question
    - Recommend whether generation is safe with NEEDS REVIEW markers, or should be blocked
-5. Only list information as missing when it is truly absent and needed to write
-   an executable, pass/fail test. Missing categories are limited to signal,
-   threshold, timing, state, observation, or behavior.
+5. Missing information — for each of the five categories below, check whether
+   the requirement provides enough semantic information. Flag only gaps that
+   are required for the test condition, expected result, or pass/fail judgment.
+   Do not over-flag information that is merely convenient or belongs to bench
+   implementation details.
+
+   signal — flag if:
+     - The case must use a specific BMS signal/interface for stimulus or
+       judgment, but the requirement provides neither a named signal nor a
+       usable natural-language physical quantity or observable.
+     - Do NOT flag signal when the requirement gives a natural-language physical
+       quantity ("cell voltage", "pack current", "selected cells") or observable
+       outcome ("charging is prevented", "balancing is suspended") — those are
+       draft-level inputs.
+     - Do NOT flag signal when the only missing detail is a HIL channel or tool
+       command.
+
+   threshold — flag if:
+     - The requirement says a threshold exists ("exceeds threshold", "above
+       limit") but does not provide a symbolic parameter or numeric value.
+     - A symbolic threshold parameter or explicit numeric threshold is enough;
+       do NOT flag threshold just because the concrete calibration value is not
+       given.
+
+   timing — flag if:
+     - Do NOT infer missing timing only because the requirement has a
+       cause/effect behavior.
+     - Timing is missing only when the case cannot decide when to check the
+       expected result using any timing value, symbolic timing parameter, event
+       point, or ordering already stated in the requirement.
+     - If the requirement provides a duration, deadline, debounce, hold,
+       confirmation, period, or relative ordering that is enough to place the
+       check, do NOT flag timing as missing.
+     - If the requirement provides a symbolic timing parameter or explicit
+       duration, timing is NOT missing.
+     - Do NOT use timing from supplementary information unless the requirement
+       explicitly refers to it.
+
+   state — flag if:
+     - The case must set, enter, exit, or verify a specific BMS mode or state
+       but the requirement does not name it.
+
+   observation — flag if:
+     - The requirement gives a natural-language outcome but does not provide
+       concrete observable evidence such as a signal, DTC, CAN field, log
+       record, limit request, contactor feedback, or report metric.
+     - Do NOT flag observation when the requirement already names the expected
+       signal/status to verify.
+
+   If none of the five categories are missing, do not create an ambiguity.
+   Do NOT flag HIL channel names, tool commands, or bench configuration details.
 6. Confidence drivers must be between 0.0 (no confidence) and 1.0 (complete confidence).
    Use 0.5 as neutral when no information is available.
 7. Do NOT invent signals, thresholds, timing values, state names, observation
