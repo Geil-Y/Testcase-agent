@@ -148,10 +148,24 @@ def _require_str(data: dict, key: str, label: str = "") -> str:
     return val
 
 
+def _normalize_to_str(item) -> str:
+    """Coerce non-string list items to string for downstream LLM consumption."""
+    if isinstance(item, str):
+        return item
+    if isinstance(item, (int, float, bool)):
+        return str(item)
+    if isinstance(item, dict):
+        for key in ("value", "name", "description", "threshold", "signal", "timing", "state"):
+            v = item.get(key)
+            if isinstance(v, str):
+                return v
+        return json.dumps(item, ensure_ascii=False)
+    if isinstance(item, list):
+        return json.dumps(item, ensure_ascii=False)
+    return str(item)
+
+
 def _str_list(val, label: str) -> list[str]:
     if not isinstance(val, list):
         raise ValueError(f"{label} must be a list")
-    for i, item in enumerate(val):
-        if not isinstance(item, str):
-            raise ValueError(f"{label}[{i}] must be a string, got {type(item).__name__}")
-    return val
+    return [_normalize_to_str(item) for item in val]
