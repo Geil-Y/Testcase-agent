@@ -186,11 +186,35 @@ def _build_user_prompt(requirements: list[dict], start_idx: int, total: int) -> 
     ]
 
     for offset, req in enumerate(requirements):
+        analysis = req.get("analysis", {}) or {}
+        signals = _fmt_list(analysis.get("signals", []))
+        thresholds = _fmt_list(analysis.get("thresholds", []))
+        timing = _fmt_list([t for t in analysis.get("timing", []) if str(t).strip().lower() != "none found"])
+        states = _fmt_list(analysis.get("states", []))
+        observations = _fmt_list(analysis.get("observations", []))
+        missing_info = _fmt_missing_items(analysis.get("missing_info_items", []))
+        expected_missing = _fmt_list(req.get("expected_missing_categories", []))
+
         parts.append(
             f"## Requirement Group {start_idx + offset}: {req.get('requirement_key', '')}\n"
             f"Function: {req.get('function_name', '')}\n"
             f"Description: {req.get('description', '')}\n"
+            f"Known signals: {signals}\n"
+            f"Known thresholds: {thresholds}\n"
+            f"Known timing: {timing}\n"
+            f"Known states: {states}\n"
+            f"Known observations: {observations}\n"
+            f"Missing information:\n{missing_info}\n"
+            f"Expected missing categories: {expected_missing}\n"
         )
+
+        # Coverage plan
+        intents = analysis.get("case_intents", [])
+        if intents:
+            parts.append("Coverage plan:\n")
+            for intent in intents:
+                desc = intent.get("description", "")
+                parts.append(f"Case intent: {desc}\n")
 
         for ci, case in enumerate(req.get("cases", [])):
             steps_text = "\n".join(
