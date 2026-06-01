@@ -134,6 +134,9 @@ def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set:
             print(f"  [Evaluate] checklist v2 hard-rule checks ...")
             evaluate_generated_cases_file(str(req_dir))
 
+            # Write per-requirement HTML report
+            _write_requirement_report(req_dir, entry, grouped)
+
             # Collect results
             eval_summary_path = req_dir / "evaluation_summary.json"
             if eval_summary_path.exists():
@@ -228,6 +231,193 @@ def _build_grouped_evaluator_input(
     return [grouped]
 
 
+def _write_requirement_report(req_dir: Path, entry: dict, grouped: list[dict]) -> None:
+    """Write a self-contained per-requirement HTML report.
+
+    Combines: requirement info, LLM-A analysis, LLM-B intents,
+    LLM-C generated cases, and hard-rule evaluation results.
+    """
+    hardrule_path = req_dir / "hardrule_evaluation.json"
+    hardrule = None
+    if hardrule_path.exists():
+        hardrule = json.loads(hardrule_path.read_text(encoding="utf-8"))
+
+    report_html = _render_requirement_html(entry, grouped, hardrule)
+    report_path = req_dir / "requirement_report.html"
+    report_path.write_text(report_html, encoding="utf-8")
+
+
+def _render_requirement_html(entry: dict, grouped: list[dict], hardrule: dict | None) -> str:
+    req_key = entry["requirement_key"]
+    description = entry.get("description", "")
+    function_name = entry.get("function_name", "")
+    bucket = entry.get("evaluation_bucket", "")
+    expected_missing = entry.get("expected_missing_categories", [])
+
+    group = grouped[0] if grouped else {}
+    analysis = group.get("analysis", {})
+    cases = group.get("cases", [])
+
+    # ── header ──
+    sections: list[str] = []
+    sections.append(f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Requirement Report — {req_key}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 40px; background: #f8fafc; color: #1e293b; }}
+  h1 {{ border-bottom: 3px solid #1565c0; padding-bottom: 8px; margin-bottom: 4px; }}
+  h2 {{ background: #e3f2fd; padding: 8px 12px; border-left: 5px solid #1565c0; margin-top: 32px; }}
+  h3 {{ margin-top: 20px; color: #334155; }}
+  .meta {{ color: #64748b; font-size: 14px; margin-bottom: 8px; }}
+  .kv {{ display: inline-block; background: #fff; border: 1px solid #bbb; border-radius: 4px; padding: 1px 6px; margin: 2px; font-size: 0.9em; }}
+  .kv.ok {{ background: #e8f5e9; border-color: #a5d6a7; }}
+  .kv.fail {{ background: #ffebee; border-color: #ef9a9a; }}
+  .kv.warn {{ background: #fff3e0; border-color: #ffcc80; }}
+  .req-desc {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; margin-bottom: 16px; }}
+  table {{ width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); margin-bottom: 16px; }}
+  th {{ background: #f1f5f9; padding: 8px 12px; text-align: left; font-size: 13px; font-weight: 600; color: #475569; }}
+  td {{ padding: 8px 12px; border-top: 1px solid #e2e8f0; font-size: 14px; vertical-align: top; }}
+  tr:hover {{ background: #f8fafc; }}
+  .pass {{ color: #22c55e; font-weight: 600; }}
+  .fail {{ color: #ef4444; font-weight: 600; }}
+  .warn {{ color: #f59e0b; font-weight: 600; }}
+  .case-card {{ background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }}
+  .case-card h3 {{ margin-top: 0; }}
+  .step-num {{ display: inline-block; background: #1565c0; color: #fff; border-radius: 50%; width: 22px; height: 22px; text-align: center; line-height: 22px; font-size: 12px; font-weight: 700; margin-right: 8px; }}
+  .section-empty {{ color: #9e9e9e; font-style: italic; }}
+  .eval-badge {{ display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }}
+  .eval-badge.pass {{ background: #dcfce7; color: #166534; }}
+  .eval-badge.fail {{ background: #fecaca; color: #991b1b; }}
+</style>
+</head>
+<body>
+<h1>Requirement Report — {req_key}</h1>
+<p class="meta">
+  Function: <strong>{function_name}</strong> &middot;
+  Bucket: <strong>{bucket}</strong>
+</p>""")
+
+    # ── 1. Requirement Description ──
+    sections.append(f"""<h2>1. Requirement</h2>
+<div class="req-desc">{description}</div>""")
+    if expected_missing:
+        tags = " ".join(f'<span class="kv warn">{c}</span>' for c in expected_missing)
+        sections.append(f'<p><strong>Expected Missing:</strong> {tags}</p>')
+
+    # ── 2. LLM-A: Test Basis Analysis ──
+    signals = analysis.get("signals", [])
+    thresholds = analysis.get("thresholds", [])
+    timing = analysis.get("timing", [])
+    missing_info = analysis.get("missing_info_items", [])
+
+    sections.append("<h2>2. Test Basis Analysis (LLM-A)</h2>")
+    allowed_sections = [
+        ("Allowed Signals", signals),
+        ("Allowed Thresholds", thresholds),
+        ("Allowed Timing", timing),
+    ]
+    for label, items in allowed_sections:
+        if items:
+            tags = " ".join(f'<span class="kv ok">{s}</span>' for s in items)
+            sections.append(f"<p><strong>{label}:</strong> {tags}</p>")
+        else:
+            sections.append(f"<p><strong>{label}:</strong> <span class='section-empty'>none</span></p>")
+
+    if missing_info:
+        rows = ""
+        for mi in missing_info:
+            rows += f"<tr><td><span class='kv warn'>{mi['category']}</span></td><td>{mi['description']}</td></tr>"
+        sections.append(f"""<h3>Missing Information</h3>
+<table><thead><tr><th>Category</th><th>Description</th></tr></thead><tbody>{rows}</tbody></table>""")
+    else:
+        sections.append("<p><strong>Missing Information:</strong> <span class='section-empty'>none</span></p>")
+
+    # ── 3. LLM-B: Planned Case Intents ──
+    intents = analysis.get("case_intents", [])
+    sections.append("<h2>3. Planned Case Intents (LLM-B)</h2>")
+    if intents:
+        rows = ""
+        for i, ci in enumerate(intents):
+            rows += f"<tr><td>{i+1}</td><td><span class='kv ok'>{ci['coverage']}</span></td></tr>"
+        sections.append(f"""<table><thead><tr><th>#</th><th>Coverage Dimension</th></tr></thead><tbody>{rows}</tbody></table>""")
+    else:
+        sections.append("<p class='section-empty'>No case intents planned.</p>")
+
+    # ── 4. LLM-C: Generated Cases ──
+    sections.append(f"<h2>4. Generated Cases (LLM-C) — {len(cases)} case(s)</h2>")
+    if not cases:
+        sections.append("<p class='section-empty'>No cases generated.</p>")
+    else:
+        for ci, case in enumerate(cases):
+            steps_rows = ""
+            for si, step in enumerate(case.get("steps", [])):
+                action = step.get("action", "")
+                expected = step.get("expected", "") or "—"
+                steps_rows += f"""<tr>
+                  <td style="width:40px;text-align:center"><span class="step-num">{si+1}</span></td>
+                  <td style="width:45%">{action}</td>
+                  <td style="width:45%">{expected}</td>
+                </tr>"""
+            cov = case.get("coverage_dimension", "")
+            cov_tag = f' <span class="kv ok">{cov}</span>' if cov else ""
+            sections.append(f"""<div class="case-card">
+<h3>Case {ci+1}: {case.get('title', 'Untitled')}{cov_tag}</h3>
+<p><strong>Objective:</strong> {case.get('objective', '—')}</p>
+<p><strong>Precondition:</strong> {case.get('precondition', '—')}</p>
+<p><strong>Postcondition:</strong> {case.get('postcondition', '—')}</p>
+<table><thead><tr><th></th><th>Action</th><th>Expected</th></tr></thead><tbody>{steps_rows}</tbody></table>
+</div>""")
+
+    # ── 5. Hard-rule Evaluation ──
+    sections.append("<h2>5. Hard-rule Evaluation (checklist v2)</h2>")
+    if hardrule is None:
+        sections.append("<p class='section-empty'>No evaluation data available.</p>")
+    else:
+        total_cases = hardrule.get("total_cases", 0)
+        total_passed = hardrule.get("total_passed", 0)
+        case_pass_rate = hardrule.get("case_pass_rate", 0)
+        errors = hardrule.get("errors", 0)
+
+        color = "#22c55e" if case_pass_rate >= 0.9 else "#f59e0b" if case_pass_rate >= 0.5 else "#ef4444"
+        sections.append(f"""<p>
+  <strong>Case Pass Rate:</strong> <span style="color:{color};font-weight:700">{case_pass_rate:.0%}</span>
+  &nbsp;({total_passed}/{total_cases} passed, {errors} errors)
+</p>""")
+
+        # Per-case item results
+        hw_cases = hardrule.get("cases", [])
+        if hw_cases:
+            for hwc in hw_cases:
+                title = hwc.get("case_title", "Untitled")
+                items = hwc.get("items", [])
+                fail_items = [it for it in items if it["result"] == "fail"]
+                pass_items = [it for it in items if it["result"] == "pass"]
+                warn_items = [it for it in items if it["result"] == "warn"]
+
+                def _badges(item_list, css_class):
+                    return " ".join(f'<span class="kv {css_class}">{it["item_id"]}</span>' for it in item_list)
+
+                parts = []
+                if fail_items:
+                    parts.append(f'<span>{_badges(fail_items, "fail")}</span>')
+                if warn_items:
+                    parts.append(f'<span>{_badges(warn_items, "warn")}</span>')
+                if pass_items:
+                    parts.append(f'<span class="section-empty">Passed: {len(pass_items)} items</span>')
+
+                status = "fail" if fail_items else "pass"
+                status_badge = f'<span class="eval-badge {status}">{status.upper()}</span>'
+                sections.append(f"""<div class="case-card">
+<h3>{title} {status_badge}</h3>
+<p>{' '.join(parts)}</p>
+</div>""")
+
+    sections.append("</body></html>")
+    return "\n".join(sections)
+
+
 def _write_batch_summary(
     batch_root: Path,
     req_set: dict,
@@ -310,7 +500,7 @@ def _render_batch_html(summary: dict, pipeline_mode: str) -> str:
             status_cell = f'<td style="color:{color};font-weight:600">{pr:.0%}</td>'
             rate_cell = f'<td style="color:{color}">{pr:.0%}</td>'
             if pipeline_mode == "minimal":
-                report_path = f"{Path(run_dir).name}/generated_cases.json"
+                report_path = f"{Path(run_dir).name}/requirement_report.html"
             else:
                 report_path = f"{Path(run_dir).name}/review_report.html"
             detail_link = f'<td><a href="{report_path}" target="_blank">View cases</a></td>'
