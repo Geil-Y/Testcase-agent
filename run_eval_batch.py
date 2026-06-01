@@ -123,7 +123,8 @@ def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set:
 
             # Write grouped evaluator input (with analysis metadata)
             grouped = _build_grouped_evaluator_input(
-                result, req_key, entry.get("description", "")
+                result, req_key, entry.get("description", ""),
+                expected_missing_categories=entry.get("expected_missing_categories"),
             )
             req_dir.joinpath("generated_cases.json").write_text(
                 json.dumps(grouped, ensure_ascii=False, indent=2), encoding="utf-8",
@@ -165,7 +166,8 @@ def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set:
 
 
 def _build_grouped_evaluator_input(
-    result, req_key: str, description: str
+    result, req_key: str, description: str,
+    expected_missing_categories: list[str] | None = None,
 ) -> list[dict]:
     """Build grouped evaluator input with analysis metadata from pipeline result.
 
@@ -215,12 +217,15 @@ def _build_grouped_evaluator_input(
         "case_intents": case_intents,
     }
 
-    return [{
+    grouped = {
         "requirement_key": req_key,
         "description": description,
         "analysis": analysis,
         "cases": cases,
-    }]
+    }
+    if expected_missing_categories is not None:
+        grouped["expected_missing_categories"] = expected_missing_categories
+    return [grouped]
 
 
 def _write_batch_summary(

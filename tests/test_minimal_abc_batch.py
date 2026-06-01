@@ -92,7 +92,10 @@ def test_build_grouped_evaluator_input():
     result.intent_plan = intent_plan
     result.cases = cases
 
-    grouped = run_eval_batch._build_grouped_evaluator_input(result, "REQ-001", "Requirement description.")
+    grouped = run_eval_batch._build_grouped_evaluator_input(
+        result, "REQ-001", "Requirement description.",
+        expected_missing_categories=["timing"],
+    )
 
     assert len(grouped) == 1
     assert grouped[0]["requirement_key"] == "REQ-001"
@@ -106,6 +109,8 @@ def test_build_grouped_evaluator_input():
     assert analysis["missing_info_items"][0]["category"] == "timing"
     assert len(analysis["case_intents"]) == 1
     assert analysis["case_intents"][0]["coverage"] == "normal_behavior"
+
+    assert grouped[0].get("expected_missing_categories") == ["timing"]
 
     case0 = grouped[0]["cases"][0]
     assert case0["title"] == "TC-001"
