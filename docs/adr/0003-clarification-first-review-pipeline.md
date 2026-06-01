@@ -1,7 +1,14 @@
 # ADR-0003: Clarification-First Review Pipeline
 
 **Date:** 2026-05-24
-**Status:** Accepted
+**Status:** Superseded by Minimal ABC Pipeline (2026-05-29)
+
+**Supersession:** The clarification-first review pipeline introduced
+human-review routing, confidence scoring, Review Memory, and the Pipeline
+Console — all complexity beyond what the 7B model baseline needed. The
+Minimal ABC Pipeline restores a linear A→B→C flow with checklist v2
+hard-rule evaluation, keeping "LLM does one thing at a time" as the
+governing principle. See `docs/plans/2026-05-29-minimal-abc-pipeline-plan.md`.
 
 ## Context
 

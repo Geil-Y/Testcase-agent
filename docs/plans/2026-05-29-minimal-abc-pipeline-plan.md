@@ -18,9 +18,11 @@ This is a baseline quality path, not the future Review Console path.
 
 ## Scope
 
-Implement the minimal ABC path beside the current review pipeline first. Batch evaluation should be able to run this path directly. The current review pipeline, Review Console, Review Memory, confidence routing, reason codes, fact references, and default-human-approve behavior should stay out of this path.
-
-Do not delete the review pipeline in this change. Freeze it while the ABC path is brought back to a passing quality line.
+The ABC pipeline is now the sole legal generation pipeline. The review pipeline
+(ADR-0003) and all associated infrastructure (Review Console, Review Memory,
+confidence routing, reason codes, fact references) have been retired and
+deleted. The ABC evaluator now uses checklist v2 hard-rule semantics from
+`optimization.evaluator`.
 
 ## Design Rules
 
