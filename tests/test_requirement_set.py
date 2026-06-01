@@ -9,7 +9,16 @@ from optimization.cli import (
     select_by_requirement_set,
     validate_requirement_set,
 )
-from testcase_agent.review_pipeline.artifacts.models import RequirementInput
+from dataclasses import dataclass
+
+
+@dataclass
+class RequirementInput:
+    requirement_key: str
+    description: str
+    function_name: str = ""
+    requirement_type: str = "requirement"
+    supplementary_info: str = ""
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 

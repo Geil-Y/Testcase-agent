@@ -1,7 +1,7 @@
 """CLI for evaluation and legacy optimization helpers.
 
-The old batch generation command has been removed. Use
-``python -m testcase_agent.review_pipeline.cli`` for new clarification-first generation runs.
+The clarification-first review pipeline has been retired (superseded by ABC pipeline).
+Use ``python run_eval_batch.py --pipeline minimal`` for batch generation.
 Existing report/evaluation helpers remain for reading completed rounds.
 """
 
@@ -346,12 +346,12 @@ def select_by_requirement_set(
 
 
 def archive_prompts(round_dir: Path) -> None:
-    """Copy current review-pipeline prompt files into round_dir/prompts/."""
+    """Copy current ABC pipeline prompt files into round_dir/prompts/."""
     prompts_dir = round_dir / "prompts"
     prompts_dir.mkdir(parents=True, exist_ok=True)
 
     project_root = Path(__file__).resolve().parents[1]
-    source_dir = project_root / "src" / "testcase_agent" / "review_pipeline" / "prompts"
+    source_dir = project_root / "prompts"
 
     for src in sorted(source_dir.glob("*.html")):
         # Strip .html extension for the archived copy.
@@ -404,10 +404,10 @@ def run_batch(
     requirement_set_data: dict | None = None,
     run_eval: bool = False,
 ) -> dict:
-    """Legacy batch generation entry point.
+    """Legacy batch generation entry point — superseded by ABC pipeline.
 
     Kept only as an importable guard for older helper code. New generation must
-    start from ``python -m testcase_agent.review_pipeline.cli prepare-clarification-review``.
+    start from ``python run_eval_batch.py --pipeline minimal``.
     """
     settings = get_settings()
     provider = create_provider(settings)
@@ -766,8 +766,8 @@ def main():
     if args.command == "run":
         parser.error(
             "optimization.cli run was removed with the legacy generation "
-            "pipeline. Use python -m testcase_agent.review_pipeline.cli "
-            "prepare-clarification-review instead."
+            "pipeline. Use python run_eval_batch.py --pipeline minimal "
+            "instead (superseded: review_pipeline retired)."
         )
 
     elif args.command == "evaluate":

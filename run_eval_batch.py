@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Batch evaluation: process requirements through 3-LLM pipeline.
+"""Batch evaluation: process requirements through ABC pipeline.
 
 Usage:
   python run_eval_batch.py --pipeline minimal  [--limit N] [--out DIR]
-  python run_eval_batch.py --pipeline review   [--limit N] [--out DIR]
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ import argparse
 import json
 import sys
 import traceback
-import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -24,9 +22,9 @@ def main():
     parser = argparse.ArgumentParser(description="Batch eval with selectable pipeline")
     parser.add_argument(
         "--pipeline",
-        choices=["minimal", "review"],
+        choices=["minimal"],
         default="minimal",
-        help="Pipeline mode: minimal (ABC) or review (default: minimal)",
+        help="Pipeline mode (default: minimal)",
     )
     parser.add_argument(
         "--requirement-set",
@@ -68,16 +66,12 @@ def main():
     batch_root.mkdir(parents=True, exist_ok=True)
     print(f"Output: {batch_root}")
 
-    if args.pipeline == "review":
-        _run_review_batch(entries, batch_root, provider, req_set)
-    else:
-        _run_minimal_batch(entries, batch_root, provider, req_set)
+    _run_minimal_batch(entries, batch_root, provider, req_set)
 
 
 def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set: dict) -> None:
     from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
-    from testcase_agent.review_pipeline.artifacts.io import write_json
-    from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
+    from src.testcase_agent.pipeline.evaluate import evaluate_generated_cases_file
 
     batch_results: list[dict] = []
     total_cases = 0
@@ -127,23 +121,22 @@ def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set:
             num_cases = len(result.cases)
             print(f"  [ABC] {num_cases} cases generated")
 
-            # Convert to evaluator format
-            generated_cases = _cases_to_evaluator_format(
-                result.cases,
-                result.intent_plan.case_intents,
-                req_key,
+            # Write grouped evaluator input (with analysis metadata)
+            grouped = _build_grouped_evaluator_input(
+                result, req_key, entry.get("description", "")
             )
-            write_json(req_dir / "generated_cases.json", generated_cases)
+            req_dir.joinpath("generated_cases.json").write_text(
+                json.dumps(grouped, ensure_ascii=False, indent=2), encoding="utf-8",
+            )
 
-            # Evaluate
-            print(f"  [Evaluate] running hard-rule checks ...")
-            evaluate_run(str(req_dir))
+            # Evaluate with checklist v2 hard-rules
+            print(f"  [Evaluate] checklist v2 hard-rule checks ...")
+            evaluate_generated_cases_file(str(req_dir))
 
             # Collect results
             eval_summary_path = req_dir / "evaluation_summary.json"
             if eval_summary_path.exists():
-                from testcase_agent.review_pipeline.artifacts.io import read_json
-                eval_summary = read_json(eval_summary_path)
+                eval_summary = json.loads(eval_summary_path.read_text(encoding="utf-8"))
                 result_entry["num_cases"] = eval_summary["total_cases"]
                 result_entry["passed"] = eval_summary["passed"]
                 result_entry["failed"] = eval_summary["failed"]
@@ -171,160 +164,63 @@ def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set:
                          total_passed, total_failed, "minimal")
 
 
-def _run_review_batch(entries: list[dict], batch_root: Path, provider, req_set: dict) -> None:
-    from testcase_agent.review_pipeline.artifacts.io import read_json, write_json
-    from testcase_agent.review_pipeline.stages.decompose_requirement import prepare_clarification_review
-    from testcase_agent.review_pipeline.stages.validate_clarification import validate_clarification_review
-    from testcase_agent.review_pipeline.stages.plan_case_intents import prepare_intent_review
-    from testcase_agent.review_pipeline.stages.validate_case_intent import validate_case_intent_review
-    from testcase_agent.review_pipeline.stages.write_cases import generate_cases
-    from testcase_agent.review_pipeline.stages.evaluate import evaluate_run
-    from testcase_agent.review_pipeline.html_rendering.report import render_unified_report
-
-    batch_results: list[dict] = []
-    total_cases = 0
-    total_passed = 0
-    total_failed = 0
-    errors_count = 0
-    completed_count = 0
-
-    for idx, entry in enumerate(entries):
-        req_key = entry["requirement_key"]
-        print(f"\n{'='*60}")
-        print(f"[{idx+1}/{len(entries)}] {req_key} — {entry.get('function_name', '')}")
-        print(f"{'='*60}")
-
-        req_dir = batch_root / req_key
-        result_entry: dict = {
-            "requirement_key": req_key,
-            "function_name": entry.get("function_name", ""),
-            "evaluation_bucket": entry.get("evaluation_bucket", ""),
-            "num_cases": 0,
-            "passed": 0,
-            "failed": 0,
-            "pass_rate": 0.0,
-            "run_dir": str(req_dir),
-            "error": None,
-        }
-
-        try:
-            req_dir.mkdir(parents=True, exist_ok=True)
-
-            req_input = {
-                "requirement_key": req_key,
-                "description": entry["description"],
-                "function_name": entry.get("function_name", ""),
-                "requirement_type": "requirement",
-                "supplementary_info": entry.get("supplementary_info", ""),
-            }
-
-            temp_input = req_dir / "_input.json"
-            write_json(temp_input, [req_input])
-
-            print(f"  [LLM-A] decompose ...")
-            prepare_clarification_review(str(temp_input), str(req_dir), provider=provider)
-
-            cr_path = req_dir / "clarification_review.json"
-            cr_data = read_json(cr_path)
-            cr_data["decisions"] = [
-                {"item_id": d["item_id"], "decision": "approve"}
-                for d in cr_data.get("decisions", [])
-            ]
-            write_json(cr_path, cr_data)
-            print(f"  [Auto-approve] {len(cr_data['decisions'])} clarification decisions -> approve")
-
-            result_a, basis = validate_clarification_review(str(cr_path))
-            if not result_a.is_valid:
-                raise RuntimeError(f"Stage A validation failed:\n{result_a.format_errors()}")
-            print(f"  [Validate-A] OK, blocked={basis.blocked if basis else 'N/A'}")
-
-            if basis and basis.blocked:
-                raise RuntimeError(f"Test basis blocked: {'; '.join(basis.block_reasons)}")
-
-            print(f"  [LLM-B] plan intents ...")
-            prepare_intent_review(str(req_dir), provider=provider)
-
-            cir_path = req_dir / "case_intent_review.json"
-            cir_data = read_json(cir_path)
-            cir_data["decisions"] = [
-                {"intent_id": d["intent_id"], "decision": "approve"}
-                for d in cir_data.get("decisions", [])
-            ]
-            write_json(cir_path, cir_data)
-            print(f"  [Auto-approve] {len(cir_data['decisions'])} intent decisions -> approve")
-
-            result_b, approved = validate_case_intent_review(str(cir_path))
-            if not result_b.is_valid:
-                raise RuntimeError(f"Stage B validation failed:\n{result_b.format_errors()}")
-            intent_count = len(approved.approved_intents) if approved else 0
-            print(f"  [Validate-B] OK, {intent_count} approved intents")
-
-            if intent_count == 0:
-                raise RuntimeError("No approved intents - nothing to generate")
-
-            print(f"  [LLM-C] generate cases ({intent_count} intents) ...")
-            case_set = generate_cases(str(req_dir), provider=provider)
-            print(f"  [LLM-C] {len(case_set.cases)} cases generated")
-
-            print(f"  [Evaluate] running hard-rule checks ...")
-            evaluate_run(str(req_dir))
-
-            print(f"  [Report] generating review_report.html ...")
-            html = render_unified_report(req_dir)
-            (req_dir / "review_report.html").write_text(html, encoding="utf-8")
-
-            eval_summary = read_json(req_dir / "evaluation_summary.json")
-            result_entry["num_cases"] = eval_summary["total_cases"]
-            result_entry["passed"] = eval_summary["passed"]
-            result_entry["failed"] = eval_summary["failed"]
-            result_entry["pass_rate"] = eval_summary["pass_rate"]
-
-            total_cases += result_entry["num_cases"]
-            total_passed += result_entry["passed"]
-            total_failed += result_entry["failed"]
-            completed_count += 1
-
-            print(f"  Done: {result_entry['num_cases']} cases, {result_entry['passed']} passed, {result_entry['failed']} failed")
-
-        except Exception as exc:
-            result_entry["error"] = f"{type(exc).__name__}: {exc}"
-            errors_count += 1
-            print(f"  ERROR: {exc}")
-            traceback.print_exc()
-
-        batch_results.append(result_entry)
-
-    _write_batch_summary(batch_root, req_set, entries, batch_results,
-                         completed_count, errors_count, total_cases,
-                         total_passed, total_failed, "review")
-
-
-def _cases_to_evaluator_format(
-    cases: list, intents: list, req_key: str
+def _build_grouped_evaluator_input(
+    result, req_key: str, description: str
 ) -> list[dict]:
-    """Convert html_parser.GeneratedCase list to evaluator dict format."""
-    out: list[dict] = []
-    for i, case in enumerate(cases):
-        intent = intents[i] if i < len(intents) else None
+    """Build grouped evaluator input with analysis metadata from pipeline result.
+
+    Produces the format expected by optimization.evaluator.evaluate_generated_cases().
+    """
+    from testcase_agent.pipeline.generate import GenerationResult
+
+    test_basis = result.test_basis
+    intent_plan = result.intent_plan
+
+    # Build cases list from GeneratedCase objects
+    cases: list[dict] = []
+    for i, case in enumerate(result.cases):
+        intent = intent_plan.case_intents[i] if i < len(intent_plan.case_intents) else None
         steps = []
         for step in case.steps:
             steps.append({
                 "action": step.action,
-                "expected_result": step.expected or "",
+                "expected": step.expected or "",
             })
-        out.append({
-            "case_id": f"case-{uuid.uuid4().hex[:8]}",
+        cases.append({
             "title": case.title,
             "objective": case.objective,
-            "pre_condition": case.precondition,
-            "post_condition": case.postcondition,
+            "precondition": case.precondition,
+            "postcondition": case.postcondition,
             "steps": steps,
-            "requirement_key": req_key,
-            "approved_intent_id": intent.intent_id if intent else "",
+            "raw_html": case.raw_html,
+            "related_requirement": req_key,
             "coverage_dimension": intent.coverage_dimension if intent else "",
-            "review_session_id": "minimal",
         })
-    return out
+
+    # Build analysis from test_basis
+    missing_info_items = [
+        {"category": mi.category, "description": mi.description}
+        for mi in test_basis.missing_info
+    ]
+    case_intents = [
+        {"coverage": intent.coverage_dimension}
+        for intent in intent_plan.case_intents
+    ]
+
+    analysis = {
+        "signals": list(test_basis.allowed_signals),
+        "thresholds": list(test_basis.allowed_thresholds),
+        "timing": list(test_basis.allowed_timing),
+        "missing_info_items": missing_info_items,
+        "case_intents": case_intents,
+    }
+
+    return [{
+        "requirement_key": req_key,
+        "description": description,
+        "analysis": analysis,
+        "cases": cases,
+    }]
 
 
 def _write_batch_summary(
@@ -339,8 +235,6 @@ def _write_batch_summary(
     total_failed: int,
     pipeline_mode: str,
 ) -> None:
-    from testcase_agent.review_pipeline.artifacts.io import write_json
-
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     aggregate_pass_rate = total_passed / total_cases if total_cases > 0 else 0.0
     batch_summary = {
@@ -358,7 +252,9 @@ def _write_batch_summary(
         "results": batch_results,
     }
     summary_path = batch_root / "batch_results.json"
-    write_json(summary_path, batch_summary)
+    summary_path.write_text(
+        json.dumps(batch_summary, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
     print(f"\nBatch results: {summary_path}")
 
     batch_html = _render_batch_html(batch_summary, pipeline_mode)
