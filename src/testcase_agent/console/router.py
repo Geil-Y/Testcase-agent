@@ -1,0 +1,375 @@
+from __future__ import annotations
+
+import io
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, UploadFile
+
+from .db import get_db
+from .pipeline_runner import run_llm_a
+from .advance import advance_run as do_advance
+from .evaluate import evaluate_run as do_evaluate
+from ..pipeline.import_requirements import ParsedRequirement, parse_requirements, ColumnMapping
+from ..config import get_settings
+from ..provider.factory import create_provider
+from ..pipeline.generate import RequirementInput
+
+console_router = APIRouter()
+
+
+# ── Requirements ──────────────────────────────────────────────────────────────
+
+@console_router.get("/requirements")
+def list_requirements(q: str = "", status: str = "", offset: int = 0, limit: int = 50):
+    db = get_db()
+    clauses = ["1=1"]
+    params: list[Any] = []
+
+    if q:
+        clauses.append("(requirement_key LIKE ? OR description LIKE ? OR function_name LIKE ?)")
+        like = f"%{q}%"
+        params.extend([like, like, like])
+
+    if status:
+        clauses.append("runs.status_label = ?")
+        params.append(status)
+
+    count_sql = f"SELECT COUNT(*) FROM requirements WHERE {' AND '.join(clauses)}"
+    total = db.execute(count_sql, params).fetchone()[0]
+
+    rows = db.execute(
+        f"SELECT * FROM requirements WHERE {' AND '.join(clauses)} ORDER BY id DESC LIMIT ? OFFSET ?",
+        params + [limit, offset],
+    ).fetchall()
+
+    items = [_row_to_dict(r) for r in rows]
+    return {"items": items, "total": total}
+
+
+@console_router.post("/requirements/import")
+def import_requirements(file: UploadFile, sheet_name: str | None = None):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "Only .xlsx and .xls files are supported")
+
+    content = file.file.read()
+    import tempfile, os
+    fd, tmp_path = tempfile.mkstemp(suffix=".xlsx")
+    try:
+        os.write(fd, content)
+        os.close(fd)
+
+        from ..pipeline.import_requirements import list_columns
+        headers = list_columns(tmp_path, sheet_name)
+        mapping = _auto_detect_mapping(headers)
+        parsed = parse_requirements(tmp_path, mapping, sheet_name)
+    finally:
+        from pathlib import Path
+        Path(tmp_path).unlink(missing_ok=True)
+
+    db = get_db()
+    inserted = 0
+    for req in parsed:
+        cur = db.execute(
+            """INSERT OR IGNORE INTO requirements
+               (requirement_key, description, function_name, requirement_type,
+                supplementary_info, source_row)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (req.requirement_key, req.description, req.function_name,
+             req.requirement_type, req.supplementary_info, req.source_row),
+        )
+        if cur.rowcount > 0:
+            inserted += 1
+    db.commit()
+
+    return {"imported": inserted, "total_rows": len(parsed)}
+
+
+@console_router.get("/requirements/{req_id:int}")
+def get_requirement(req_id: int):
+    db = get_db()
+    row = db.execute("SELECT * FROM requirements WHERE id = ?", (req_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "Requirement not found")
+
+    runs = db.execute(
+        "SELECT * FROM runs WHERE requirement_id = ? ORDER BY created_at DESC",
+        (req_id,),
+    ).fetchall()
+
+    return {
+        "requirement": _row_to_dict(row),
+        "runs": [_row_to_dict(r) for r in runs],
+    }
+
+
+# ── Runs ──────────────────────────────────────────────────────────────────────
+
+@console_router.post("/runs")
+def create_run(body: dict):
+    requirement_id = body.get("requirement_id")
+    review_required: list[str] = body.get("review_required", [])
+
+    if not requirement_id:
+        raise HTTPException(422, "requirement_id is required")
+
+    db = get_db()
+    req = db.execute("SELECT * FROM requirements WHERE id = ?", (requirement_id,)).fetchone()
+    if not req:
+        raise HTTPException(404, "Requirement not found")
+
+    ra = 1 if "a" in review_required else 0
+    rb = 1 if "b" in review_required else 0
+    rc = 1 if "c" in review_required else 0
+
+    cur = db.execute(
+        """INSERT INTO runs (requirement_id, review_llm_a, review_llm_b, review_llm_c)
+           VALUES (?, ?, ?, ?)""",
+        (requirement_id, ra, rb, rc),
+    )
+    run_id = cur.lastrowid
+
+    settings = get_settings()
+    provider = create_provider(settings)
+    req_input = RequirementInput(
+        requirement_key=req["requirement_key"],
+        description=req["description"],
+        function_name=req["function_name"] or "",
+        supplementary_info=req["supplementary_info"] or "",
+    )
+
+    try:
+        run_llm_a(req_input, provider, run_id, db)
+    except Exception as e:
+        db.execute("UPDATE runs SET status='failed', error=?, updated_at=datetime('now') WHERE id=?",
+                   (str(e), run_id))
+        db.commit()
+
+    return _build_run_response(run_id, db)
+
+
+@console_router.get("/runs/{run_id:int}")
+def get_run(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+    return _build_run_response(run_id, db)
+
+
+@console_router.post("/runs/{run_id:int}/advance")
+def advance_run(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    do_advance(run_id, provider, db)
+
+    return _build_run_response(run_id, db)
+
+
+@console_router.post("/runs/{run_id:int}/evaluate")
+def evaluate_run(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    result = do_evaluate(run_id, db)
+    return result
+
+
+# ── Section Items ─────────────────────────────────────────────────────────────
+
+_VALID_SECTIONS = {"signals", "thresholds", "timing", "states", "observations"}
+
+
+@console_router.put("/runs/{run_id:int}/sections/{section:str}/items/{item_id:str}")
+def update_item(run_id: int, section: str, item_id: str, body: dict):
+    if section not in _VALID_SECTIONS:
+        raise HTTPException(422, f"Invalid section: {section}")
+
+    db = get_db()
+    row = db.execute(
+        """SELECT i.id FROM test_basis_items i
+           JOIN test_basis_sections s ON i.section_id = s.id
+           WHERE s.run_id = ? AND s.section_name = ? AND i.item_id = ?""",
+        (run_id, section, item_id),
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, f"Item {item_id} not found in section {section}")
+
+    fields: dict[str, Any] = {}
+    for key in ("status", "content", "need"):
+        if key in body:
+            fields[key] = body[key]
+
+    if fields:
+        sets = ", ".join(f"{k}=?" for k in fields)
+        values = list(fields.values()) + [row["id"]]
+        db.execute(f"UPDATE test_basis_items SET {sets} WHERE id=?", values)
+        db.commit()
+
+    updated = db.execute("SELECT * FROM test_basis_items WHERE id = ?", (row["id"],)).fetchone()
+    return _row_to_dict(updated)
+
+
+@console_router.post("/runs/{run_id:int}/sections/{section:str}/items")
+def add_item(run_id: int, section: str, body: dict):
+    if section not in _VALID_SECTIONS:
+        raise HTTPException(422, f"Invalid section: {section}")
+
+    db = get_db()
+    sec = db.execute(
+        "SELECT id FROM test_basis_sections WHERE run_id = ? AND section_name = ?",
+        (run_id, section),
+    ).fetchone()
+    if not sec:
+        raise HTTPException(404, f"Section {section} not found in run")
+
+    item_id = body.get("item_id", "")
+    status = body.get("status", "known")
+    content = body.get("content", "")
+    need = body.get("need", "")
+    source_text = body.get("source_text", "")
+
+    cur = db.execute(
+        """INSERT INTO test_basis_items (section_id, item_id, status, content, need, source_text)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (sec["id"], item_id, status, content, need, source_text),
+    )
+    db.commit()
+
+    new_row = db.execute("SELECT * FROM test_basis_items WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return _row_to_dict(new_row)
+
+
+@console_router.delete("/runs/{run_id:int}/sections/{section:str}/items/{item_id:str}")
+def delete_item(run_id: int, section: str, item_id: str):
+    if section not in _VALID_SECTIONS:
+        raise HTTPException(422, f"Invalid section: {section}")
+
+    db = get_db()
+    row = db.execute(
+        """SELECT i.id FROM test_basis_items i
+           JOIN test_basis_sections s ON i.section_id = s.id
+           WHERE s.run_id = ? AND s.section_name = ? AND i.item_id = ?""",
+        (run_id, section, item_id),
+    ).fetchone()
+
+    if not row:
+        raise HTTPException(404, f"Item {item_id} not found in section {section}")
+
+    db.execute("DELETE FROM test_basis_items WHERE id = ?", (row["id"],))
+    db.commit()
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _row_to_dict(row: sqlite3.Row) -> dict:
+    return dict(row)
+
+
+def _auto_detect_mapping(headers: list[str]) -> ColumnMapping:
+    mapping = ColumnMapping()
+    lower = [h.lower() for h in headers]
+
+    for i, h in enumerate(lower):
+        if not mapping.requirement_key_col and ("key" in h or "requirement" in h or h == "id"):
+            mapping.requirement_key_col = headers[i]
+        elif not mapping.description_col and ("description" in h or "desc" in h or "requirement" in h or "detail" in h):
+            mapping.description_col = headers[i]
+        elif not mapping.function_name_col and ("function" in h or "func" in h):
+            mapping.function_name_col = headers[i]
+        elif not mapping.requirement_type_col and ("type" in h or "category" in h):
+            mapping.requirement_type_col = headers[i]
+        else:
+            mapping.supplementary_info_cols.append(headers[i])
+
+    return mapping
+
+
+def _build_run_response(run_id: int, db: sqlite3.Connection) -> dict:
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    req = db.execute("SELECT * FROM requirements WHERE id = ?", (run["requirement_id"],)).fetchone()
+
+    sections = db.execute(
+        "SELECT * FROM test_basis_sections WHERE run_id = ? ORDER BY sort_order",
+        (run_id,),
+    ).fetchall()
+
+    sections_data = []
+    for sec in sections:
+        items = db.execute(
+            "SELECT * FROM test_basis_items WHERE section_id = ? ORDER BY sort_order",
+            (sec["id"],),
+        ).fetchall()
+        sections_data.append({
+            "section_name": sec["section_name"],
+            "items": [_row_to_dict(it) for it in items],
+        })
+
+    intents = db.execute(
+        "SELECT * FROM case_intents WHERE run_id = ? ORDER BY sort_order",
+        (run_id,),
+    ).fetchall()
+
+    cases = db.execute(
+        "SELECT * FROM test_cases WHERE run_id = ? ORDER BY sort_order",
+        (run_id,),
+    ).fetchall()
+
+    cases_data = []
+    for case in cases:
+        steps = db.execute(
+            "SELECT * FROM test_case_steps WHERE case_id = ? ORDER BY step_order",
+            (case["id"],),
+        ).fetchall()
+        case_dict = _row_to_dict(case)
+        case_dict["steps"] = [_row_to_dict(s) for s in steps]
+
+        evals = db.execute(
+            "SELECT * FROM evaluation_results WHERE case_id = ?",
+            (case["id"],),
+        ).fetchall()
+        case_dict["evaluation_items"] = [_row_to_dict(e) for e in evals]
+        cases_data.append(case_dict)
+
+    evaluation = None
+    if run["status"] == "evaluated":
+        total = len(cases_data)
+        passed = sum(
+            1 for c in cases_data
+            if not any(e["result"] == "fail" for e in c["evaluation_items"])
+        )
+        evaluation = {
+            "total_cases": total,
+            "passed": passed,
+            "failed": total - passed,
+            "pass_rate": round(passed / total, 4) if total > 0 else 0.0,
+            "cases": [
+                {
+                    "case_id": c["id"],
+                    "title": c["title"],
+                    "passed": not any(e["result"] == "fail" for e in c["evaluation_items"]),
+                    "failed_items": [e["item_id"] for e in c["evaluation_items"] if e["result"] == "fail"],
+                    "warning_items": [e["item_id"] for e in c["evaluation_items"] if e["result"] == "warn"],
+                }
+                for c in cases_data
+            ],
+        }
+
+    return {
+        "run": _row_to_dict(run),
+        "requirement": _row_to_dict(req),
+        "sections": sections_data,
+        "intents": [_row_to_dict(i) for i in intents],
+        "cases": cases_data,
+        "evaluation": evaluation,
+    }
