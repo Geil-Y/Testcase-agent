@@ -25,7 +25,7 @@ def advance_run(run_id: int, provider: LlmProvider, db: sqlite3.Connection) -> N
     if status == "extraction_ready":
         run_llm_b(run_id, provider, db)
         run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-        if run["review_llm_c"] == 0:
+        if run["review_llm_b"] == 0 and run["review_llm_c"] == 0:
             run_llm_c(run_id, provider, db)
 
     elif status == "intents_ready":

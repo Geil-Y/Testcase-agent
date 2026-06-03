@@ -31,7 +31,17 @@ def list_requirements(q: str = "", status: str = "", offset: int = 0, limit: int
         params.extend([like, like, like])
 
     if status:
-        clauses.append("runs.status_label = ?")
+        clauses.append("""
+            COALESCE(
+                (SELECT CASE
+                    WHEN r.status IN ('cases_ready','evaluated') THEN 'reviewed'
+                    WHEN r.status IN ('extraction_ready','intents_ready') THEN 'pending'
+                    ELSE 'new'
+                END
+                FROM runs r WHERE r.requirement_id = requirements.id
+                ORDER BY r.created_at DESC LIMIT 1
+                ), 'new') = ?
+        """)
         params.append(status)
 
     count_sql = f"SELECT COUNT(*) FROM requirements WHERE {' AND '.join(clauses)}"
