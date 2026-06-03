@@ -26,6 +26,8 @@ vi.mock('../api/runs', () => ({
   getRun: vi.fn().mockImplementation(() => Promise.resolve(mockData)),
   advanceRun: vi.fn().mockResolvedValue({}),
   evaluateRun: vi.fn().mockResolvedValue({ summary: { total_cases: 1, passed: 1, failed: 0, pass_rate: 1 }, cases: [] }),
+  addItem: vi.fn().mockResolvedValue({}),
+  deleteItem: vi.fn().mockResolvedValue(undefined),
 }));
 
 function renderWs(data: RunDetail) {

@@ -5,9 +5,11 @@ interface Props {
   requirement: Requirement;
   sections: Section[];
   onItemClick: (item: SectionItem, sectionName: string) => void;
+  onAddItem: (sectionName: string) => void;
+  onDeleteItem: (item: SectionItem, sectionName: string) => void;
 }
 
-export default function Sidebar({ requirement, sections, onItemClick }: Props) {
+export default function Sidebar({ requirement, sections, onItemClick, onAddItem, onDeleteItem }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -26,6 +28,7 @@ export default function Sidebar({ requirement, sections, onItemClick }: Props) {
             <div className="sb-section-header" onClick={() => toggle(sec.section_name)}>
               <span>{sec.section_name}</span>
               <span className="text-muted" style={{ fontSize: 11 }}>{sec.items.length} items</span>
+              <button className="btn btn-xs" style={{ marginLeft: 'auto' }} onClick={(e) => { e.stopPropagation(); onAddItem(sec.section_name); }} title="Add item">+</button>
             </div>
             {!collapsed[sec.section_name] && (
               <div className="sb-section-body">
@@ -40,6 +43,7 @@ export default function Sidebar({ requirement, sections, onItemClick }: Props) {
                       <span className={`badge ${item.status === 'known' ? 'badge-known' : 'badge-needs'}`}>
                         {item.status === 'known' ? 'known' : 'needs review'}
                       </span>
+                      <button className="btn btn-xs sb-item-del" onClick={(e) => { e.stopPropagation(); onDeleteItem(item, sec.section_name); }} title="Delete item">&times;</button>
                     </div>
                     {item.content && <div className="sb-item-content">{item.content}</div>}
                     {item.need && <div className="sb-item-need">{item.need}</div>}

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRun, advanceRun, evaluateRun } from '../api/runs';
+import { getRun, advanceRun, evaluateRun, addItem, deleteItem } from '../api/runs';
 import type { RunDetail, SectionItem } from '../api/types';
 import Sidebar from '../components/Sidebar';
 import CaseGroup from '../components/CaseGroup';
@@ -22,7 +22,7 @@ export default function Workspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [advancing, setAdvancing] = useState(false);
-  const [modalItem, setModalItem] = useState<{ item: SectionItem; sectionName: string } | null>(null);
+  const [modalItem, setModalItem] = useState<{ item: SectionItem; sectionName: string; isNew: boolean } | null>(null);
 
   const fetchRun = async () => {
     if (!runId) return;
@@ -42,12 +42,28 @@ export default function Workspace() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (modalItem) setModalItem(null);
+        if (modalItem) { setModalItem(null); }
+        else { navigate('/'); }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [modalItem]);
+
+  const handleAddItem = (sectionName: string) => {
+    const empty: SectionItem = { id: 0, item_id: '', status: 'known', content: '', need: '', source_text: '', sort_order: 0 };
+    setModalItem({ item: empty, sectionName, isNew: true });
+  };
+
+  const handleDeleteItem = async (item: SectionItem, sectionName: string) => {
+    if (!runId || !window.confirm(`Delete item "${item.item_id}"?`)) return;
+    try {
+      await deleteItem(Number(runId), sectionName, item.item_id);
+      await fetchRun();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   const handleAdvance = async () => {
     if (!runId) return;
@@ -98,14 +114,15 @@ export default function Workspace() {
           {status.replace(/_/g, ' ')}
         </span>
         <span className="ws-spacer" />
-        <button className="btn btn-sm">Save Draft</button>
         {actionBtn}
       </div>
       <div className="ws-body">
         <Sidebar
           requirement={requirement}
           sections={sections}
-          onItemClick={(item, sectionName) => setModalItem({ item, sectionName })}
+          onItemClick={(item, sectionName) => setModalItem({ item, sectionName, isNew: false })}
+          onAddItem={handleAddItem}
+          onDeleteItem={handleDeleteItem}
         />
         <div className="main-content">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -147,6 +164,7 @@ export default function Workspace() {
           runId={Number(runId)}
           onClose={() => setModalItem(null)}
           onSaved={fetchRun}
+          isNew={modalItem.isNew}
         />
       )}
     </div>

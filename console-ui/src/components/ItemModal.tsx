@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { SectionItem } from '../api/types';
-import { updateItem } from '../api/runs';
+import { updateItem, addItem } from '../api/runs';
 
 interface Props {
   item: SectionItem;
@@ -9,6 +9,7 @@ interface Props {
   runId: number;
   onClose: () => void;
   onSaved: () => void;
+  isNew?: boolean;
 }
 
 function highlightInText(fullText: string, query: string): string {
@@ -25,7 +26,7 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export default function ItemModal({ item, sectionName, requirementDescription, runId, onClose, onSaved }: Props) {
+export default function ItemModal({ item, sectionName, requirementDescription, runId, onClose, onSaved, isNew }: Props) {
   const [status, setStatus] = useState(item.status);
   const [content, setContent] = useState(item.content);
   const [need, setNeed] = useState(item.need);
@@ -37,7 +38,11 @@ export default function ItemModal({ item, sectionName, requirementDescription, r
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateItem(runId, sectionName, item.item_id, { status, content, need });
+      if (isNew) {
+        await addItem(runId, sectionName, { item_id: content ? content.slice(0, 20).replace(/[^a-zA-Z0-9_-]/g, '-') : 'new-item', status, content, need, source_text: '' });
+      } else {
+        await updateItem(runId, sectionName, item.item_id, { status, content, need });
+      }
       onSaved();
       onClose();
     } catch (e) {

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import Sidebar from './Sidebar';
-import type { Requirement, Section } from '../api/types';
+import type { Requirement, Section, SectionItem } from '../api/types';
 
 const mockReq: Requirement = {
   id: 1, requirement_key: 'REQ-001', description: 'BMS Cell Overvoltage Detection',
@@ -23,21 +23,37 @@ const mockSections: Section[] = [
   },
 ];
 
+function renderSb(props: Partial<{
+  onItemClick: (item: SectionItem, sectionName: string) => void;
+  onAddItem: (sectionName: string) => void;
+  onDeleteItem: (item: SectionItem, sectionName: string) => void;
+}> = {}) {
+  return render(
+    <Sidebar
+      requirement={mockReq}
+      sections={mockSections}
+      onItemClick={props.onItemClick ?? vi.fn()}
+      onAddItem={props.onAddItem ?? vi.fn()}
+      onDeleteItem={props.onDeleteItem ?? vi.fn()}
+    />
+  );
+}
+
 describe('Sidebar', () => {
   it('renders requirement description', () => {
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={vi.fn()} />);
+    renderSb();
     expect(screen.getByText('BMS Cell Overvoltage Detection')).toBeDefined();
   });
 
   it('renders section headers with item counts', () => {
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={vi.fn()} />);
+    renderSb();
     expect(screen.getByText('signals')).toBeDefined();
     expect(screen.getByText('2 items')).toBeDefined();
     expect(screen.getByText('1 items')).toBeDefined();
   });
 
   it('collapses and expands sections', () => {
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={vi.fn()} />);
+    renderSb();
     expect(screen.getByText('sig-1')).toBeDefined();
     fireEvent.click(screen.getByText('signals'));
     expect(screen.queryByText('sig-1')).toBeNull();
@@ -47,19 +63,47 @@ describe('Sidebar', () => {
 
   it('calls onItemClick with item and section name', () => {
     const onClick = vi.fn();
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={onClick} />);
+    renderSb({ onItemClick: onClick });
     fireEvent.click(screen.getByText('sig-1'));
     expect(onClick).toHaveBeenCalledWith(mockSections[0].items[0], 'signals');
   });
 
   it('shows known and needs_review badges', () => {
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={vi.fn()} />);
+    renderSb();
     expect(screen.getAllByText('known').length).toBe(2);
     expect(screen.getByText('needs review')).toBeDefined();
   });
 
   it('renders blocking gaps textarea', () => {
-    render(<Sidebar requirement={mockReq} sections={mockSections} onItemClick={vi.fn()} />);
+    renderSb();
     expect(screen.getByPlaceholderText('None identified.')).toBeDefined();
+  });
+
+  it('renders + buttons in section headers', () => {
+    renderSb();
+    const btns = screen.getAllByTitle('Add item');
+    expect(btns.length).toBe(2);
+  });
+
+  it('calls onAddItem when + is clicked', () => {
+    const onAdd = vi.fn();
+    renderSb({ onAddItem: onAdd });
+    const btns = screen.getAllByTitle('Add item');
+    fireEvent.click(btns[0]);
+    expect(onAdd).toHaveBeenCalledWith('signals');
+  });
+
+  it('renders × buttons on items', () => {
+    renderSb();
+    const btns = screen.getAllByTitle('Delete item');
+    expect(btns.length).toBe(3);
+  });
+
+  it('calls onDeleteItem when × is clicked', () => {
+    const onDel = vi.fn();
+    renderSb({ onDeleteItem: onDel });
+    const btns = screen.getAllByTitle('Delete item');
+    fireEvent.click(btns[0]);
+    expect(onDel).toHaveBeenCalledWith(mockSections[0].items[0], 'signals');
   });
 });
