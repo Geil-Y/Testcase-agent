@@ -1,0 +1,62 @@
+import { useState } from 'react';
+import type { Requirement, Section, SectionItem } from '../api/types';
+
+interface Props {
+  requirement: Requirement;
+  sections: Section[];
+  onItemClick: (item: SectionItem, sectionName: string) => void;
+}
+
+export default function Sidebar({ requirement, sections, onItemClick }: Props) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const toggle = (name: string) => setCollapsed((p) => ({ ...p, [name]: !p[name] }));
+
+  return (
+    <div className="sidebar">
+      <div className="sidebar-scroll">
+        <div className="sb-req">
+          <h4>Requirement</h4>
+          <p>{requirement.description}</p>
+        </div>
+
+        {sections.map((sec) => (
+          <div key={sec.section_name} className="sb-section">
+            <div className="sb-section-header" onClick={() => toggle(sec.section_name)}>
+              <span>{sec.section_name}</span>
+              <span className="text-muted" style={{ fontSize: 11 }}>{sec.items.length} items</span>
+            </div>
+            {!collapsed[sec.section_name] && (
+              <div className="sb-section-body">
+                {sec.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`sb-item ${selectedId === String(item.id) ? 'selected' : ''}`}
+                    onClick={() => { setSelectedId(String(item.id)); onItemClick(item, sec.section_name); }}
+                  >
+                    <div className="sb-item-header">
+                      <span className="sb-item-id">{item.item_id}</span>
+                      <span className={`badge ${item.status === 'known' ? 'badge-known' : 'badge-needs'}`}>
+                        {item.status === 'known' ? 'known' : 'needs review'}
+                      </span>
+                    </div>
+                    {item.content && <div className="sb-item-content">{item.content}</div>}
+                    {item.need && <div className="sb-item-need">{item.need}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div className="sb-blocker">
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
+            Blocking Gaps
+          </div>
+          <textarea placeholder="None identified." defaultValue="" />
+        </div>
+      </div>
+    </div>
+  );
+}
