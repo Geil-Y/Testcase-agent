@@ -107,6 +107,12 @@ Build **Pipeline Console v2** — a local web UI backed by SQLite, with a React/
 - Dark mode toggle (light theme only for MVP)
 - Mobile responsive layout (desktop-first)
 
+## Verification Strategy
+
+**All development and testing uses mock LLM providers. Real LLM calls are NOT required to verify any issue.**
+
+The `CapturingProvider` pattern from `tests/test_generate_pipeline.py` is the standard approach: a mock that returns pre-canned JSON/HTML responses and records the prompts it received. Set `TCASE_LLM_PROVIDER=mock` to use `MockProvider` from `testcase_agent/provider/mock.py`. Pipeline stage functions are verified by checking correct DB writes and prompt rendering, not LLM output quality.
+
 ## Further Notes
 
 - The UI prototype is at `prototype/pipeline-console-v2.html` — it validates the layout, interaction patterns, and visual design. The implementation should match its look and feel.
