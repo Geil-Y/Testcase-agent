@@ -48,7 +48,11 @@ def list_requirements(q: str = "", status: str = "", offset: int = 0, limit: int
     total = db.execute(count_sql, params).fetchone()[0]
 
     rows = db.execute(
-        f"SELECT * FROM requirements WHERE {' AND '.join(clauses)} ORDER BY id DESC LIMIT ? OFFSET ?",
+        f"""SELECT r.*,
+            (SELECT COUNT(*) FROM test_cases tc
+             JOIN runs ru ON tc.run_id = ru.id
+             WHERE ru.requirement_id = r.id) as case_count
+        FROM requirements r WHERE {' AND '.join(clauses)} ORDER BY r.id DESC LIMIT ? OFFSET ?""",
         params + [limit, offset],
     ).fetchall()
 
@@ -58,8 +62,8 @@ def list_requirements(q: str = "", status: str = "", offset: int = 0, limit: int
 
 @console_router.post("/requirements/import")
 def import_requirements(file: UploadFile, sheet_name: str | None = None):
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise HTTPException(400, "Only .xlsx and .xls files are supported")
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(400, "Only .xlsx files are supported")
 
     content = file.file.read()
     import tempfile, os
