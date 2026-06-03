@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pipeline Console — Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROTOTYPE — throwaway code. Answering: "which workspace layout feels right?"
+   Open in browser. Use bottom bar or ← → keys to switch variants.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Design Tokens (Linear-inspired dark) ────────────────────────────────── */
+:root {
+  --bg-root: #0d0f11;
+  --bg-surface: #14171b;
+  --bg-elevated: #1a1d23;
+  --bg-hover: #1f2229;
+  --border: #262a31;
+  --border-hover: #363a42;
+  --text: #e6e8ec;
+  --text-secondary: #a0a4ab;
+  --text-muted: #6b6f76;
+  --accent: #5b6cf0;
+  --accent-hover: #7b89f4;
+  --accent-subtle: rgba(91,108,240,0.12);
+  --success: #3fb973;
+  --success-subtle: rgba(63,185,115,0.12);
+  --warning: #d99b2e;
+  --warning-subtle: rgba(217,155,46,0.12);
+  --danger: #e5534b;
+  --danger-subtle: rgba(229,83,75,0.12);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.55;
+  background: var(--bg-root);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ── Top Nav ────────────────────────────────────────────────────────────── */
+.nav {
+  height: 44px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 16px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+.nav-brand {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+.nav-brand span { color: var(--accent); }
+.nav-sep { width: 1px; height: 18px; background: var(--border); }
+.nav-item {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: color 0.12s, background 0.12s;
+}
+.nav-item:hover { color: var(--text); background: var(--bg-hover); }
+.nav-item.active { color: var(--text); }
+
+/* ── Layout Shell ────────────────────────────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+.page {
+  flex: 1;
+  overflow: hidden;
+  display: none;
+}
+.page.active { display: flex; }
+
+/* ── Home Page ───────────────────────────────────────────────────────────── */
+.home {
+  display: flex;
+  flex-direction: column;
+  max-width: 960px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 32px 24px;
+  overflow-y: auto;
+}
+.home-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+.home-header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+.home-actions { display: flex; gap: 8px; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--bg-elevated);
+  color: var(--text-secondary); font-size: 13px; font-family: var(--font);
+  cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--border-hover); color: var(--text); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 500; }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+.btn-sm { padding: 3px 10px; font-size: 12px; }
+
+.req-table { width: 100%; border-collapse: collapse; }
+.req-table th {
+  font-size: 11px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 8px 14px; text-align: left; border-bottom: 1px solid var(--border);
+}
+.req-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-size: 13px; color: var(--text-secondary);
+}
+.req-table tr { cursor: pointer; transition: background 0.08s; }
+.req-table tr:hover td { background: var(--bg-hover); }
+.req-key { font-family: var(--font-mono); font-size: 12px; color: var(--accent); font-weight: 500; }
+.req-desc { max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.badge {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  border-radius: 999px; font-size: 11px; font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.badge-done { background: var(--success-subtle); color: var(--success); }
+.badge-pending { background: var(--warning-subtle); color: var(--warning); }
+.badge-new { background: var(--bg-hover); color: var(--text-muted); }
+
+/* ── Workspace Shell ─────────────────────────────────────────────────────── */
+.workspace { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.ws-topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  background: var(--bg-surface); flex-shrink: 0;
+}
+.ws-back { font-size: 13px; color: var(--text-muted); cursor: pointer; }
+.ws-back:hover { color: var(--text); }
+.ws-req-key { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--accent); }
+.ws-req-desc { font-size: 13px; color: var(--text-muted); max-width: 400px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-body { flex: 1; overflow: hidden; display: flex; min-height: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VARIANT A — "Calm Cards"
+   Generous spacing, each item is a card, lots of breathing room.
+   Left: Requirement + TestBasis cards. Right: Intents + Cases.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.variant-a { gap: 24px; padding: 24px; }
+.a-left { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.a-right { width: 440px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+
+.a-section { }
+.a-section-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  font-size: 12px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.a-section-header .count { color: var(--text-secondary); }
+.a-card {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 16px; margin-bottom: 8px;
+  transition: border-color 0.12s, background 0.12s; cursor: pointer;
+}
+.a-card:hover { border-color: var(--border-hover); background: var(--bg-elevated); }
+.a-card.selected { border-color: var(--accent); background: var(--accent-subtle); }
+.a-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.a-item-id { font-family: var(--font-mono); font-size: 12px; color: var(--accent); font-weight: 500; }
+.a-item-status { font-size: 11px; padding: 1px 8px; border-radius: 999px; font-weight: 500; }
+.a-item-status.known { background: var(--success-subtle); color: var(--success); }
+.a-item-status.needs_review { background: var(--warning-subtle); color: var(--warning); }
+.a-item-content { font-size: 13px; color: var(--text); line-height: 1.55; margin-bottom: 6px; }
+.a-item-source { font-size: 12px; color: var(--text-muted); font-style: italic; }
+.a-item-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+.a-placeholder {
+  background: var(--bg-surface); border: 1px dashed var(--border);
+  border-radius: var(--radius-lg); padding: 32px; text-align: center;
+  color: var(--text-muted); font-size: 13px;
+}
+.a-placeholder h4 { font-size: 14px; color: var(--text-secondary); margin-bottom: 6px; }
+
+.a-intent-item {
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 14px; margin-bottom: 8px;
+}
+.a-intent-dimension { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 500; }
+.a-intent-text { font-size: 13px; color: var(--text); margin-top: 4px; }
+
+.a-req-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 16px;
+}
+.a-req-card h4 { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+.a-req-card p { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VARIANT B — "Dense Editor"
+   Table-based, inline editable, compact. Higher information density.
+   All TestBasis sections collapsed into one editable master table.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.variant-b { gap: 0; }
+.b-left { flex: 1; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--border); }
+.b-right { width: 420px; flex-shrink: 0; overflow-y: auto; }
+
+.b-req-bar {
+  padding: 14px 20px; background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+}
+.b-req-bar p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.b-req-bar .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 500; display: block; margin-bottom: 2px; }
+
+.b-toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+  border-bottom: 1px solid var(--border); background: var(--bg-surface);
+}
+.b-toolbar .b-filter {
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-root); color: var(--text-secondary); font-size: 12px;
+  font-family: var(--font);
+}
+
+.b-table-wrap { flex: 1; overflow-y: auto; }
+.b-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.b-table th {
+  position: sticky; top: 0; z-index: 1;
+  font-size: 11px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 8px 14px; text-align: left; background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+}
+.b-table td {
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary); vertical-align: top;
+}
+.b-table tr:hover td { background: var(--bg-hover); }
+.b-table tr.selected td { background: var(--accent-subtle); }
+.b-table .section-tag { font-size: 11px; color: var(--text-muted); }
+.b-table td.editable { cursor: text; }
+.b-table td.editable:focus { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+
+.b-intent-card {
+  padding: 14px 20px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.b-intent-card:hover { background: var(--bg-hover); }
+.b-right-header {
+  padding: 12px 20px; font-size: 12px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  background: var(--bg-elevated); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   VARIANT C — "Queue Review"
+   Email-client feel. Left panel is a compact queue list.
+   Center shows detail editor. Right column shows downstream preview.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.variant-c { gap: 0; }
+.c-queue { width: 280px; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.c-queue-header {
+  padding: 12px 14px; font-size: 11px; font-weight: 500; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.c-queue-list { flex: 1; overflow-y: auto; }
+.c-queue-item {
+  padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
+  display: flex; align-items: center; gap: 8px; font-size: 13px;
+  color: var(--text-secondary); transition: background 0.08s;
+}
+.c-queue-item:hover { background: var(--bg-hover); }
+.c-queue-item.selected { background: var(--accent-subtle); color: var(--text); border-left: 2px solid var(--accent); }
+.c-queue-id { font-family: var(--font-mono); font-size: 11px; color: var(--accent); min-width: 56px; }
+.c-queue-status { font-size: 10px; padding: 1px 6px; border-radius: 999px; font-weight: 500; flex-shrink: 0; }
+.c-queue-status.known { background: var(--success-subtle); color: var(--success); }
+.c-queue-status.needs_review { background: var(--warning-subtle); color: var(--warning); }
+.c-queue-section { font-size: 10px; color: var(--text-muted); margin-left: auto; }
+
+.c-editor { flex: 1; overflow-y: auto; padding: 20px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.c-editor-empty { color: var(--text-muted); font-size: 13px; display: flex; align-items: center; justify-content: center; height: 100%; }
+.c-field label { display: block; font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.c-field .value { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+.c-field input, .c-field textarea, .c-field select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-root); color: var(--text); font-size: 13px; font-family: var(--font);
+}
+.c-field textarea { resize: vertical; min-height: 60px; }
+.c-field select { font-family: var(--font); }
+.c-editor-actions { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+
+.c-right { width: 380px; flex-shrink: 0; border-left: 1px solid var(--border); overflow-y: auto; padding: 16px; }
+
+/* ── Prototype Switcher ─────────────────────────────────────────────────── */
+.switcher {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 999px; padding: 6px 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 100;
+}
+.switcher button {
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 16px; padding: 4px 8px; border-radius: 4px;
+  font-family: var(--font);
+}
+.switcher button:hover { color: var(--text); background: var(--bg-hover); }
+.switcher .sw-label {
+  font-size: 12px; font-weight: 500; color: var(--text);
+  min-width: 120px; text-align: center;
+}
+.switcher .sw-name { color: var(--text-muted); font-weight: 400; }
+
+/* ── Utility ─────────────────────────────────────────────────────────────── */
+.section-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell" id="app">
+  <!-- Nav -->
+  <nav class="nav">
+    <div class="nav-brand"><span>◇</span> Pipeline Console</div>
+    <div class="nav-sep"></div>
+    <div class="nav-item active" data-page="home">Requirements</div>
+    <div class="nav-item" id="nav-workspace" style="display:none" data-page="workspace">Workspace</div>
+  </nav>
+
+  <!-- HOME PAGE -->
+  <div class="page active" id="page-home">
+    <div class="home">
+      <div class="home-header">
+        <h1>Requirements</h1>
+        <div class="home-actions">
+          <button class="btn btn-primary">+ Import Excel</button>
+          <button class="btn">Refresh</button>
+        </div>
+      </div>
+      <table class="req-table">
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Description</th>
+            <th>Function</th>
+            <th style="text-align:right">Cases</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr onclick="openWorkspace('REQ-BMS-OVP-001')">
+            <td><span class="req-key">REQ-BMS-OVP-001</span></td>
+            <td><span class="req-desc">BMS_CellOV_Detect shall be set to 1 when any cell voltage >= r_CellOV_Threshold</span></td>
+            <td style="color:var(--text-muted)">OVP_Detection</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:13px">4</td>
+            <td><span class="badge badge-done">Reviewed</span></td>
+          </tr>
+          <tr onclick="openWorkspace('REQ-BMS-UVP-002')">
+            <td><span class="req-key">REQ-BMS-UVP-002</span></td>
+            <td><span class="req-desc">BMS_CellUV_Detect shall be set to 1 when any cell voltage < r_CellUV_Threshold</span></td>
+            <td style="color:var(--text-muted)">UVP_Detection</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:13px">3</td>
+            <td><span class="badge badge-pending">Pending</span></td>
+          </tr>
+          <tr onclick="openWorkspace('REQ-BMS-OTP-003')">
+            <td><span class="req-key">REQ-BMS-OTP-003</span></td>
+            <td><span class="req-desc">BMS_TempOT_Detect shall be set to 1 when any cell temperature > r_CellOT_Threshold for t_CellOT_Debounce</span></td>
+            <td style="color:var(--text-muted)">OTP_Detection</td>
+            <td style="text-align:right;font-family:var(--font-mono);font-size:13px">—</td>
+            <td><span class="badge badge-new">New</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- WORKSPACE PAGE (content rendered by JS) -->
+  <div class="page" id="page-workspace"></div>
+
+  <!-- Prototype Switcher -->
+  <div class="switcher" id="switcher" style="display:none">
+    <button onclick="prevVariant()" title="Previous (←)">←</button>
+    <span class="sw-label" id="sw-label">A <span class="sw-name">— Calm Cards</span></span>
+    <button onclick="nextVariant()" title="Next (→)">→</button>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PROTOTYPE LOGIC — Mock data + routing + variant switching
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const VARIANTS = [
+  { key: 'A', name: 'Calm Cards',   desc: 'Generous spacing, large cards, minimal chrome' },
+  { key: 'B', name: 'Dense Editor', desc: 'Table-based, inline editing, high density' },
+  { key: 'C', name: 'Queue Review', desc: 'Email-client feel, queue + detail + preview' },
+];
+
+let currentVariant = 'A';
+
+/* ── Mock Data ──────────────────────────────────────────────────────────── */
+const MOCK = {
+  requirement: {
+    key: 'REQ-BMS-OVP-001',
+    description: 'BMS_CellOV_Detect shall be set to 1 when any cell voltage >= r_CellOV_Threshold. The detection shall be latched until cleared by a system reset or explicit clear command.',
+    function_name: 'OVP_Detection',
+    status: 'extraction_pending_review',
+  },
+  testBasis: {
+    sections: [
+      {
+        name: 'signals', label: 'Signals',
+        items: [
+          { id: 'sig-1', status: 'known', content: 'BMS_CellOV_Detect', source: 'BMS_CellOV_Detect shall be set to 1', need: '' },
+          { id: 'sig-2', status: 'needs_review', content: '', source: 'when any cell voltage >= r_CellOV_Threshold', need: 'Cell voltage measurement signal name not specified in requirement' },
+        ],
+      },
+      {
+        name: 'thresholds', label: 'Thresholds',
+        items: [
+          { id: 'thr-1', status: 'known', content: 'r_CellOV_Threshold', source: 'cell voltage >= r_CellOV_Threshold', need: '' },
+        ],
+      },
+      {
+        name: 'timing', label: 'Timing',
+        items: [
+          { id: 'tim-1', status: 'needs_review', content: '', source: 'The detection shall be latched', need: 'Detection response time / debounce period not specified' },
+        ],
+      },
+      {
+        name: 'states', label: 'States',
+        items: [
+          { id: 'st-1', status: 'known', content: 'Normal operation (no overvoltage)', source: 'when any cell voltage...', need: '' },
+          { id: 'st-2', status: 'known', content: 'Overvoltage detected & latched', source: 'shall be set to 1... The detection shall be latched', need: '' },
+        ],
+      },
+      {
+        name: 'observations', label: 'Observations',
+        items: [
+          { id: 'obs-1', status: 'needs_review', content: '', source: 'BMS_CellOV_Detect shall be set to 1', need: 'DTC, CAN message, or log record for overvoltage event not specified' },
+        ],
+      },
+    ],
+  },
+  intents: [
+    { id: 'intent-1', dimension: 'normal_behavior', text: 'Verify that BMS_CellOV_Detect is set to 1 when cell voltage exceeds r_CellOV_Threshold.' },
+    { id: 'intent-2', dimension: 'boundary_or_threshold', text: 'Verify that BMS_CellOV_Detect remains 0 when cell voltage is exactly at r_CellOV_Threshold minus tolerance.' },
+    { id: 'intent-3', dimension: 'state_transition', text: 'Verify that the latched overvoltage detection persists after cell voltage returns below r_CellOV_Threshold.' },
+    { id: 'intent-4', dimension: 'observability', text: 'Verify the overvoltage event is recorded in the observable output.' },
+  ],
+};
+
+/* ── Routing ────────────────────────────────────────────────────────────── */
+function openWorkspace(reqKey) {
+  document.getElementById('page-home').classList.remove('active');
+  document.getElementById('page-workspace').classList.add('active');
+  document.getElementById('nav-workspace').style.display = '';
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-workspace').classList.add('active');
+  document.getElementById('switcher').style.display = '';
+  renderWorkspace();
+}
+
+function goHome() {
+  document.getElementById('page-home').classList.add('active');
+  document.getElementById('page-workspace').classList.remove('active');
+  document.getElementById('nav-workspace').style.display = 'none';
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelector('[data-page="home"]').classList.add('active');
+  document.getElementById('switcher').style.display = 'none';
+}
+
+/* ── Variant Rendering ──────────────────────────────────────────────────── */
+function renderWorkspace() {
+  const container = document.getElementById('page-workspace');
+  const v = currentVariant;
+
+  let body = '';
+  if (v === 'A') body = renderVariantA();
+  else if (v === 'B') body = renderVariantB();
+  else if (v === 'C') body = renderVariantC();
+
+  container.innerHTML = `
+    <div class="workspace">
+      <div class="ws-topbar">
+        <span class="ws-back" onclick="goHome()">← Requirements</span>
+        <span class="ws-req-key">${MOCK.requirement.key}</span>
+        <span class="ws-req-desc">${MOCK.requirement.description.slice(0, 80)}…</span>
+        <span class="badge badge-pending">Extraction Review</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">Variant ${v}</span>
+      </div>
+      <div class="ws-body variant-${v.toLowerCase()}">
+        ${body}
+      </div>
+    </div>
+  `;
+
+  document.getElementById('sw-label').innerHTML =
+    `${v} <span class="sw-name">— ${VARIANTS.find(x => x.key === v).name}</span>`;
+}
+
+/* ── Variant A: Calm Cards ─────────────────────────────────────────────── */
+function renderVariantA() {
+  const d = MOCK.testBasis;
+  let left = `
+    <div class="a-left">
+      <div class="a-req-card">
+        <h4>Requirement</h4>
+        <p>${MOCK.requirement.description}</p>
+      </div>`;
+
+  d.sections.forEach(sec => {
+    left += `<div class="a-section">
+      <div class="a-section-header">${sec.label} <span class="count">${sec.items.length} items</span></div>`;
+    sec.items.forEach(item => {
+      const sel = item.id === 'sig-1' ? ' selected' : '';
+      left += `
+      <div class="a-card${sel}" onclick="selectCard(this, '${item.id}')">
+        <div class="a-card-header">
+          <span class="a-item-id">${item.id}</span>
+          <span class="a-item-status ${item.status}">${item.status === 'known' ? 'known' : 'needs review'}</span>
+        </div>
+        ${item.content ? `<div class="a-item-content">${item.content}</div>` : ''}
+        ${item.need ? `<div class="a-item-content" style="color:var(--warning)">⚠ Missing: ${item.need}</div>` : ''}
+        <div class="a-item-source">Source: "${item.source}"</div>
+        <div class="a-item-actions">
+          <button class="btn btn-sm">Edit</button>
+          <button class="btn btn-sm btn-primary">Accept</button>
+          <button class="btn btn-sm">Flag</button>
+        </div>
+      </div>`;
+    });
+    left += `</div>`;
+  });
+  left += `<div class="a-section" style="margin-top:8px">
+    <div class="a-section-header">Blocking Gaps</div>
+    <textarea style="width:100%;height:60px;background:var(--bg-root);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);padding:8px;font-family:var(--font);font-size:13px;resize:vertical" placeholder="None identified — LLM-A found no blocking gaps for this requirement."></textarea>
+  </div></div>`;
+
+  let right = `<div class="a-right">`;
+  right += `<div><div class="section-title">Case Intents (LLM-B)</div>`;
+  MOCK.intents.forEach(ci => {
+    right += `<div class="a-intent-item">
+      <div class="a-intent-dimension">${ci.dimension}</div>
+      <div class="a-intent-text">${ci.id}: ${ci.text}</div>
+    </div>`;
+  });
+  right += `</div>`;
+
+  right += `<div>
+    <div class="section-title">Generated Cases (LLM-C)</div>
+    <div class="a-placeholder">
+      <h4>Cases not yet generated</h4>
+      Accept all TestBasis items and plan case intents to generate test cases.
+    </div>
+  </div></div>`;
+
+  return left + right;
+}
+
+function selectCard(el, id) {
+  document.querySelectorAll('.a-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+/* ── Variant B: Dense Editor ────────────────────────────────────────────── */
+function renderVariantB() {
+  const d = MOCK.testBasis;
+  let rows = '';
+  d.sections.forEach(sec => {
+    sec.items.forEach((item, i) => {
+      const cls = item.id === 'sig-1' ? 'selected' : '';
+      rows += `<tr class="${cls}" onclick="this.closest('table').querySelectorAll('tr.selected').forEach(r=>r.classList.remove('selected'));this.classList.add('selected')">
+        <td><span class="section-tag">${sec.label}</span></td>
+        <td style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">${item.id}</td>
+        <td><span class="badge ${item.status === 'known' ? 'badge-done' : 'badge-pending'}">${item.status}</span></td>
+        <td class="editable" contenteditable="true">${item.content || '—'}</td>
+        <td class="editable" contenteditable="true" style="color:var(--warning)">${item.need || '—'}</td>
+        <td style="font-size:12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${item.source.replace(/"/g,'&quot;')}">${item.source}</td>
+      </tr>`;
+    });
+  });
+
+  let left = `
+    <div class="b-left">
+      <div class="b-req-bar">
+        <span class="label">Requirement</span>
+        <p>${MOCK.requirement.description}</p>
+      </div>
+      <div class="b-toolbar">
+        <select class="b-filter"><option>All sections</option><option>Known only</option><option>Needs Review only</option></select>
+        <select class="b-filter"><option>All items</option><option>Signals</option><option>Thresholds</option><option>Timing</option><option>States</option><option>Observations</option></select>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">8 items</span>
+      </div>
+      <div class="b-table-wrap">
+        <table class="b-table">
+          <thead>
+            <tr>
+              <th>Section</th>
+              <th>Item ID</th>
+              <th>Status</th>
+              <th>Content</th>
+              <th>Need</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+
+  let right = `<div class="b-right">
+    <div class="b-right-header">Case Intents (LLM-B)</div>`;
+  MOCK.intents.forEach(ci => {
+    right += `<div class="b-intent-card">
+      <div style="font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.03em;font-weight:500">${ci.dimension}</div>
+      <div style="font-size:13px;color:var(--text);margin-top:3px">${ci.id}: ${ci.text}</div>
+    </div>`;
+  });
+  right += `<div class="b-right-header">Generated Cases (LLM-C)</div>
+    <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
+      <h4 style="color:var(--text-secondary);margin-bottom:6px">Cases not yet generated</h4>
+      Accept all items → Plan Intents → Generate Cases
+    </div>
+  </div>`;
+
+  return left + right;
+}
+
+/* ── Variant C: Queue Review ────────────────────────────────────────────── */
+function renderVariantC() {
+  const d = MOCK.testBasis;
+  let queueItems = '';
+  d.sections.forEach(sec => {
+    sec.items.forEach((item, i) => {
+      const sel = item.id === 'sig-1' ? ' selected' : '';
+      queueItems += `<div class="c-queue-item${sel}" onclick="selectQueueItem(this, '${item.id}', '${sec.label}', '${item.status}', '${(item.content||'').replace(/'/g,"\\'")}', '${(item.need||'').replace(/'/g,"\\'")}', '${item.source.replace(/'/g,"\\'")}')">
+        <span class="c-queue-id">${item.id}</span>
+        <span class="c-queue-status ${item.status}">${item.status === 'known' ? '✓' : '?'}</span>
+        <span style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${item.content || item.need?.slice(0,50) || '—'}</span>
+        <span class="c-queue-section">${sec.label}</span>
+      </div>`;
+    });
+  });
+
+  let left = `
+    <div class="c-queue">
+      <div class="c-queue-header">Review Queue</div>
+      <div class="c-queue-list">${queueItems}</div>
+    </div>
+    <div class="c-editor" id="c-editor">
+      <div class="c-editor-empty">← Select an item from the queue to review</div>
+    </div>`;
+
+  let right = `<div class="c-right">
+    <div class="section-title">Case Intents (LLM-B)</div>`;
+  MOCK.intents.forEach(ci => {
+    right += `<div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.03em;font-weight:500;margin-bottom:2px">${ci.dimension}</div>
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--text-muted)">${ci.id}</span> ${ci.text}
+    </div>`;
+  });
+  right += `<div class="section-title" style="margin-top:20px">Generated Cases (LLM-C)</div>
+    <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:20px">
+      <h4 style="color:var(--text-secondary);margin-bottom:6px">Not yet generated</h4>
+      Complete extraction review and plan intents to generate cases.
+    </div>
+  </div>`;
+
+  return left + right;
+}
+
+function selectQueueItem(el, id, section, status, content, need, source) {
+  document.querySelectorAll('.c-queue-item').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const ed = document.getElementById('c-editor');
+  ed.innerHTML = `
+    <div class="c-field">
+      <label>Item ID · ${section}</label>
+      <div class="value" style="font-family:var(--font-mono);color:var(--accent);font-size:14px">${id}</div>
+    </div>
+    <div class="c-field">
+      <label>Status</label>
+      <select>
+        <option value="known" ${status==='known'?'selected':''}>known — Requirement explicitly provides this</option>
+        <option value="needs_review" ${status==='needs_review'?'selected':''}>needs_review — Missing from requirement</option>
+      </select>
+    </div>
+    <div class="c-field">
+      <label>Content</label>
+      <textarea>${content}</textarea>
+    </div>
+    <div class="c-field">
+      <label>Missing Need</label>
+      <textarea style="color:var(--warning)">${need}</textarea>
+    </div>
+    <div class="c-field">
+      <label>Source Text</label>
+      <div class="value" style="font-size:12px;font-style:italic;color:var(--text-muted);background:var(--bg-elevated);padding:8px;border-radius:var(--radius-sm)">"${source}"</div>
+    </div>
+    <div class="c-editor-actions">
+      <button class="btn btn-primary">Accept</button>
+      <button class="btn">Flag for Review</button>
+      <button class="btn">Reject</button>
+    </div>`;
+}
+
+/* ── Switcher ───────────────────────────────────────────────────────────── */
+function switchVariant(key) {
+  currentVariant = key;
+  renderWorkspace();
+}
+
+function prevVariant() {
+  const idx = VARIANTS.findIndex(x => x.key === currentVariant);
+  const next = (idx - 1 + VARIANTS.length) % VARIANTS.length;
+  switchVariant(VARIANTS[next].key);
+}
+
+function nextVariant() {
+  const idx = VARIANTS.findIndex(x => x.key === currentVariant);
+  const next = (idx + 1) % VARIANTS.length;
+  switchVariant(VARIANTS[next].key);
+}
+
+/* ── Keyboard ────────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+  if (e.key === 'ArrowLeft') prevVariant();
+  if (e.key === 'ArrowRight') nextVariant();
+  if (e.key === 'Escape') goHome();
+});
+</script>
+
+</body>
+</html>

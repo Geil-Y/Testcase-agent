@@ -136,9 +136,26 @@ superseded by the ABC pipeline. The following terms are historical:
 - **Case Intent Review** — [RETIRED] human review of proposed case intents.
 - **Approved Case Plan** — [RETIRED] final case-writer-ready intents.
 - **Review Workbench** — [RETIRED] interactive human review UI.
-- **Pipeline Console** — [RETIRED] local full-flow UI for the review pipeline.
-- **Active Run** — [RETIRED] the current review pipeline run.
-- **Review Memory** — [RETIRED] SQLite-based persistent storage of review decisions.
+- **Pipeline Console** — a local web UI for importing requirements, running the ABC
+  pipeline with optional per-stage human review, and viewing generated test cases.
+  Backed by a SQLite database that stores all artifacts.
+- **Console Database** — a SQLite file (`pipeline_console.db`) at the project
+  root. Stores imported requirements, runs, LLM-A/B/C artifacts (test basis
+  items, case intents, test cases with steps), review decisions, and evaluation
+  results. Replaces the retired file-based artifact directory model.
+- **Run** — one pipeline execution for a single Requirement. Has a status
+  (`extraction_ready`, `intents_ready`, `cases_ready`, `evaluated`, `failed`)
+  and a per-stage review configuration. A Requirement may have multiple Runs
+  (1:N), preserving history.
+- **Review Stage Configuration** — a per-Run setting (`review_required`) that
+  specifies which LLM stages (a, b, c) require human review before advancing.
+  Any subset may be set: none (full auto-approve), a only, b only, c only,
+  a+b, a+c, b+c, or all three. Locked at Run creation time.
+- **Stage Advance** — the action of completing review on the current stage and
+  triggering the next LLM stage. When consecutive downstream stages are
+  configured as auto-approve, the backend chains them in a single synchronous
+  request. User-edited test basis items override LLM-A's original output when
+  advancing to LLM-B.
 - **Confidence Routing** — [RETIRED] four-color confidence scoring system.
 - **Pattern Tag** — [RETIRED] deterministic memory index for review decisions.
 
@@ -148,12 +165,22 @@ superseded by the ABC pipeline. The following terms are historical:
 - A **Prompt Evaluation Set Entry** refers to exactly one **Requirement**.
 - A **Requirement** can produce multiple **Test Cases** through the generation
   pipeline.
+- A **Requirement** may have multiple **Runs** (1:N), preserving history of
+  repeated pipeline executions.
+- A **Run** belongs to exactly one **Requirement** and contains one set of
+  LLM-A **TestBasis Sections and Items**, one set of LLM-B **Case Intents**,
+  and one set of LLM-C **Test Cases** with **Steps**.
+- User-edited **TestBasis Items** override LLM-A's original output and become
+  the authority for downstream LLM-B and LLM-C stages.
 - A **Test Case** is evaluated by the **Quality Checklist** and may also receive
   the case-level dimensions of a **Manual Review Score**.
 - A **Hard Gate** can make a **Test Case** unacceptable even when other review
   scores are high.
 - The **ABC Pipeline** is the sole legal generation path. It produces
   **Test Cases** from **Requirements** through the three-stage linear flow.
+- The **Pipeline Console** reads and writes through the **Console Database**.
+  The CLI batch workflow (`run_eval_batch.py`) continues to use its own
+  file-based artifact output and is unaffected by the database.
 
 ## Architecture principles
 
