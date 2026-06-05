@@ -415,6 +415,9 @@ def update_item(run_id: int, section: str, item_id: str, body: dict):
         sets = ", ".join(f"{k}=?" for k in fields)
         values = list(fields.values()) + [row["id"]]
         db.execute(f"UPDATE test_basis_items SET {sets} WHERE id=?", values)
+        from .review_state import record_action
+        record_action(db, run_id, "a", "edit", target_type="test_basis_item",
+                       target_id=row["id"], comment=None)
         db.commit()
 
     updated = db.execute("SELECT * FROM test_basis_items WHERE id = ?", (row["id"],)).fetchone()
