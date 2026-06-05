@@ -8,7 +8,8 @@ human-review routing, confidence scoring, Review Memory, and the Pipeline
 Console — all complexity beyond what the 7B model baseline needed. The
 Minimal ABC Pipeline restores a linear A→B→C flow with checklist v2
 hard-rule evaluation, keeping "LLM does one thing at a time" as the
-governing principle. See `docs/plans/2026-05-29-minimal-abc-pipeline-plan.md`.
+governing principle. See `CONTEXT.md` and
+`src/testcase_agent/pipeline/generate.py`.
 
 ## Context
 
