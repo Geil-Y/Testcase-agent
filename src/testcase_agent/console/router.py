@@ -473,6 +473,81 @@ def delete_item(run_id: int, section: str, item_id: str):
     return Response(status_code=204)
 
 
+@console_router.post("/runs/{run_id:int}/regenerate-intents")
+def regenerate_intents_endpoint(run_id: int, body: dict):
+    comment = body.get("comment", "")
+    if not comment or not comment.strip():
+        raise HTTPException(422, "comment is required for regeneration")
+
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    from .pipeline_runner import regenerate_case_intents
+    try:
+        regenerate_case_intents(db, run_id, comment.strip(), provider)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+    return _build_run_response(run_id, db)
+
+
+@console_router.get("/runs/{run_id:int}/intents/history")
+def get_intents_history(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    rows = db.execute(
+        "SELECT * FROM case_intents WHERE run_id=? ORDER BY version DESC, sort_order",
+        (run_id,),
+    ).fetchall()
+
+    versions: dict[int, dict] = {}
+    for row in rows:
+        v = row["version"]
+        if v not in versions:
+            versions[v] = {"version": v, "intents": [], "created_at": ""}
+        versions[v]["intents"].append({
+            "intent_id": row["intent_id"],
+            "coverage_dimension": row["coverage_dimension"],
+            "intent_text": row["intent_text"],
+            "review_status": row["review_status"],
+            "regenerate_count": row["regenerate_count"],
+        })
+
+    return {"versions": sorted(versions.values(), key=lambda v: v["version"], reverse=True)}
+
+
+@console_router.get("/runs/{run_id:int}/review-actions")
+def get_review_actions(run_id: int, stage: str = "", action: str = ""):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    clauses = ["run_id = ?"]
+    params: list[Any] = [run_id]
+    if stage:
+        clauses.append("stage = ?")
+        params.append(stage)
+    if action:
+        clauses.append("action = ?")
+        params.append(action)
+
+    rows = db.execute(
+        f"SELECT * FROM review_actions WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
+        params,
+    ).fetchall()
+
+    return {"actions": [_row_to_dict(r) for r in rows]}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _row_to_dict(row: sqlite3.Row) -> dict:

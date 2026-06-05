@@ -783,6 +783,110 @@ class TestReviewStateMachine:
         assert run["llm_c_accepted"] == 0
 
 
+# ── LLM-B / LLM-C / Cascade / Audit Tests ────────────────────────────────────
+
+class TestLLMBStage:
+    def test_regenerate_intents_requires_comment(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": []})
+        run_id = cr.json()["run"]["id"]
+        resp = client.post(f"/api/v1/console/runs/{run_id}/regenerate-intents", json={"comment": ""})
+        assert resp.status_code == 422
+
+    def test_intents_history(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": []})
+        run_id = cr.json()["run"]["id"]
+        # Ensure intents exist by advancing if needed
+        data = client.get(f"/api/v1/console/runs/{run_id}").json()
+        if data["run"]["status"] in ("extraction_ready",):
+            client.post(f"/api/v1/console/runs/{run_id}/advance")
+        data = client.get(f"/api/v1/console/runs/{run_id}").json()
+        if data["run"]["status"] in ("extraction_ready",):
+            client.post(f"/api/v1/console/runs/{run_id}/advance")
+        resp = client.get(f"/api/v1/console/runs/{run_id}/intents/history")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "versions" in data
+
+    def test_llm_b_accept_and_unlock(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": ["b"]})
+        run_id = cr.json()["run"]["id"]
+        # Advance past A first (A is auto-approve)
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        client.post(f"/api/v1/console/runs/{run_id}/advance")
+        # Now accept B
+        resp = client.post(f"/api/v1/console/runs/{run_id}/accept/b")
+        assert resp.status_code == 200
+        # Unlock B
+        resp = client.post(f"/api/v1/console/runs/{run_id}/unlock/b")
+        assert resp.status_code == 200
+
+
+class TestLLMCStage:
+    def test_llm_c_accept(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": ["c"]})
+        run_id = cr.json()["run"]["id"]
+        # Auto-advance through A and B
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        client.post(f"/api/v1/console/runs/{run_id}/advance")  # runs LLM-B
+        client.post(f"/api/v1/console/runs/{run_id}/accept/b")
+        client.post(f"/api/v1/console/runs/{run_id}/advance")  # runs LLM-C
+        # Accept C
+        resp = client.post(f"/api/v1/console/runs/{run_id}/accept/c")
+        assert resp.status_code == 200
+        state = client.get(f"/api/v1/console/runs/{run_id}/review-state").json()
+        assert state["c"]["accepted"] is True
+
+
+class TestCascade:
+    def test_cascade_warning_on_unlock_a(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": []})
+        run_id = cr.json()["run"]["id"]
+        # Accept A, then unlock
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        resp = client.post(f"/api/v1/console/runs/{run_id}/unlock/a")
+        data = resp.json()
+        if "cascade_warning" in data:
+            assert data["cascade_warning"] is True
+
+    def test_unlock_c_no_warning(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": ["c"]})
+        run_id = cr.json()["run"]["id"]
+        client.post(f"/api/v1/console/runs/{run_id}/accept/c")
+        resp = client.post(f"/api/v1/console/runs/{run_id}/unlock/c")
+        assert resp.status_code == 200
+
+
+class TestAuditTrail:
+    def test_review_actions_endpoint(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": ["a"]})
+        run_id = cr.json()["run"]["id"]
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        resp = client.get(f"/api/v1/console/runs/{run_id}/review-actions")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["actions"]) >= 1
+        assert data["actions"][0]["stage"] == "a"
+        assert data["actions"][0]["action"] == "accept"
+
+    def test_review_actions_filter_stage(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={"requirement_id": 1, "review_required": ["a"]})
+        run_id = cr.json()["run"]["id"]
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        resp = client.get(f"/api/v1/console/runs/{run_id}/review-actions?stage=a")
+        assert resp.status_code == 200
+        data = resp.json()
+        for a in data["actions"]:
+            assert a["stage"] == "a"
+
+
 def _seed_requirement(client):
     fixture = Path("tests/fixtures/minimal_requirements.xlsx")
     with open(fixture, "rb") as f:

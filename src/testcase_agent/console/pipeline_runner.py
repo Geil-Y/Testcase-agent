@@ -317,6 +317,101 @@ def regenerate_test_basis(
     return result
 
 
+def regenerate_case_intents(
+    db: sqlite3.Connection,
+    run_id: int,
+    comment: str,
+    provider: LlmProvider,
+) -> list[dict]:
+    """Regenerate case intents based on human review feedback. Respects 3-regenerate limit."""
+    from .review_state import can_regenerate_intents, record_action
+
+    if not can_regenerate_intents(db, run_id):
+        db.execute(
+            "UPDATE case_intents SET review_status='force_edit' WHERE run_id=? AND review_status != 'stale'",
+            (run_id,),
+        )
+        db.commit()
+        raise ValueError("Regenerate limit reached (max 3). All intents set to force_edit. Please manually edit.")
+
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    req = db.execute("SELECT * FROM requirements WHERE id = ?", (run["requirement_id"],)).fetchone()
+
+    current_intents = db.execute(
+        "SELECT * FROM case_intents WHERE run_id=? AND review_status != 'stale' ORDER BY sort_order",
+        (run_id,),
+    ).fetchall()
+
+    current_count = max((int(it["regenerate_count"]) for it in current_intents), default=0)
+    current_version = max((int(it["version"]) for it in current_intents), default=1)
+    new_version = current_version + 1
+    new_count = current_count + 1
+
+    # Build test basis context from accepted items
+    sections = db.execute(
+        "SELECT * FROM test_basis_sections WHERE run_id = ? ORDER BY sort_order", (run_id,)
+    ).fetchall()
+    basis_lines: list[str] = []
+    for sec in sections:
+        items = db.execute(
+            "SELECT * FROM test_basis_items WHERE section_id = ? ORDER BY sort_order", (sec["id"],)
+        ).fetchall()
+        for it in items:
+            status_marker = "[known]" if it["status"] == "known" else "[needs_review]"
+            text = it["content"] or it["need"]
+            basis_lines.append(f"{status_marker} {text} → NEED: {it['need']}")
+
+    test_basis_context = "\n".join(basis_lines)
+
+    prev_plan_lines: list[str] = []
+    for intent in current_intents:
+        prev_plan_lines.append(
+            f"- [{intent['coverage_dimension']}] {intent['intent_text']}"
+        )
+    previous_intent_plan = "\n".join(prev_plan_lines)
+
+    sys_prompt, usr_prompt = render_prompt(
+        "regenerate_case_intents",
+        test_basis_context=test_basis_context,
+        previous_intent_plan=previous_intent_plan,
+        review_comment=comment,
+    )
+
+    raw = provider.complete(sys_prompt, usr_prompt)
+    from ..parser.json_parser import parse_case_intents_json
+    plan = parse_case_intents_json(raw)
+
+    # Mark old intents as stale
+    db.execute(
+        "UPDATE case_intents SET review_status='stale' WHERE run_id=? AND review_status != 'stale'",
+        (run_id,),
+    )
+
+    # Insert new version intents
+    result: list[dict] = []
+    for idx, intent in enumerate(plan.case_intents):
+        db.execute(
+            """INSERT INTO case_intents
+               (run_id, intent_id, coverage_dimension, intent_text, sort_order,
+                review_status, regenerate_count, version)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)""",
+            (run_id, intent.intent_id, intent.coverage_dimension, intent.intent_text,
+             idx, new_count, new_version),
+        )
+        result.append({
+            "intent_id": intent.intent_id,
+            "coverage_dimension": intent.coverage_dimension,
+            "intent_text": intent.intent_text,
+            "version": new_version,
+            "regenerate_count": new_count,
+        })
+
+    record_action(db, run_id, "b", "regenerate", target_type="stage",
+                   target_id=None, comment=comment)
+    db.commit()
+    return result
+
+
 def _section_to_category(section_name: str) -> str:
     mapping = {
         "signals": "signal",
