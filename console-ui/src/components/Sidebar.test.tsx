@@ -74,11 +74,6 @@ describe('Sidebar', () => {
     expect(screen.getByText('needs review')).toBeDefined();
   });
 
-  it('renders blocking gaps textarea', () => {
-    renderSb();
-    expect(screen.getByPlaceholderText('None identified.')).toBeDefined();
-  });
-
   it('renders + buttons in section headers', () => {
     renderSb();
     const btns = screen.getAllByTitle('Add item');

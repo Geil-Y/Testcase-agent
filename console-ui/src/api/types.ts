@@ -7,6 +7,8 @@ export interface Requirement {
   supplementary_info: string;
   source_row: number;
   imported_at: string;
+  status: string;
+  case_count?: number;
 }
 
 export interface RequirementListResponse {
@@ -55,6 +57,20 @@ export interface TestCase {
   intent_id: number | null;
   steps: TestCaseStep[];
   evaluation_items: EvaluationItem[];
+}
+
+export interface CaseStepPayload {
+  step_order: number;
+  action: string;
+  expected: string;
+}
+
+export interface CaseUpdatePayload {
+  title?: string;
+  objective?: string;
+  precondition?: string;
+  postcondition?: string;
+  steps?: CaseStepPayload[];
 }
 
 export interface EvaluationItem {

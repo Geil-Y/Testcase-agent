@@ -25,6 +25,18 @@ export function addItem(runId: number, section: string, item: Partial<SectionIte
   return apiPost<SectionItem>(`/runs/${runId}/sections/${section}/items`, item);
 }
 
+export function updateCase(runId: number, caseId: number, payload: import('./types').CaseUpdatePayload): Promise<import('./types').TestCase> {
+  return apiPut(`/runs/${runId}/cases/${caseId}`, payload);
+}
+
+export function deleteIntent(runId: number, intentId: number): Promise<void> {
+  return apiDelete(`/runs/${runId}/intents/${intentId}`);
+}
+
+export function regenerateIntents(runId: number): Promise<import('./types').RunDetail> {
+  return apiPost(`/runs/${runId}/regenerate-intents`);
+}
+
 export function deleteItem(runId: number, section: string, itemId: string): Promise<void> {
   return apiDelete(`/runs/${runId}/sections/${section}/items/${itemId}`);
 }

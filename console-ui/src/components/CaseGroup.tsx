@@ -5,6 +5,7 @@ interface Props {
   intent: CaseIntent | null;
   index: number;
   dimLabel: string;
+  onEditCase?: (case_: TestCase) => void;
 }
 
 function renderWithNeedsReview(text: string) {
@@ -18,7 +19,7 @@ function renderWithNeedsReview(text: string) {
   );
 }
 
-export default function CaseGroup({ case_, intent, index, dimLabel }: Props) {
+export default function CaseGroup({ case_, intent, index, dimLabel, onEditCase }: Props) {
   const evalItems = case_.evaluation_items || [];
   const failed = evalItems.filter((e) => e.result === 'fail');
   const warned = evalItems.filter((e) => e.result === 'warn');
@@ -45,7 +46,7 @@ export default function CaseGroup({ case_, intent, index, dimLabel }: Props) {
           <div style={{ display: 'flex', gap: 6 }}>
             {evPassed && <span className="badge badge-done">✓ Passed</span>}
             {evFailed && <span className="badge" style={{ background: 'var(--danger-subtle)', color: 'var(--danger)' }}>✗ Failed</span>}
-            <button className="btn btn-xs">Edit</button>
+            <button className="btn btn-xs" onClick={() => onEditCase?.(case_)}>Edit</button>
             <button className="btn btn-xs">Regenerate</button>
             <button className="btn btn-xs btn-primary">Accept</button>
           </div>

@@ -3,21 +3,36 @@ import { useNavigate } from 'react-router-dom';
 import { listRequirements, importRequirements } from '../api/requirements';
 import type { Requirement } from '../api/types';
 
+function statusBadge(s: string) {
+  if (s === 'reviewed') return <span className="badge badge-done">Reviewed</span>;
+  if (s === 'pending') return <span className="badge badge-pending">Pending</span>;
+  return <span className="badge badge-new">New</span>;
+}
+
 export default function Home() {
   const [reqs, setReqs] = useState<Requirement[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage] = useState(50);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [importing, setImporting] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+
   const fetchReqs = useCallback(async () => {
     try {
       setError('');
-      const data = await listRequirements({ q: q || undefined, status: status || undefined });
+      const data = await listRequirements({
+        q: q || undefined,
+        status: status || undefined,
+        offset: (page - 1) * perPage,
+        limit: perPage,
+      });
       setReqs(data.items);
       setTotal(data.total);
     } catch (e) {
@@ -25,7 +40,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [q, status]);
+  }, [q, status, page, perPage]);
 
   useEffect(() => { fetchReqs(); }, [fetchReqs]);
 
@@ -77,7 +92,7 @@ export default function Home() {
             type="text"
             placeholder="Search requirements... (/)"
             value={q}
-            onChange={(e) => { setQ(e.target.value); setLoading(true); }}
+            onChange={(e) => { setQ(e.target.value); setPage(1); setLoading(true); }}
             style={{
               width: '100%', padding: '8px 12px 8px 32px', border: '1px solid var(--border)',
               borderRadius: 'var(--radius-md)', background: 'var(--bg-surface)',
@@ -91,7 +106,7 @@ export default function Home() {
             <button
               key={s || 'all'}
               className={`filter-chip ${status === s ? 'active' : ''}`}
-              onClick={() => { setStatus(s); setLoading(true); }}
+              onClick={() => { setStatus(s); setPage(1); setLoading(true); }}
             >
               {s ? s.charAt(0).toUpperCase() + s.slice(1) : 'All'}
             </button>
@@ -114,11 +129,25 @@ export default function Home() {
               <td><span className="req-key">{r.requirement_key}</span></td>
               <td><span className="req-desc">{r.description}</span></td>
               <td style={{ color: 'var(--text-muted)' }}>{r.function_name || '—'}</td>
-              <td style={{ textAlign: 'right' }}><span className="badge badge-new">New</span></td>
+              <td style={{ textAlign: 'right' }}>{statusBadge(r.status)}</td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 16 }}>
+          <button className="btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+            ← Prev
+          </button>
+          <span className="text-muted" style={{ fontSize: 13 }}>
+            Page {page} of {totalPages}
+          </span>
+          <button className="btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+            Next →
+          </button>
+        </div>
+      )}
 
       {!loading && reqs.length === 0 && !error && (
         <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>

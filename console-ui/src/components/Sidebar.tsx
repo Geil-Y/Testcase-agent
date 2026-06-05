@@ -54,12 +54,6 @@ export default function Sidebar({ requirement, sections, onItemClick, onAddItem,
           </div>
         ))}
 
-        <div className="sb-blocker">
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 4 }}>
-            Blocking Gaps
-          </div>
-          <textarea placeholder="None identified." defaultValue="" />
-        </div>
       </div>
     </div>
   );

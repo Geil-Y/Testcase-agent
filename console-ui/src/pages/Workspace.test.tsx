@@ -28,6 +28,9 @@ vi.mock('../api/runs', () => ({
   evaluateRun: vi.fn().mockResolvedValue({ summary: { total_cases: 1, passed: 1, failed: 0, pass_rate: 1 }, cases: [] }),
   addItem: vi.fn().mockResolvedValue({}),
   deleteItem: vi.fn().mockResolvedValue(undefined),
+  updateCase: vi.fn().mockResolvedValue({}),
+  deleteIntent: vi.fn().mockResolvedValue(undefined),
+  regenerateIntents: vi.fn().mockResolvedValue({}),
 }));
 
 function renderWs(data: RunDetail) {
@@ -55,9 +58,9 @@ describe('Workspace', () => {
     await waitFor(() => expect(screen.getByText('Run Evaluation')).toBeDefined());
   });
 
-  it('shows empty state when no cases', async () => {
+  it('shows empty state when extraction_ready', async () => {
     renderWs(base);
-    await waitFor(() => expect(screen.getByText('Cases not yet generated')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Intents not yet planned')).toBeDefined());
   });
 
   it('calls advance on button click', async () => {

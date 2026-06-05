@@ -86,7 +86,6 @@ export default function ItemModal({ item, sectionName, requirementDescription, r
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn" onClick={onClose}>Flag</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Accept'}</button>
         </div>
       </div>

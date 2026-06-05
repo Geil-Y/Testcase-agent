@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRun, advanceRun, evaluateRun, deleteItem } from '../api/runs';
-import type { RunDetail, SectionItem } from '../api/types';
+import { getRun, advanceRun, evaluateRun, deleteItem, deleteIntent, regenerateIntents } from '../api/runs';
+import type { RunDetail, SectionItem, TestCase } from '../api/types';
 import Sidebar from '../components/Sidebar';
 import CaseGroup from '../components/CaseGroup';
+import IntentsPanel from '../components/IntentsPanel';
 import ItemModal from '../components/ItemModal';
+import CaseEditModal from '../components/CaseEditModal';
 import EvaluationSummary from '../components/EvaluationSummary';
 
 const DIM_LABELS: Record<string, string> = {
@@ -22,7 +24,9 @@ export default function Workspace() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [advancing, setAdvancing] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [modalItem, setModalItem] = useState<{ item: SectionItem; sectionName: string; isNew: boolean } | null>(null);
+  const [editingCase, setEditingCase] = useState<TestCase | null>(null);
 
   const fetchRun = async () => {
     if (!runId) return;
@@ -42,13 +46,14 @@ export default function Workspace() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (modalItem) { setModalItem(null); }
+        if (editingCase) { setEditingCase(null); }
+        else if (modalItem) { setModalItem(null); }
         else { navigate('/'); }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [modalItem]);
+  }, [modalItem, editingCase]);
 
   const handleAddItem = (sectionName: string) => {
     const empty: SectionItem = { id: 0, item_id: '', status: 'known', content: '', need: '', source_text: '', sort_order: 0 };
@@ -62,6 +67,29 @@ export default function Workspace() {
       await fetchRun();
     } catch (e) {
       setError(String(e));
+    }
+  };
+
+  const handleDeleteIntent = async (intent: { id: number }) => {
+    if (!runId || !window.confirm('Delete this intent?')) return;
+    try {
+      await deleteIntent(Number(runId), intent.id);
+      await fetchRun();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleRegenerateIntents = async () => {
+    if (!runId) return;
+    setRegenerating(true);
+    try {
+      await regenerateIntents(Number(runId));
+      await fetchRun();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -125,33 +153,54 @@ export default function Workspace() {
           onDeleteItem={handleDeleteItem}
         />
         <div className="main-content">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600 }}>Test Cases</h2>
-              {cases.length > 0 && <span className="badge badge-done">{cases.length} cases</span>}
-            </div>
-          </div>
+          {status === 'intents_ready' && (
+            <IntentsPanel
+              intents={intents}
+              onDelete={handleDeleteIntent}
+              onRegenerate={handleRegenerateIntents}
+              regenerating={regenerating}
+            />
+          )}
 
-          {evaluation && <EvaluationSummary evaluation={evaluation} cases={cases} />}
+          {(status === 'cases_ready' || status === 'evaluated') && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <h2 style={{ fontSize: 16, fontWeight: 600 }}>Test Cases</h2>
+                  {cases.length > 0 && <span className="badge badge-done">{cases.length} cases</span>}
+                </div>
+              </div>
 
-          {cases.length === 0 ? (
+              {evaluation && <EvaluationSummary evaluation={evaluation} cases={cases} />}
+
+              {cases.length === 0 ? (
+                <div className="empty-state">
+                  <h3>Cases not yet generated</h3>
+                  <p>Complete extraction review and advance to generate case intents and test cases.</p>
+                </div>
+              ) : (
+                cases.map((c, idx) => {
+                  const intent = intents.find((i) => i.id === c.intent_id);
+                  return (
+                    <CaseGroup
+                      key={c.id}
+                      case_={c}
+                      intent={intent || null}
+                      index={idx}
+                      dimLabel={intent ? DIM_LABELS[intent.coverage_dimension] || intent.coverage_dimension : ''}
+                      onEditCase={setEditingCase}
+                    />
+                  );
+                })
+              )}
+            </>
+          )}
+
+          {status === 'extraction_ready' && cases.length === 0 && (
             <div className="empty-state">
-              <h3>Cases not yet generated</h3>
-              <p>Complete extraction review and advance to generate case intents and test cases.</p>
+              <h3>Intents not yet planned</h3>
+              <p>Complete extraction review and advance to plan case intents.</p>
             </div>
-          ) : (
-            cases.map((c, idx) => {
-              const intent = intents.find((i) => i.id === c.intent_id);
-              return (
-                <CaseGroup
-                  key={c.id}
-                  case_={c}
-                  intent={intent || null}
-                  index={idx}
-                  dimLabel={intent ? DIM_LABELS[intent.coverage_dimension] || intent.coverage_dimension : ''}
-                />
-              );
-            })
           )}
         </div>
       </div>
@@ -165,6 +214,15 @@ export default function Workspace() {
           onClose={() => setModalItem(null)}
           onSaved={fetchRun}
           isNew={modalItem.isNew}
+        />
+      )}
+
+      {editingCase && (
+        <CaseEditModal
+          case_={editingCase}
+          runId={Number(runId)}
+          onClose={() => setEditingCase(null)}
+          onSaved={fetchRun}
         />
       )}
     </div>

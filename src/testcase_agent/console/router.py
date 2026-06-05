@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, UploadFile
 
 from .db import get_db
-from .pipeline_runner import run_llm_a
+from .pipeline_runner import run_llm_a, run_llm_b
 from .advance import advance_run as do_advance
 from .evaluate import evaluate_run as do_evaluate
 from ..pipeline.import_requirements import ParsedRequirement, parse_requirements, ColumnMapping
@@ -51,7 +51,16 @@ def list_requirements(q: str = "", status: str = "", offset: int = 0, limit: int
         f"""SELECT r.*,
             (SELECT COUNT(*) FROM test_cases tc
              JOIN runs ru ON tc.run_id = ru.id
-             WHERE ru.requirement_id = r.id) as case_count
+             WHERE ru.requirement_id = r.id) as case_count,
+            COALESCE(
+                (SELECT CASE
+                    WHEN rn.status IN ('cases_ready','evaluated') THEN 'reviewed'
+                    WHEN rn.status IN ('extraction_ready','intents_ready') THEN 'pending'
+                    ELSE 'new'
+                END
+                FROM runs rn WHERE rn.requirement_id = r.id
+                ORDER BY rn.created_at DESC LIMIT 1
+            ), 'new') as status
         FROM requirements r WHERE {' AND '.join(clauses)} ORDER BY r.id DESC LIMIT ? OFFSET ?""",
         params + [limit, offset],
     ).fetchall()
@@ -194,6 +203,93 @@ def evaluate_run(run_id: int):
 
     result = do_evaluate(run_id, db)
     return result
+
+
+# ── Case Update ───────────────────────────────────────────────────────────────
+
+@console_router.put("/runs/{run_id:int}/cases/{case_id:int}")
+def update_case(run_id: int, case_id: int, body: dict):
+    db = get_db()
+
+    case = db.execute(
+        "SELECT * FROM test_cases WHERE id = ? AND run_id = ?",
+        (case_id, run_id),
+    ).fetchone()
+    if not case:
+        raise HTTPException(404, "Case not found in this run")
+
+    updatable = ("title", "objective", "precondition", "postcondition")
+    sets = []
+    values: list[Any] = []
+    for field in updatable:
+        if field in body:
+            sets.append(f"{field}=?")
+            values.append(body[field])
+    if sets:
+        values.append(case_id)
+        db.execute(f"UPDATE test_cases SET {', '.join(sets)} WHERE id=?", values)
+
+    if "steps" in body and isinstance(body["steps"], list):
+        db.execute("DELETE FROM test_case_steps WHERE case_id = ?", (case_id,))
+        for step in body["steps"]:
+            db.execute(
+                """INSERT INTO test_case_steps (case_id, step_order, action, expected)
+                   VALUES (?, ?, ?, ?)""",
+                (case_id, step.get("step_order", 0), step.get("action", ""), step.get("expected", "")),
+            )
+
+    db.commit()
+    updated_case = db.execute("SELECT * FROM test_cases WHERE id = ?", (case_id,)).fetchone()
+    steps = db.execute(
+        "SELECT * FROM test_case_steps WHERE case_id = ? ORDER BY step_order",
+        (case_id,),
+    ).fetchall()
+    result = _row_to_dict(updated_case)
+    result["steps"] = [_row_to_dict(s) for s in steps]
+    return result
+
+
+# ── Intents ────────────────────────────────────────────────────────────────────
+
+@console_router.delete("/runs/{run_id:int}/intents/{intent_id:int}")
+def delete_intent(run_id: int, intent_id: int):
+    db = get_db()
+    intent = db.execute(
+        "SELECT * FROM case_intents WHERE id = ? AND run_id = ?",
+        (intent_id, run_id),
+    ).fetchone()
+    if not intent:
+        raise HTTPException(404, "Intent not found in this run")
+    db.execute("DELETE FROM case_intents WHERE id = ?", (intent_id,))
+    db.commit()
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
+@console_router.post("/runs/{run_id:int}/regenerate-intents")
+def regenerate_intents(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    db.execute("DELETE FROM case_intents WHERE run_id = ?", (run_id,))
+    db.commit()
+
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    try:
+        run_llm_b(run_id, provider, db)
+    except Exception as e:
+        db.execute(
+            "UPDATE runs SET status='failed', error=?, updated_at=datetime('now') WHERE id=?",
+            (str(e), run_id),
+        )
+        db.commit()
+        raise HTTPException(500, str(e))
+
+    return _build_run_response(run_id, db)
 
 
 # ── Section Items ─────────────────────────────────────────────────────────────
