@@ -359,30 +359,6 @@ def delete_intent(run_id: int, intent_id: int):
     return Response(status_code=204)
 
 
-@console_router.post("/runs/{run_id:int}/regenerate-intents")
-def regenerate_intents(run_id: int):
-    db = get_db()
-    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
-    if not run:
-        raise HTTPException(404, "Run not found")
-
-    db.execute("DELETE FROM case_intents WHERE run_id = ?", (run_id,))
-    db.commit()
-
-    settings = get_settings()
-    provider = create_provider(settings)
-
-    try:
-        run_llm_b(run_id, provider, db)
-    except Exception as e:
-        db.execute(
-            "UPDATE runs SET status='failed', error=?, updated_at=datetime('now') WHERE id=?",
-            (str(e), run_id),
-        )
-        db.commit()
-        raise HTTPException(500, str(e))
-
-    return _build_run_response(run_id, db)
 
 
 # ── Section Items ─────────────────────────────────────────────────────────────
