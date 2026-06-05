@@ -224,6 +224,99 @@ def run_llm_c(run_id: int, provider: LlmProvider, db: sqlite3.Connection) -> Non
     db.commit()
 
 
+def regenerate_test_basis(
+    db: sqlite3.Connection,
+    run_id: int,
+    item_id: str,
+    comment: str,
+    provider: LlmProvider,
+) -> list[dict]:
+    """Regenerate the full test basis for a run based on human review feedback."""
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    req = db.execute("SELECT * FROM requirements WHERE id = ?", (run["requirement_id"],)).fetchone()
+
+    sections = db.execute(
+        "SELECT * FROM test_basis_sections WHERE run_id = ? ORDER BY sort_order", (run_id,)
+    ).fetchall()
+    items_by_section: dict[str, list[str]] = {}
+    focus_desc = ""
+    for sec in sections:
+        items = db.execute(
+            "SELECT * FROM test_basis_items WHERE section_id = ? ORDER BY sort_order", (sec["id"],)
+        ).fetchall()
+        items_by_section[sec["section_name"]] = [it["content"] or it["need"] for it in items]
+        for it in items:
+            if it["item_id"] == item_id:
+                focus_desc = it["content"] or it["need"] or it["item_id"]
+
+    previous_output = "\n".join(
+        f"{sec}: {', '.join(contents)}" for sec, contents in items_by_section.items()
+    )
+
+    requirement_text = req["description"]
+    if req["supplementary_info"]:
+        requirement_text += "\n" + req["supplementary_info"]
+
+    sys_prompt, usr_prompt = render_prompt(
+        "regenerate_test_basis_item",
+        requirement_text=requirement_text,
+        previous_output=previous_output,
+        review_comment=comment,
+        focus_item_id=item_id,
+        focus_item_description=focus_desc,
+    )
+
+    raw = provider.complete(sys_prompt, usr_prompt)
+    from ..parser.json_parser import parse_test_basis_json
+    tb = parse_test_basis_json(raw)
+
+    for sec in sections:
+        db.execute("DELETE FROM test_basis_items WHERE section_id = ?", (sec["id"],))
+    db.execute("DELETE FROM test_basis_sections WHERE run_id = ?", (run_id,))
+
+    section_order = [
+        ("signals", tb.allowed_signals),
+        ("thresholds", tb.allowed_thresholds),
+        ("timing", tb.allowed_timing),
+        ("states", tb.allowed_states),
+        ("observations", tb.allowed_observations),
+    ]
+
+    result: list[dict] = []
+    for sort_order, (section_name, values) in enumerate(section_order):
+        cur = db.execute(
+            "INSERT INTO test_basis_sections (run_id, section_name, sort_order) VALUES (?, ?, ?)",
+            (run_id, section_name, sort_order),
+        )
+        section_id = cur.lastrowid
+
+        for i, val in enumerate(values):
+            db.execute(
+                """INSERT INTO test_basis_items
+                   (section_id, item_id, status, content, need, source_text, sort_order)
+                   VALUES (?, ?, 'known', ?, '', ?, ?)""",
+                (section_id, f"{section_name[:4]}-{i+1}", val, req["description"], i),
+            )
+            result.append({"item_id": f"{section_name[:4]}-{i+1}", "content": val})
+
+        section_mi = [mi for mi in tb.missing_info if mi.category == _section_to_category(section_name)]
+        for j, mi in enumerate(section_mi):
+            db.execute(
+                """INSERT INTO test_basis_items
+                   (section_id, item_id, status, content, need, source_text, sort_order)
+                   VALUES (?, ?, 'needs_review', '', ?, '', ?)""",
+                (section_id, f"{section_name[:4]}-needs-{j+1}", mi.description, len(values) + j),
+            )
+            result.append({"item_id": f"{section_name[:4]}-needs-{j+1}", "need": mi.description})
+
+    from .review_state import record_action
+    record_action(db, run_id, "a", "regenerate", target_type="test_basis_item",
+                   target_id=None, comment=comment)
+
+    db.commit()
+    return result
+
+
 def _section_to_category(section_name: str) -> str:
     mapping = {
         "signals": "signal",

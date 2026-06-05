@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRun, advanceRun, evaluateRun, deleteItem, deleteIntent, regenerateIntents } from '../api/runs';
-import type { RunDetail, SectionItem, TestCase } from '../api/types';
+import { getRun, advanceRun, evaluateRun, addItem, deleteItem, deleteIntent, regenerateIntents, getReviewState, acceptStage, unlockStage } from '../api/runs';
+import type { RunDetail, ReviewState, SectionItem, TestCase } from '../api/types';
 import Sidebar from '../components/Sidebar';
 import CaseGroup from '../components/CaseGroup';
 import IntentsPanel from '../components/IntentsPanel';
@@ -21,10 +21,12 @@ export default function Workspace() {
   const { runId } = useParams<{ runId: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<RunDetail | null>(null);
+  const [reviewState, setReviewState] = useState<ReviewState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [advancing, setAdvancing] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [toast, setToast] = useState('');
   const [modalItem, setModalItem] = useState<{ item: SectionItem; sectionName: string; isNew: boolean } | null>(null);
   const [editingCase, setEditingCase] = useState<TestCase | null>(null);
 
@@ -41,7 +43,15 @@ export default function Workspace() {
     }
   };
 
-  useEffect(() => { fetchRun(); }, [runId]);
+  const fetchReviewState = useCallback(async () => {
+    if (!runId) return;
+    try {
+      const rs = await getReviewState(Number(runId));
+      setReviewState(rs);
+    } catch { /* endpoint may not exist yet */ }
+  }, [runId]);
+
+  useEffect(() => { fetchRun(); fetchReviewState(); }, [runId, fetchReviewState]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -54,6 +64,11 @@ export default function Workspace() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [modalItem, editingCase]);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 4000);
+  };
 
   const handleAddItem = (sectionName: string) => {
     const empty: SectionItem = { id: 0, item_id: '', status: 'known', content: '', need: '', source_text: '', sort_order: 0 };
@@ -99,8 +114,13 @@ export default function Workspace() {
     try {
       await advanceRun(Number(runId));
       await fetchRun();
-    } catch (e) {
-      setError(String(e));
+      await fetchReviewState();
+    } catch (e: any) {
+      if (String(e).includes('409') || String(e).includes('not yet accepted')) {
+        showToast('请先 Accept 当前阶段');
+      } else {
+        setError(String(e));
+      }
     } finally {
       setAdvancing(false);
     }
@@ -119,12 +139,37 @@ export default function Workspace() {
     }
   };
 
+  const handleAccept = async (stage: string) => {
+    if (!runId) return;
+    try {
+      await acceptStage(Number(runId), stage);
+      await fetchRun();
+      await fetchReviewState();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleUnlock = async (stage: string) => {
+    if (!runId) return;
+    try {
+      await unlockStage(Number(runId), stage, false);
+      await fetchRun();
+      await fetchReviewState();
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
   if (loading) return <div className="loading"><span style={{ marginRight: 8 }}>⟳</span>Loading run...</div>;
   if (error) return <div className="error-msg">{error}</div>;
   if (!data) return <div className="error-msg">Run not found</div>;
 
   const { run, requirement, sections, intents, cases, evaluation } = data;
   const status = run.status;
+  const llmA = reviewState?.a;
+  const llmAAccepted = llmA?.accepted ?? false;
+  const llmARequired = llmA?.review_required ?? false;
 
   let actionBtn = null;
   if (status === 'extraction_ready') actionBtn = <button className="btn btn-primary" onClick={handleAdvance} disabled={advancing}>{advancing ? 'Planning...' : 'Plan Case Intents'}</button>;
@@ -141,6 +186,13 @@ export default function Workspace() {
         <span className={`badge ${status === 'evaluated' ? 'badge-done' : 'badge-pending'}`}>
           {status.replace(/_/g, ' ')}
         </span>
+        {status === 'extraction_ready' && llmARequired && (
+          llmAAccepted ? (
+            <button className="btn btn-sm" onClick={() => handleUnlock('a')} style={{ marginLeft: 8 }}>Unlock LLM-A</button>
+          ) : (
+            <button className="btn btn-sm btn-accept" onClick={() => handleAccept('a')} style={{ marginLeft: 8 }}>Accept LLM-A</button>
+          )
+        )}
         <span className="ws-spacer" />
         {actionBtn}
       </div>
@@ -151,6 +203,9 @@ export default function Workspace() {
           onItemClick={(item, sectionName) => setModalItem({ item, sectionName, isNew: false })}
           onAddItem={handleAddItem}
           onDeleteItem={handleDeleteItem}
+          accepted={llmAAccepted}
+          runId={Number(runId)}
+          onRegenerated={fetchRun}
         />
         <div className="main-content">
           {status === 'intents_ready' && (
@@ -205,6 +260,8 @@ export default function Workspace() {
         </div>
       </div>
 
+      {toast && <div className="toast">{toast}</div>}
+
       {modalItem && (
         <ItemModal
           item={modalItem.item}
@@ -214,6 +271,7 @@ export default function Workspace() {
           onClose={() => setModalItem(null)}
           onSaved={fetchRun}
           isNew={modalItem.isNew}
+          accepted={llmAAccepted}
         />
       )}
 

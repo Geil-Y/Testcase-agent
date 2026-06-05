@@ -10,6 +10,7 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
   isNew?: boolean;
+  accepted?: boolean;
 }
 
 function highlightInText(fullText: string, query: string): string {
@@ -26,7 +27,7 @@ function escHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export default function ItemModal({ item, sectionName, requirementDescription, runId, onClose, onSaved, isNew }: Props) {
+export default function ItemModal({ item, sectionName, requirementDescription, runId, onClose, onSaved, isNew, accepted }: Props) {
   const [status, setStatus] = useState(item.status);
   const [content, setContent] = useState(item.content);
   const [need, setNeed] = useState(item.need);
@@ -68,25 +69,39 @@ export default function ItemModal({ item, sectionName, requirementDescription, r
               dangerouslySetInnerHTML={{ __html: highlighted }}
             />
           </div>
-          <div className="mf">
-            <label>Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value as SectionItem['status'])}>
-              <option value="known">known — explicitly in requirement</option>
-              <option value="needs_review">needs_review — missing from requirement</option>
-            </select>
-          </div>
-          <div className="mf">
-            <label>Content</label>
-            <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Extracted value..." rows={3} />
-          </div>
-          <div className="mf">
-            <label>Missing Need</label>
-            <textarea value={need} onChange={(e) => setNeed(e.target.value)} placeholder="Describe what information is missing..." rows={2} style={{ color: status === 'needs_review' ? 'var(--warning)' : undefined }} />
-          </div>
+          {accepted ? (
+            <div className="mf">
+              <label>Status (locked)</label>
+              <p>Item is accepted and locked. Unlock the stage to edit.</p>
+            </div>
+          ) : (
+            <>
+              <div className="mf">
+                <label>Status</label>
+                <select value={status} onChange={(e) => setStatus(e.target.value as SectionItem['status'])}>
+                  <option value="known">known — explicitly in requirement</option>
+                  <option value="needs_review">needs_review — missing from requirement</option>
+                </select>
+              </div>
+              <div className="mf">
+                <label>Content</label>
+                <textarea value={content} onChange={(e) => setContent(e.target.value)} placeholder="Extracted value..." rows={3} />
+              </div>
+              <div className="mf">
+                <label>Missing Need</label>
+                <textarea value={need} onChange={(e) => setNeed(e.target.value)} placeholder="Describe what information is missing..." rows={2} style={{ color: status === 'needs_review' ? 'var(--warning)' : undefined }} />
+              </div>
+            </>
+          )}
         </div>
         <div className="modal-footer">
           <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Accept'}</button>
+          {!accepted && (
+            <>
+              <button className="btn" onClick={onClose}>Flag</button>
+              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Accept'}</button>
+            </>
+          )}
         </div>
       </div>
     </div>

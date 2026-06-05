@@ -27,6 +27,7 @@ function renderSb(props: Partial<{
   onItemClick: (item: SectionItem, sectionName: string) => void;
   onAddItem: (sectionName: string) => void;
   onDeleteItem: (item: SectionItem, sectionName: string) => void;
+  accepted: boolean;
 }> = {}) {
   return render(
     <Sidebar
@@ -35,6 +36,9 @@ function renderSb(props: Partial<{
       onItemClick={props.onItemClick ?? vi.fn()}
       onAddItem={props.onAddItem ?? vi.fn()}
       onDeleteItem={props.onDeleteItem ?? vi.fn()}
+      accepted={props.accepted ?? false}
+      runId={1}
+      onRegenerated={vi.fn()}
     />
   );
 }

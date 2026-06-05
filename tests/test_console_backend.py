@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from testcase_agent.api import create_app
-from testcase_agent.console.db import init_db
+from testcase_agent.console.db import init_db, run_migrations
 from testcase_agent.pipeline.generate import RequirementInput
 
 
@@ -24,6 +24,7 @@ def db(tmp_path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     init_db(conn)
+    run_migrations(conn)
     yield conn
     conn.close()
 
@@ -335,13 +336,94 @@ class TestRunAPI:
         })
         run_id = cr.json()["run"]["id"]
 
+        # Must accept LLM-A before advancing
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+
         resp = client.post(f"/api/v1/console/runs/{run_id}/advance")
         assert resp.status_code == 200
         data = resp.json()
-        # With review_llm_b=0 (auto), LLM-B should run
-        # With review_llm_c=0 (auto), LLM-C should also run (auto-chain)
         assert data["run"]["status"] in ("intents_ready", "cases_ready")
         assert len(data["intents"]) >= 1
+
+    def test_advance_blocked_by_review(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={
+            "requirement_id": 1,
+            "review_required": ["a"],
+        })
+        run_id = cr.json()["run"]["id"]
+
+        # Advance should be blocked because LLM-A not yet accepted
+        resp = client.post(f"/api/v1/console/runs/{run_id}/advance")
+        assert resp.status_code == 409
+
+    def test_accept_blocked_when_already_accepted(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={
+            "requirement_id": 1,
+            "review_required": ["a"],
+        })
+        run_id = cr.json()["run"]["id"]
+        resp = client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        assert resp.status_code == 200
+        # Second accept should return 409
+        resp2 = client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        assert resp2.status_code == 409
+
+    def test_review_state_endpoint(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={
+            "requirement_id": 1,
+            "review_required": ["a"],
+        })
+        run_id = cr.json()["run"]["id"]
+        resp = client.get(f"/api/v1/console/runs/{run_id}/review-state")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["a"]["review_required"] is True
+        assert data["a"]["accepted"] is False
+
+    def test_llm_a_review_flow(self, client, db):
+        """Integration test: LLM-A Accept → Advance → complete."""
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={
+            "requirement_id": 1,
+            "review_required": ["a"],
+        })
+        run_id = cr.json()["run"]["id"]
+        assert cr.json()["run"]["status"] == "extraction_ready"
+
+        # Accept LLM-A
+        resp = client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        assert resp.status_code == 200
+
+        # Verify review state
+        state = client.get(f"/api/v1/console/runs/{run_id}/review-state").json()
+        assert state["a"]["accepted"] is True
+
+        # Unlock LLM-A (no cascade since no downstream data)
+        resp = client.post(f"/api/v1/console/runs/{run_id}/unlock/a")
+        assert resp.status_code == 200
+        state = client.get(f"/api/v1/console/runs/{run_id}/review-state").json()
+        assert state["a"]["accepted"] is False
+
+        # Re-accept and advance
+        client.post(f"/api/v1/console/runs/{run_id}/accept/a")
+        resp = client.post(f"/api/v1/console/runs/{run_id}/advance")
+        assert resp.status_code == 200
+
+    def test_regenerate_requires_comment(self, client, db):
+        _seed_requirement(client)
+        cr = client.post("/api/v1/console/runs", json={
+            "requirement_id": 1,
+            "review_required": ["a"],
+        })
+        run_id = cr.json()["run"]["id"]
+        resp = client.post(
+            f"/api/v1/console/runs/{run_id}/sections/signals/items/sign-1/regenerate",
+            json={"comment": ""},
+        )
+        assert resp.status_code == 422
 
     def test_evaluate(self, client, db):
         _seed_requirement(client)

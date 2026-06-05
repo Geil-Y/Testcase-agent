@@ -24,12 +24,28 @@ Rules:
 Valid coverage_dimension values:
 normal_behavior, boundary_or_threshold, fault_or_protection, state_transition, observability.
 
-Case count is determined by the requirement structure:
-- Each logical OR branch in the condition gets its own case. Do not merge branches.
-- Each relevant operational mode gets its own case.
-- Boundary values: the triggers condition and the just-does-not-trigger condition are separate cases.
-- Timed conditions: duration met and duration not met are separate cases.
-- Simple single-condition requirements may need only 1-2 cases.
+Case count is determined by specification-based test design value:
+- Use equivalence partitions for trigger and non-trigger conditions.
+- Use boundary value analysis for thresholds, limits, and inclusive or exclusive comparisons.
+- Use decision-table thinking for AND/OR conditions: include the all-true trigger case and selected one-condition-false cases when they clarify the requirement response.
+- Use state-transition thinking when the requirement defines modes, states, latches, clears, or transitions.
+- Simple single-condition requirements may need only 1-2 cases, while multi-condition safety logic may need more.
+
+Timing rules:
+- For debounce, hold, continuous-duration, or maturity timing, create duration-met and duration-not-met intents.
+- For response-time deadlines such as "within 50 ms", create an intent that verifies the required response occurs within the deadline. Do not turn the deadline into a not-yet-mature no-response case.
+- For chained deadlines, keep each deadline as a distinct acceptance criterion only when it has a distinct response or evidence point.
+
+Negative and boundary intents:
+- Keep each negative or boundary intent limited to the varied condition.
+- Do not invent recovery, reset, diagnostic clear, timeout, late-response handling, fault-state behavior, or permanent no-response behavior unless the selected requirement states it.
+- Use symbolic relations from the requirement. Do not invent epsilon values or representative numeric test points.
+
+Anti-duplication:
+- Do not create a separate intent only because wording, coverage label, or observation method differs.
+- If multiple outputs are caused by the same trigger and judged at the same verification point, keep them in one intent.
+- Different evidence paths justify separate intents only when the requirement defines different behaviors or acceptance criteria.
+- Do not create late-response, missed-deadline, retry, timeout, or fault-state intents unless the selected requirement explicitly defines those outcomes.
 
 Multiple expected results:
 - Do not split one requirement-defined response into multiple case intents only because it has multiple expected results or multiple evidence points.

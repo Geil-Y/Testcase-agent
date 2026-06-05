@@ -31,6 +31,9 @@ vi.mock('../api/runs', () => ({
   updateCase: vi.fn().mockResolvedValue({}),
   deleteIntent: vi.fn().mockResolvedValue(undefined),
   regenerateIntents: vi.fn().mockResolvedValue({}),
+  getReviewState: vi.fn().mockResolvedValue({ a: { review_required: false, accepted: false, status: 'extraction_ready' }, b: { review_required: false, accepted: false, status: 'extraction_ready' }, c: { review_required: false, accepted: false, status: 'extraction_ready' } }),
+  acceptStage: vi.fn().mockResolvedValue({}),
+  unlockStage: vi.fn().mockResolvedValue({}),
 }));
 
 function renderWs(data: RunDetail) {

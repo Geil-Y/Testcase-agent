@@ -114,3 +114,23 @@ export interface CaseEvalResult {
   failed_items: string[];
   warning_items: string[];
 }
+
+export interface StageState {
+  review_required: boolean;
+  accepted: boolean;
+  status: string;
+  can_regenerate?: boolean;
+}
+
+export interface ReviewState {
+  a: StageState;
+  b: StageState;
+  c: StageState;
+}
+
+export interface CascadeWarning {
+  cascade_warning: boolean;
+  affected_intents: number;
+  affected_cases: number;
+  message: string;
+}

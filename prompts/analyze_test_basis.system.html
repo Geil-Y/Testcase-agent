@@ -28,17 +28,25 @@ Rules:
 - Do not convert symbolic parameters into numeric values.
 - Do not infer numeric values, calibration values, HIL channel names, tool commands, bench configuration, diagnostics, CAN fields, logs, states, or observations.
 
+Natural-language basis:
+- Natural-language physical quantities or outcomes explicitly stated in the requirement may be used as draft-level test basis.
+- Do not put a plain natural-language outcome into allowed_signals or allowed_observations unless the requirement names a concrete engineering object.
+- If concrete engineering evidence is needed but missing, preserve the requirement outcome in the description and add missing_info.
+
 Field guidance:
-- allowed_signals: BMS signal names explicitly found in the requirement.
+- allowed_signals: named BMS variables, named statuses, named controls, or named physical/control quantities explicitly found in the requirement. Include named objects used in trigger conditions, operating context, or required output/status.
 - allowed_thresholds: threshold parameters or explicit numeric thresholds found in the requirement.
 - allowed_timing: timing parameters, debounce durations, response times, periods, deadlines, or explicit durations found in the requirement.
 - allowed_states: BMS states, modes, or named operational conditions found in the requirement.
-- allowed_observations: observation points explicitly required by the requirement, such as DTCs, CAN fields, logged records, fault records, contactor state changes, status reports, or other required observable outputs.
+- allowed_observations: concrete evidence containers or observation mechanisms explicitly required by the requirement, such as DTCs, CAN fields or reports, stored records, fault records, non-volatile memory records, logs, contactor state feedback, status reports, or other named observable outputs.
 
 Missing information:
 - missing_info only covers requirement semantic gaps in these five categories: signal, threshold, timing, state, observation.
 - Do not flag HIL channel names, tool commands, test equipment setup, or bench configuration as missing information.
 - If the requirement provides a symbolic threshold or timing parameter, do not mark that threshold or timing as missing.
+- Add signal missing_info only when the case needs a specific BMS signal/interface for stimulus or judgment, and the requirement provides neither a named signal nor a usable natural-language physical quantity or outcome.
+- Add timing missing_info only when the case cannot decide when the expected result becomes valid from a duration, deadline, symbolic timing parameter, event point, or ordering in the requirement.
+- Add observation missing_info when the requirement gives a natural-language outcome but no named signal, state, record, report, measurement, or other concrete evidence to judge it.
 - If no critical semantic information is missing, output an empty missing_info array.
 - missing_info.category must be one of the listed string values.
 - Do not output confidence, severity, fact IDs, routing labels, review decisions, case intents, coverage plans, actions, expected results, or explanations.

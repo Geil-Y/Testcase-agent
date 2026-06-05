@@ -186,10 +186,103 @@ def advance_run(run_id: int):
     if not run:
         raise HTTPException(404, "Run not found")
 
+    from .review_state import can_advance as check_advance
+    ok, msg = check_advance(db, run_id)
+    if not ok:
+        raise HTTPException(409, msg)
+
     settings = get_settings()
     provider = create_provider(settings)
 
     do_advance(run_id, provider, db)
+
+    return _build_run_response(run_id, db)
+
+
+# ── Review Endpoints ──────────────────────────────────────────────────────────
+
+@console_router.get("/runs/{run_id:int}/review-state")
+def get_review_state(run_id: int):
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+    from .review_state import get_stage_states
+    return get_stage_states(db, run_id)
+
+
+@console_router.post("/runs/{run_id:int}/accept/{stage:str}")
+def accept_stage_endpoint(run_id: int, stage: str):
+    if stage not in ("a", "b", "c"):
+        raise HTTPException(422, "Invalid stage: must be a, b, or c")
+
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    from .review_state import accept_stage
+    already = False
+    if stage == "a":
+        already = bool(run["llm_a_accepted"])
+    elif stage == "b":
+        already = bool(run["llm_b_accepted"])
+    elif stage == "c":
+        already = bool(run["llm_c_accepted"])
+
+    if already:
+        raise HTTPException(409, f"Stage {stage} already accepted")
+
+    accept_stage(db, run_id, stage)
+    return _build_run_response(run_id, db)
+
+
+@console_router.post("/runs/{run_id:int}/unlock/{stage:str}")
+def unlock_stage_endpoint(run_id: int, stage: str, cascade: bool = False):
+    if stage not in ("a", "b", "c"):
+        raise HTTPException(422, "Invalid stage: must be a, b, or c")
+
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    from .review_state import unlock_stage, check_cascade_impact
+
+    if not cascade and stage != "c":
+        impact = check_cascade_impact(db, run_id, stage)
+        total = impact["affected_intents"] + impact["affected_cases"]
+        if total > 0:
+            return {
+                "cascade_warning": True,
+                "affected_intents": impact["affected_intents"],
+                "affected_cases": impact["affected_cases"],
+                "message": f"Unlocking stage {stage} will affect {impact['affected_intents']} intents and {impact['affected_cases']} cases downstream. Confirm with cascade=true to proceed.",
+            }
+
+    unlock_stage(db, run_id, stage, cascade=cascade)
+    return _build_run_response(run_id, db)
+
+
+@console_router.post("/runs/{run_id:int}/sections/{section:str}/items/{item_id:str}/regenerate")
+def regenerate_item_endpoint(run_id: int, section: str, item_id: str, body: dict):
+    if section not in _VALID_SECTIONS:
+        raise HTTPException(422, f"Invalid section: {section}")
+
+    comment = body.get("comment", "")
+    if not comment or not comment.strip():
+        raise HTTPException(422, "comment is required for regeneration")
+
+    db = get_db()
+    run = db.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        raise HTTPException(404, "Run not found")
+
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    from .pipeline_runner import regenerate_test_basis
+    regenerate_test_basis(db, run_id, item_id, comment.strip(), provider)
 
     return _build_run_response(run_id, db)
 

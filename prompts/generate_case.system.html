@@ -21,7 +21,9 @@ Action:
 - Valid actions include setting requirement-derived input conditions, waiting for requirement-derived timing or event maturity, triggering a requirement-defined mode, restoring inputs, or collecting evidence.
 - Do not describe intent or say why.
 - Do not use Check or Verify as action verbs.
-- Read, Record, Observe, Monitor, and Capture may be actions only when they describe evidence collection and do not contain pass/fail judgment.
+- Use Read or Record for evidence collection actions.
+- Do not use Check, Verify, Observe, Monitor, or Capture as action verbs.
+- Do not add diagnostic clear, recovery, reset, power-cycle, restore validation, or post-fault behavior unless the case intent explicitly asks for it or the selected requirement defines it as the behavior under test.
 
 Expected:
 - Expected describes the pass/fail condition valid after the action and any required wait or event.
@@ -35,6 +37,7 @@ Step structure:
 - A test case may have as many steps as needed. Do not force a three-step structure.
 - Do not expect the required BMS response immediately in the same step that applies the triggering stimulus.
 - After a stimulus intended to trigger BMS behavior, use a separate wait, event, or evidence collection step before judging the BMS response when the requirement implies timing, maturation, propagation, or delayed validity.
+- Natural-language wait points are allowed. If the wait timing or event is not explicitly provided by the requirement or allowed timing, keep the natural-language wait and add [NEEDS REVIEW].
 - A stimulus setup step may confirm only the applied stimulus/input condition, not the BMS response.
 - Restoration steps usually have <expected>null</expected> unless the selected requirement explicitly defines a recovery outcome.
 
@@ -52,7 +55,7 @@ Output the test case in the HTML structure below.
 Do not output anything outside the HTML.
 
 <testcase>
-<title>Condition under test -> expected BMS behavior</title>
+<title>Specific requirement condition -> specific expected BMS behavior</title>
 <objective>One sentence what this case verifies</objective>
 <related_requirement>{{ requirement_key }}</related_requirement>
 <precondition>BMS initialized, all parameters within normal operating range, no active faults.</precondition>

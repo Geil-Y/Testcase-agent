@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './client';
-import type { RunDetail, SectionItem } from './types';
+import type { RunDetail, ReviewState, CascadeWarning, SectionItem } from './types';
 
 export function getRun(runId: number): Promise<RunDetail> {
   return apiGet<RunDetail>(`/runs/${runId}`);
@@ -39,4 +39,20 @@ export function regenerateIntents(runId: number): Promise<import('./types').RunD
 
 export function deleteItem(runId: number, section: string, itemId: string): Promise<void> {
   return apiDelete(`/runs/${runId}/sections/${section}/items/${itemId}`);
+}
+
+export function getReviewState(runId: number): Promise<ReviewState> {
+  return apiGet<ReviewState>(`/runs/${runId}/review-state`);
+}
+
+export function acceptStage(runId: number, stage: string): Promise<RunDetail> {
+  return apiPost<RunDetail>(`/runs/${runId}/accept/${stage}`);
+}
+
+export function unlockStage(runId: number, stage: string, cascade: boolean = false): Promise<RunDetail | CascadeWarning> {
+  return apiPost<RunDetail | CascadeWarning>(`/runs/${runId}/unlock/${stage}?cascade=${cascade}`);
+}
+
+export function regenerateItem(runId: number, section: string, itemId: string, comment: string): Promise<RunDetail> {
+  return apiPost<RunDetail>(`/runs/${runId}/sections/${section}/items/${itemId}/regenerate`, { comment });
 }
