@@ -5,5 +5,5 @@ class MockProvider:
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         return (
             '{"mock": true, "message": "MockProvider returned a placeholder. '
-            'Use stage-specific fake providers in review_pipeline tests."}'
+            'Use stage-specific fake providers in pipeline tests."}'
         )
