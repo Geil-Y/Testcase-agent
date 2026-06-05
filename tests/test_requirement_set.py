@@ -1,192 +1,60 @@
-"""Tests for requirement set loading, validation, and selection."""
+"""Tests for the prompt evaluation requirement set artifact."""
 
+from __future__ import annotations
+
+import json
 from pathlib import Path
 
 import pytest
 
-from optimization.cli import (
-    load_requirement_set,
-    select_by_requirement_set,
-    validate_requirement_set,
-)
-from dataclasses import dataclass
-
-
-@dataclass
-class RequirementInput:
-    requirement_key: str
-    description: str
-    function_name: str = ""
-    requirement_type: str = "requirement"
-    supplementary_info: str = ""
-
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-
-
-# ── Shared fixtures ─────────────────────────────────────────────────────
+_VALID_MISSING_CATEGORIES = {"signal", "threshold", "timing", "state", "observation"}
 
 
 @pytest.fixture
-def prompt_eval_v1_path() -> Path:
-    p = _PROJECT_ROOT / "optimization_runs" / "requirement_sets" / "prompt_eval_v1.json"
-    assert p.exists(), f"Expected set file not found: {p}"
-    return p
+def prompt_eval_v1() -> dict:
+    path = _PROJECT_ROOT / "docs" / "quality" / "requirement_sets" / "prompt_eval_v1.json"
+    assert path.exists(), f"Expected set file not found: {path}"
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _make_inputs(keys: list[str]) -> list[RequirementInput]:
-    return [
-        RequirementInput(requirement_key=k, description=f"Desc for {k}")
-        for k in keys
-    ]
+class TestPromptEvalV1:
+    def test_loads_entries(self, prompt_eval_v1):
+        assert prompt_eval_v1["name"] == "Prompt Evaluation Set V1"
+        assert len(prompt_eval_v1["entries"]) > 0
 
-
-def _valid_set(entries: list[dict]) -> dict:
-    return {"name": "Test Set", "entries": entries}
-
-
-def _entry(key: str, bucket: str = "test", cats: list[str] | None = None) -> dict:
-    return {
-        "requirement_key": key,
-        "evaluation_bucket": bucket,
-        "expected_missing_categories": cats if cats is not None else [],
-        "rationale": "test rationale",
-        "description": "Test requirement description for " + key,
-    }
-
-
-# ── Load and validate ───────────────────────────────────────────────────
-
-
-class TestLoadPromptEvalV1:
-    def test_loads_entries(self, prompt_eval_v1_path):
-        data = load_requirement_set(str(prompt_eval_v1_path))
-        assert data["name"] == "Prompt Evaluation Set V1"
-        assert len(data["entries"]) > 0
-
-    def test_no_duplicate_keys(self, prompt_eval_v1_path):
-        data = load_requirement_set(str(prompt_eval_v1_path))
-        keys = [e["requirement_key"] for e in data["entries"]]
+    def test_no_duplicate_keys(self, prompt_eval_v1):
+        keys = [entry["requirement_key"] for entry in prompt_eval_v1["entries"]]
         assert len(keys) == len(set(keys))
 
-    def test_all_categories_valid(self, prompt_eval_v1_path):
-        data = load_requirement_set(str(prompt_eval_v1_path))
-        valid = {"signal", "threshold", "timing", "state", "observation"}
-        for e in data["entries"]:
-            for c in e["expected_missing_categories"]:
-                assert c in valid, f"Invalid category '{c}' for {e['requirement_key']}"
+    def test_all_categories_valid(self, prompt_eval_v1):
+        for entry in prompt_eval_v1["entries"]:
+            for category in entry["expected_missing_categories"]:
+                assert category in _VALID_MISSING_CATEGORIES
 
-    def test_all_entries_have_required_fields(self, prompt_eval_v1_path):
-        data = load_requirement_set(str(prompt_eval_v1_path))
-        for e in data["entries"]:
-            assert isinstance(e["requirement_key"], str) and e["requirement_key"]
-            assert isinstance(e["evaluation_bucket"], str) and e["evaluation_bucket"]
-            assert isinstance(e["expected_missing_categories"], list)
-            assert isinstance(e["rationale"], str) and e["rationale"]
+    def test_all_entries_have_required_fields(self, prompt_eval_v1):
+        for entry in prompt_eval_v1["entries"]:
+            assert isinstance(entry["requirement_key"], str) and entry["requirement_key"]
+            assert isinstance(entry["evaluation_bucket"], str) and entry["evaluation_bucket"]
+            assert isinstance(entry["expected_missing_categories"], list)
+            assert isinstance(entry["rationale"], str) and entry["rationale"]
+            assert isinstance(entry["description"], str) and entry["description"]
 
-    def test_expected_missing_category_counts(self, prompt_eval_v1_path):
-        """Spot-check known entries from each bucket."""
-        data = load_requirement_set(str(prompt_eval_v1_path))
-        lookup = {e["requirement_key"]: e for e in data["entries"]}
+    def test_expected_missing_category_counts(self, prompt_eval_v1):
+        lookup = {entry["requirement_key"]: entry for entry in prompt_eval_v1["entries"]}
 
-        # Complete info baseline → no missing
         assert lookup["REQ-BMS-OVP-002"]["expected_missing_categories"] == []
-        # Raw OV detection has a symbolic threshold, but still lacks the
-        # controllable cell-voltage interface and raw response/sample time.
         assert lookup["REQ-BMS-OVP-001"]["expected_missing_categories"] == ["signal", "timing"]
-        # UVP-001 provides the 2.80 V threshold; the missing semantics are the
-        # controllable cell-voltage interface, response timing, and concrete
-        # evidence/value for discharge limiting.
-        assert lookup["REQ-BMS-UVP-001"]["expected_missing_categories"] == ["signal", "timing", "observation"]
-        # BAL-002 provides 20 mV and 5 A thresholds; timeout duration and
-        # concrete balancing status/control signals and observations remain
-        # missing.
-        assert lookup["REQ-BMS-BAL-002"]["expected_missing_categories"] == ["signal", "timing", "observation"]
-        # Missing info trap → threshold + timing
+        assert lookup["REQ-BMS-UVP-001"]["expected_missing_categories"] == [
+            "signal",
+            "timing",
+            "observation",
+        ]
+        assert lookup["REQ-BMS-BAL-002"]["expected_missing_categories"] == [
+            "signal",
+            "timing",
+            "observation",
+        ]
         assert lookup["REQ-BMS-THM-004"]["expected_missing_categories"] == ["threshold", "timing"]
-        # Multi-branch → state + observation
         assert lookup["REQ-BMS-CHG-004"]["expected_missing_categories"] == ["state", "observation"]
-        # State/observation/diagnostic → state + timing
         assert lookup["REQ-BMS-STM-006"]["expected_missing_categories"] == ["state", "timing"]
-
-
-class TestValidateRequirementSet:
-    def test_rejects_invalid_category(self):
-        data = _valid_set([_entry("R1", cats=["timing", "bad_category"])])
-        with pytest.raises(ValueError, match="invalid expected_missing_categories"):
-            validate_requirement_set(data, "test.json")
-
-    def test_rejects_duplicate_key(self):
-        data = _valid_set([
-            _entry("R1"),
-            _entry("R2"),
-            _entry("R1"),  # duplicate
-        ])
-        with pytest.raises(ValueError, match="Duplicate requirement_key"):
-            validate_requirement_set(data, "test.json")
-
-    def test_rejects_missing_name(self):
-        data = {"entries": [_entry("R1")]}
-        with pytest.raises(ValueError, match="missing a non-empty 'name'"):
-            validate_requirement_set(data, "test.json")
-
-    def test_rejects_empty_entries(self):
-        data = {"name": "Empty", "entries": []}
-        with pytest.raises(ValueError, match="has no 'entries'"):
-            validate_requirement_set(data, "test.json")
-
-    def test_rejects_missing_key(self):
-        data = _valid_set([{"evaluation_bucket": "test", "expected_missing_categories": [], "rationale": "x"}])
-        with pytest.raises(ValueError, match="missing a valid 'requirement_key'"):
-            validate_requirement_set(data, "test.json")
-
-    def test_rejects_non_list_categories(self):
-        data = _valid_set([{
-            "requirement_key": "R1",
-            "evaluation_bucket": "test",
-            "expected_missing_categories": "timing",
-            "rationale": "x",
-        }])
-        with pytest.raises(ValueError, match="must be a list"):
-            validate_requirement_set(data, "test.json")
-
-
-class TestLoadRequirementSetErrors:
-    def test_missing_file_raises(self):
-        with pytest.raises(ValueError, match="not found"):
-            load_requirement_set("nonexistent_file.json")
-
-    def test_invalid_json_raises(self, tmp_path):
-        p = tmp_path / "bad.json"
-        p.write_text("{not valid json", encoding="utf-8")
-        with pytest.raises(ValueError, match="not valid JSON"):
-            load_requirement_set(str(p))
-
-
-# ── Selection ───────────────────────────────────────────────────────────
-
-
-class TestSelectByRequirementSet:
-    def test_preserves_set_order(self):
-        all_inputs = _make_inputs(["C", "A", "B"])
-        set_data = _valid_set([_entry("A"), _entry("B"), _entry("C")])
-        result = select_by_requirement_set(all_inputs, set_data)
-        assert [r.requirement_key for r in result] == ["A", "B", "C"]
-
-    def test_raises_on_missing_key(self):
-        all_inputs = _make_inputs(["A", "B"])
-        set_data = _valid_set([_entry("A"), _entry("MISSING"), _entry("B")])
-        with pytest.raises(ValueError, match="MISSING"):
-            select_by_requirement_set(all_inputs, set_data)
-
-    def test_returns_subset(self):
-        all_inputs = _make_inputs(["A", "B", "C", "D", "E"])
-        set_data = _valid_set([_entry("A"), _entry("C")])
-        result = select_by_requirement_set(all_inputs, set_data)
-        assert len(result) == 2
-        assert [r.requirement_key for r in result] == ["A", "C"]
-
-    def test_empty_set_returns_empty(self):
-        all_inputs = _make_inputs(["A", "B"])
-        set_data = _valid_set([])
-        result = select_by_requirement_set(all_inputs, set_data)
-        assert result == []

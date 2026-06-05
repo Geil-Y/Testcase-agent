@@ -5,7 +5,7 @@
 ## Context
 
 The ABC pipeline (ADR-0005) stores LLM artifacts as JSON files in timestamped
-run directories under `reviews/` or `optimization_runs/`. This works for CLI
+run directories under `reviews/`. This works for CLI
 batch evaluation but creates friction for the new Pipeline Console web UI:
 searching, filtering, and cross-referencing across requirements and runs
 requires traversing the filesystem.

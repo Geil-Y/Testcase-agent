@@ -9,7 +9,7 @@ created: 2026-05-21
 
 This document defines the minimal standard for a good AI-generated BMS HIL
 draft test case. It is intentionally shorter than
-`optimization_runs/scoring_rubrics.md`.
+`docs/quality/scoring_rubrics.md`.
 
 Use this document as the shared baseline for prompt writing, human review, and
 future evaluator hard gates. Use the 8-dimension scoring rubric for detailed
@@ -249,7 +249,7 @@ provided by the test basis.
 This definition is the entry quality bar.
 
 After a case satisfies the hard-fail rules above, use
-`optimization_runs/scoring_rubrics.md` for detailed scoring:
+`docs/quality/scoring_rubrics.md` for detailed scoring:
 
 - `requirement_alignment`: did the case test the right requirement?
 - `information_integrity`: did it avoid unsupported facts and mark gaps?

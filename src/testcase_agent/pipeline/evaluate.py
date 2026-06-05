@@ -1,7 +1,7 @@
 """ABC pipeline evaluator — checklist v2 hard-rule evaluation.
 
 Reads generated_cases.json in grouped-requirement format and runs the
-optimization.evaluator engine. Writes evaluation_results.json,
+quality evaluator engine. Writes evaluation_results.json,
 evaluation_summary.json, and hardrule_evaluation.json.
 """
 
@@ -10,13 +10,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from optimization.evaluator import evaluate_generated_cases, save_evaluation_result
+from testcase_agent.quality.evaluator import evaluate_generated_cases, save_evaluation_result
 
 
 def evaluate_generated_cases_file(run_dir: str | Path) -> None:
     """Evaluate generated_cases.json with checklist v2 hard-rules.
 
-    Reads generated_cases.json, runs the shared optimization.evaluator engine,
+    Reads generated_cases.json, runs the shared quality evaluator engine,
     then writes evaluation_results.json, evaluation_summary.json, and
     hardrule_evaluation.json into the run directory.
     """

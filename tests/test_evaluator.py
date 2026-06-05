@@ -1,6 +1,6 @@
-"""Tests for v2 Section 3 hard gates and missing information evaluation."""
+﻿"""Tests for v2 Section 3 hard gates and missing information evaluation."""
 
-from optimization.evaluator import (
+from testcase_agent.quality.evaluator import (
     CHECKLIST,
     evaluate_case,
     evaluate_generated_cases,
@@ -8,7 +8,7 @@ from optimization.evaluator import (
 )
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def _case(title="TC-01", objective="Verify X", precondition="Ready", postcondition="Done",
@@ -42,7 +42,7 @@ def _req_info(**overrides):
     return info
 
 
-# ── Evaluation Engine interface ─────────────────────────────────────────
+# â”€â”€ Evaluation Engine interface â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestEvaluateGeneratedCases:
@@ -83,7 +83,7 @@ class TestEvaluateGeneratedCases:
         assert result.hard_gate_records[0]["item_ids"] == ["3.2.1"]
 
 
-# ── Section 3 item IDs in CHECKLIST ─────────────────────────────────────
+# â”€â”€ Section 3 item IDs in CHECKLIST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 def test_checklist_has_v2_section3_items():
@@ -98,8 +98,8 @@ def test_checklist_has_v2_section3_items():
     assert "[HARD]" in CHECKLIST["3.2.3"][0]
 
 
-# ── 3.2.1 [HARD] — needs signal/threshold/timing/state/observation but
-#    case lacks [NEEDS REVIEW] ────────────────────────────────────────────
+# â”€â”€ 3.2.1 [HARD] â€” needs signal/threshold/timing/state/observation but
+#    case lacks [NEEDS REVIEW] â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestHardGateMissingNeedsReview:
@@ -126,7 +126,7 @@ class TestHardGateMissingNeedsReview:
         assert "3.2.1" not in failed
 
 
-# ── 3.2.2 [HARD] — action/expected invents missing semantics ─────────────
+# â”€â”€ 3.2.2 [HARD] â€” action/expected invents missing semantics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestHardGateInventedSemantics:
@@ -231,7 +231,7 @@ class TestHardGateInventedSemantics:
         assert "3.2.1" not in failed
 
 
-# ── 3.2.3 [WARNING] — complete requirement but case adds [NEEDS REVIEW] ──
+# â”€â”€ 3.2.3 [WARNING] â€” complete requirement but case adds [NEEDS REVIEW] â”€â”€
 
 
 class TestHardGateUnnecessaryNeedsReview:
@@ -255,7 +255,7 @@ class TestHardGateUnnecessaryNeedsReview:
         assert "3.2.3" not in failed
 
 
-# ── 3.3.1 — [NEEDS REVIEW] only in action/expected, not elsewhere ───────
+# â”€â”€ 3.3.1 â€” [NEEDS REVIEW] only in action/expected, not elsewhere â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestNeedsReviewPosition:
@@ -280,7 +280,7 @@ class TestNeedsReviewPosition:
         assert "3.3.1" not in failed
 
 
-# ── 3.3.2 — timing missing → [NEEDS REVIEW] in Wait action ───────────────
+# â”€â”€ 3.3.2 â€” timing missing â†’ [NEEDS REVIEW] in Wait action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestNeedsReviewInWaitAction:
@@ -320,7 +320,7 @@ class TestNeedsReviewInWaitAction:
         assert "3.3.2" not in failed
 
 
-# ── 3.3.3 — no [NEEDS REVIEW: category] suffix ──────────────────────────
+# â”€â”€ 3.3.3 â€” no [NEEDS REVIEW: category] suffix â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestWarningNeedsReviewSuffix:
@@ -340,7 +340,7 @@ class TestWarningNeedsReviewSuffix:
         assert "3.3.3" not in warnings
 
 
-# ── Good-case calibration regressions ───────────────────────────────────
+# â”€â”€ Good-case calibration regressions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestGoodCaseCalibrationRegressions:
@@ -571,7 +571,7 @@ class TestGoodCaseCalibrationRegressions:
         assert "2.2.1" not in failed
 
 
-# ── evaluate_missing_info_hard_gates ─────────────────────────────────────
+# â”€â”€ evaluate_missing_info_hard_gates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 
 class TestEvaluateMissingInfoHardGates:
@@ -673,46 +673,4 @@ class TestEvaluateMissingInfoHardGates:
         assert isinstance(result[1], list)
 
 
-# ── Report rendering ───────────────────────────────────────────────────
-
-
-class TestReportRendering:
-    def test_warning_items_in_report_html(self):
-        """Warning items appear in the report HTML when triggered."""
-        from collections import Counter
-        from optimization.generate_report import _render_warning_items
-
-        counts = Counter({"3.2.3": 3, "4.1.1": 1})
-        html = _render_warning_items(counts, 50)
-        assert "WARNING 检查项" in html
-        assert "3.2.3" in html
-        assert "4.1.1" in html
-        assert "3" in html   # count for 3.2.3
-        assert "WARNING" in html
-
-    def test_warning_empty_when_no_warnings(self):
-        from collections import Counter
-        from optimization.generate_report import _render_warning_items
-
-        html = _render_warning_items(Counter(), 50)
-        assert html == ""
-
-    def test_hard_gate_section_includes_item_ids(self):
-        """Hard gate HTML table includes item_ids column with 3.2.1."""
-        from optimization.generate_report import _render_hard_gate_section
-
-        records = [{
-            "requirement_key": "REQ-001",
-            "evaluation_bucket": "test",
-            "expected_missing_categories": ["timing"],
-            "actual_missing_categories": [],
-            "matched": [],
-            "missing_from_actual": ["timing"],
-            "extra_in_actual": [],
-            "case_issues": [],
-            "item_ids": ["3.2.1"],
-        }]
-        html = _render_hard_gate_section(records)
-        assert "3.2.1" in html
-        assert "Item IDs" in html
-        assert "⚠️ LLM#1 遗漏" in html
+# â”€â”€ Report rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

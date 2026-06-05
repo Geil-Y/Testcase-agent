@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getRun, advanceRun, evaluateRun, addItem, deleteItem } from '../api/runs';
+import { getRun, advanceRun, evaluateRun, deleteItem } from '../api/runs';
 import type { RunDetail, SectionItem } from '../api/types';
 import Sidebar from '../components/Sidebar';
 import CaseGroup from '../components/CaseGroup';

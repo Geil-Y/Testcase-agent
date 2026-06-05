@@ -70,7 +70,7 @@ from structured requirements.
   Includes hard-gate items that make a case unacceptable and warning items that
   flag likely issues. Used by Claude Code (not the 7B model) to evaluate
   generated case quality. Items sourced from CodeX are annotated `[CodeX]`.
-  Current version: `optimization_runs/checklist_v2.md`.
+  Current version: `docs/quality/checklist_v2.md`.
 
 - **Prompt Evaluation Set** — a stable representative set of source
   requirements used to compare prompt changes with the same inputs and review
@@ -121,8 +121,8 @@ from structured requirements.
   Live at `src/testcase_agent/pipeline/generate.py`.
 
 - **ABC Evaluator** — checklist v2 hard-rule evaluation run on ABC pipeline
-  output. Lives at `src/testcase_agent/pipeline/evaluate.py` and delegates
-  to `optimization.evaluator`.
+  output. Lives at `src/testcase_agent/quality/evaluator.py` and is called by
+  `src/testcase_agent/pipeline/evaluate.py` and the Pipeline Console.
 
 ## Retired Concepts (Review Pipeline)
 

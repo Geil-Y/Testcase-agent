@@ -1,7 +1,7 @@
 {
   "name": "Prompt Evaluation Set V1",
   "description": "35 fixed requirements selected from the 64-requirement evaluation pool. Used as the primary quality benchmark for prompt changes.",
-  "source_pool": "optimization_runs/log/20260519_v2-full64_evalonly/",
+  "source_pool": "legacy 20260519_v2-full64_evalonly evaluation pool",
   "entries": [
     {
       "requirement_key": "REQ-BMS-OVP-002",

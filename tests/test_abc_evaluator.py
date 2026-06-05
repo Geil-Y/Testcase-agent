@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-from src.testcase_agent.pipeline.evaluate import (
+from testcase_agent.pipeline.evaluate import (
     _build_evaluation_results,
     _is_flat_case_list,
     _normalize_case,
     _wrap_flat_as_grouped,
     evaluate_generated_cases_file,
 )
-from optimization.evaluator import CaseEvaluation, EvaluationResult
+from testcase_agent.quality.evaluator import CaseEvaluation, EvaluationResult
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────
@@ -338,7 +338,7 @@ class TestBuildEvaluationResults:
 
 def test_evaluator_module_does_not_import_review_pipeline():
     """The ABC evaluator must not depend on testcase_agent.review_pipeline."""
-    from src.testcase_agent.pipeline import evaluate as mod
+    from testcase_agent.pipeline import evaluate as mod
 
     source = Path(mod.__file__).read_text(encoding="utf-8")
     assert "testcase_agent.review_pipeline" not in source

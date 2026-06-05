@@ -28,7 +28,7 @@ def main():
     )
     parser.add_argument(
         "--requirement-set",
-        default="optimization_runs/requirement_sets/prompt_eval_v1.json",
+        default="docs/quality/requirement_sets/prompt_eval_v1.json",
         help="Path to requirement set JSON",
     )
     parser.add_argument("--limit", type=int, default=None, help="Process first N requirements only")
@@ -71,7 +71,7 @@ def main():
 
 def _run_minimal_batch(entries: list[dict], batch_root: Path, provider, req_set: dict) -> None:
     from testcase_agent.pipeline.generate import RequirementInput, run_pipeline
-    from src.testcase_agent.pipeline.evaluate import evaluate_generated_cases_file
+    from testcase_agent.pipeline.evaluate import evaluate_generated_cases_file
 
     batch_results: list[dict] = []
     total_cases = 0
@@ -174,7 +174,7 @@ def _build_grouped_evaluator_input(
 ) -> list[dict]:
     """Build grouped evaluator input with analysis metadata from pipeline result.
 
-    Produces the format expected by optimization.evaluator.evaluate_generated_cases().
+    Produces the format expected by testcase_agent.quality.evaluator.evaluate_generated_cases().
     """
     from testcase_agent.pipeline.generate import GenerationResult
 

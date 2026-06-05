@@ -125,13 +125,9 @@ class EvaluationResult:
     item_fail_counts: Counter[str] = field(default_factory=Counter)
     item_warning_counts: Counter[str] = field(default_factory=Counter)
     hard_gate_records: list[dict[str, Any]] = field(default_factory=list)
-    manual_review_summary: dict[str, Any] = field(default_factory=dict)
 
 
-def evaluate_generated_cases(
-    data: list[dict[str, Any]],
-    manual_review_entries: list[Any] | None = None,
-) -> EvaluationResult:
+def evaluate_generated_cases(data: list[dict[str, Any]]) -> EvaluationResult:
     """Evaluate generated_cases.json data and return aggregate results."""
     result = EvaluationResult()
 
@@ -172,79 +168,7 @@ def evaluate_generated_cases(
     )
     result.hard_gate_records = evaluate_missing_info_hard_gates(data)
 
-    if manual_review_entries is not None:
-        from optimization.manual_review import get_review_summary
-
-        result.manual_review_summary = get_review_summary(manual_review_entries, data)
-
     return result
-
-
-def evaluate_manual_review_hard_gates(
-    entry: Any,
-    generated_case: dict | None = None,
-    expected_missing_categories: list[str] | None = None,
-) -> dict[str, Any]:
-    """Evaluate manual-review hard gates using the shared case evaluator."""
-    result: dict[str, Any] = {
-        "unacceptable": False,
-        "reasons": [],
-        "warnings": [],
-    }
-
-    information_integrity = getattr(entry, "information_integrity", 0)
-    if information_integrity < 3:
-        result["unacceptable"] = True
-        result["reasons"].append(
-            f"information_integrity={information_integrity} (< 3)"
-        )
-
-    if generated_case is None:
-        return result
-
-    normalized_case = _normalize_case_for_manual_gate(entry, generated_case)
-    req_info = {
-        "signals": [],
-        "thresholds": [],
-        "timing": [],
-        "case_coverage": "",
-        "requirement_description": "",
-        "supplementary_info": "",
-        "expected_missing_categories": expected_missing_categories or [],
-    }
-    failed, warnings = evaluate_case(normalized_case, req_info, {})
-
-    if "3.2.1" in failed:
-        result["unacceptable"] = True
-        result["reasons"].append(
-            f"Expected missing {expected_missing_categories} but case lacks [NEEDS REVIEW]"
-        )
-    if "3.2.2" in failed:
-        result["unacceptable"] = True
-        result["reasons"].append(
-            "Case contains numeric value(s) that appear to invent "
-            "missing threshold/timing semantics"
-        )
-    if "3.2.3" in failed:
-        result["unacceptable"] = True
-        result["reasons"].append(
-            "Requirement appears semantically complete but case contains "
-            "unnecessary [NEEDS REVIEW]"
-        )
-
-    return result
-
-
-def _normalize_case_for_manual_gate(entry: Any, generated_case: dict) -> dict:
-    return {
-        "title": generated_case.get("title", ""),
-        "objective": generated_case.get("objective", ""),
-        "precondition": generated_case.get("precondition", ""),
-        "postcondition": generated_case.get("postcondition", ""),
-        "related_requirement": generated_case.get("related_requirement", entry.requirement_key),
-        "steps": generated_case.get("steps", []),
-        "raw_html": generated_case.get("raw_html", ""),
-    }
 
 
 def _normalize_token(text: str) -> str:

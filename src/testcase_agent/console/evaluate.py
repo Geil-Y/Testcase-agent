@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from optimization.evaluator import evaluate_generated_cases
+from testcase_agent.quality.evaluator import evaluate_generated_cases
 
 
 def evaluate_run(run_id: int, db: sqlite3.Connection) -> dict:
