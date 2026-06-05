@@ -364,6 +364,343 @@ class TestRunAPI:
         assert "total_cases" in eval_data["summary"]
 
 
+# ── Migration Tests ────────────────────────────────────────────────────────────
+
+class TestMigration:
+    def test_idempotent_on_empty_db(self, db):
+        from testcase_agent.console.db import run_migrations
+        run_migrations(db)
+        run_migrations(db)  # second run must not error
+
+        tables = db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        names = [t[0] for t in tables]
+        assert "review_actions" in names
+
+    def test_idempotent_on_existing_data(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        init_db(db)
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute(
+            "INSERT INTO runs (requirement_id, status) VALUES (1, 'cases_ready')"
+        )
+        db.execute(
+            "INSERT INTO test_basis_sections (run_id, section_name, sort_order) VALUES (1, 'signals', 0)"
+        )
+        db.execute(
+            "INSERT INTO test_basis_items (section_id, item_id, status, content) VALUES (1, 'sig-1', 'known', 'S1')"
+        )
+        db.execute(
+            "INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) "
+            "VALUES (1, 'i-1', 'normal', 'intent text')"
+        )
+        db.execute(
+            "INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')"
+        )
+        db.commit()
+
+        run_migrations(db)
+        run_migrations(db)  # idempotent
+
+        item = db.execute("SELECT review_status FROM test_basis_items WHERE item_id='sig-1'").fetchone()
+        assert item["review_status"] == "accepted"
+
+        intent = db.execute("SELECT review_status, version FROM case_intents WHERE intent_id='i-1'").fetchone()
+        assert intent["review_status"] == "accepted"
+        assert intent["version"] == 1
+
+        case = db.execute("SELECT review_status FROM test_cases WHERE title='TC1'").fetchone()
+        assert case["review_status"] == "accepted"
+
+        run = db.execute("SELECT llm_a_accepted, llm_b_accepted, llm_c_accepted FROM runs WHERE id=1").fetchone()
+        assert run["llm_a_accepted"] == 1
+        assert run["llm_b_accepted"] == 1
+        assert run["llm_c_accepted"] == 1
+
+    def test_review_actions_read_write(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status) VALUES (1, 1, 'extraction_ready')")
+        db.commit()
+
+        db.execute(
+            "INSERT INTO review_actions (run_id, stage, action, target_type, target_id, comment) "
+            "VALUES (1, 'a', 'accept', 'stage', NULL, NULL)"
+        )
+        db.commit()
+
+        row = db.execute("SELECT * FROM review_actions WHERE run_id=1").fetchone()
+        assert row is not None
+        assert row["stage"] == "a"
+        assert row["action"] == "accept"
+
+
+# ── Review State Machine Tests ──────────────────────────────────────────────────
+
+class TestReviewStateMachine:
+    def test_accept_stage_a(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import accept_stage
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, review_llm_a, status) VALUES (1, 1, 1, 'extraction_ready')")
+        db.execute("INSERT INTO test_basis_sections (id, run_id, section_name, sort_order) VALUES (1, 1, 'signals', 0)")
+        db.execute("INSERT INTO test_basis_items (id, section_id, item_id, status, content) VALUES (1, 1, 'sig-1', 'known', 'S1')")
+        db.execute("INSERT INTO test_basis_items (id, section_id, item_id, status, content) VALUES (2, 1, 'sig-2', 'needs_review', 'S2')")
+        db.commit()
+
+        accept_stage(db, 1, "a")
+
+        items = db.execute("SELECT review_status, accepted_at FROM test_basis_items").fetchall()
+        for it in items:
+            assert it["review_status"] == "accepted"
+            assert it["accepted_at"] is not None
+
+        run = db.execute("SELECT llm_a_accepted FROM runs WHERE id=1").fetchone()
+        assert run["llm_a_accepted"] == 1
+
+        action = db.execute("SELECT * FROM review_actions WHERE run_id=1").fetchone()
+        assert action is not None
+        assert action["stage"] == "a"
+        assert action["action"] == "accept"
+
+    def test_accept_stage_b(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import accept_stage
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, review_llm_b, status) VALUES (1, 1, 1, 'intents_ready')")
+        db.execute("INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) VALUES (1, 'i-1', 'normal', 'text')")
+        db.execute("INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) VALUES (1, 'i-2', 'boundary', 'text')")
+        db.commit()
+
+        accept_stage(db, 1, "b")
+
+        intents = db.execute("SELECT review_status, accepted_at FROM case_intents").fetchall()
+        for intent in intents:
+            assert intent["review_status"] == "accepted"
+            assert intent["accepted_at"] is not None
+
+        run = db.execute("SELECT llm_b_accepted FROM runs WHERE id=1").fetchone()
+        assert run["llm_b_accepted"] == 1
+
+    def test_accept_stage_c(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import accept_stage
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, review_llm_c, status) VALUES (1, 1, 1, 'cases_ready')")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')")
+        db.commit()
+
+        accept_stage(db, 1, "c")
+
+        cases = db.execute("SELECT review_status, accepted_at FROM test_cases").fetchall()
+        for case in cases:
+            assert case["review_status"] == "accepted"
+            assert case["accepted_at"] is not None
+
+        run = db.execute("SELECT llm_c_accepted FROM runs WHERE id=1").fetchone()
+        assert run["llm_c_accepted"] == 1
+
+    def test_unlock_stage_clears_accepted_at(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import accept_stage, unlock_stage
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, review_llm_a, status) VALUES (1, 1, 1, 'extraction_ready')")
+        db.execute("INSERT INTO test_basis_sections (id, run_id, section_name, sort_order) VALUES (1, 1, 'signals', 0)")
+        db.execute("INSERT INTO test_basis_items (id, section_id, item_id, status, content) VALUES (1, 1, 'sig-1', 'known', 'S1')")
+        db.commit()
+
+        accept_stage(db, 1, "a")
+        unlock_stage(db, 1, "a", cascade=False)
+
+        items = db.execute("SELECT review_status, accepted_at FROM test_basis_items").fetchall()
+        for it in items:
+            assert it["review_status"] == "pending"
+            assert it["accepted_at"] is None
+
+        run = db.execute("SELECT llm_a_accepted FROM runs WHERE id=1").fetchone()
+        assert run["llm_a_accepted"] == 0
+
+    def test_can_advance_blocks_when_not_accepted(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import can_advance
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute(
+            "INSERT INTO runs (id, requirement_id, status, review_llm_a, llm_a_accepted) "
+            "VALUES (1, 1, 'extraction_ready', 1, 0)"
+        )
+        db.commit()
+
+        ok, msg = can_advance(db, 1)
+        assert not ok
+        assert "LLM-A" in msg
+
+    def test_can_advance_allows_when_accepted(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import can_advance
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute(
+            "INSERT INTO runs (id, requirement_id, status, review_llm_a, llm_a_accepted) "
+            "VALUES (1, 1, 'extraction_ready', 1, 1)"
+        )
+        db.commit()
+
+        ok, msg = can_advance(db, 1)
+        assert ok
+        assert msg == ""
+
+    def test_can_regenerate_intents_limit(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import can_regenerate_intents
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status) VALUES (1, 1, 'intents_ready')")
+        db.execute(
+            "INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text, regenerate_count) "
+            "VALUES (1, 'i-1', 'normal', 'text', 3)"
+        )
+        db.commit()
+
+        assert not can_regenerate_intents(db, 1)
+
+    def test_can_regenerate_intents_allows(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import can_regenerate_intents
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status) VALUES (1, 1, 'intents_ready')")
+        db.execute(
+            "INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text, regenerate_count) "
+            "VALUES (1, 'i-1', 'normal', 'text', 2)"
+        )
+        db.commit()
+
+        assert can_regenerate_intents(db, 1)
+
+    def test_get_stage_states(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import get_stage_states
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute(
+            "INSERT INTO runs (id, requirement_id, status, review_llm_a, review_llm_b, review_llm_c, "
+            "llm_a_accepted, llm_b_accepted, llm_c_accepted) "
+            "VALUES (1, 1, 'extraction_ready', 1, 0, 0, 0, 0, 0)"
+        )
+        db.commit()
+
+        states = get_stage_states(db, 1)
+        assert states["a"]["review_required"] is True
+        assert states["a"]["accepted"] is False
+        assert states["b"]["review_required"] is False
+        assert states["c"]["review_required"] is False
+
+    def test_check_cascade_impact_a(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import check_cascade_impact
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status) VALUES (1, 1, 'cases_ready')")
+        db.execute("INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) VALUES (1, 'i-1', 'normal', 'text')")
+        db.execute("INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) VALUES (1, 'i-2', 'boundary', 'text')")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')")
+        db.commit()
+
+        impact = check_cascade_impact(db, 1, "a")
+        assert impact["affected_intents"] == 2
+        assert impact["affected_cases"] == 1
+
+    def test_check_cascade_impact_b(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import check_cascade_impact
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status) VALUES (1, 1, 'cases_ready')")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC2')")
+        db.commit()
+
+        impact = check_cascade_impact(db, 1, "b")
+        assert impact["affected_cases"] == 2
+        assert impact["affected_intents"] == 0
+
+    def test_cascade_stale_data_from_a(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import cascade_stale_data
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status, llm_b_accepted, llm_c_accepted) VALUES (1, 1, 'cases_ready', 1, 1)")
+        db.execute("INSERT INTO case_intents (run_id, intent_id, coverage_dimension, intent_text) VALUES (1, 'i-1', 'normal', 'text')")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')")
+        db.commit()
+
+        cascade_stale_data(db, 1, "a")
+
+        intent = db.execute("SELECT review_status FROM case_intents WHERE intent_id='i-1'").fetchone()
+        assert intent["review_status"] == "stale"
+
+        case = db.execute("SELECT review_status FROM test_cases WHERE title='TC1'").fetchone()
+        assert case["review_status"] == "stale"
+
+        run = db.execute("SELECT status, llm_b_accepted, llm_c_accepted FROM runs WHERE id=1").fetchone()
+        assert run["status"] == "extraction_ready"
+        assert run["llm_b_accepted"] == 0
+        assert run["llm_c_accepted"] == 0
+
+    def test_cascade_stale_data_from_b(self, db):
+        from testcase_agent.console.db import run_migrations, init_db
+        from testcase_agent.console.review_state import cascade_stale_data
+        init_db(db)
+        run_migrations(db)
+
+        db.execute("INSERT INTO requirements (requirement_key, description) VALUES ('K1','D1')")
+        db.execute("INSERT INTO runs (id, requirement_id, status, llm_c_accepted) VALUES (1, 1, 'cases_ready', 1)")
+        db.execute("INSERT INTO test_cases (run_id, title) VALUES (1, 'TC1')")
+        db.commit()
+
+        cascade_stale_data(db, 1, "b")
+
+        case = db.execute("SELECT review_status FROM test_cases WHERE title='TC1'").fetchone()
+        assert case["review_status"] == "stale"
+
+        run = db.execute("SELECT status, llm_c_accepted FROM runs WHERE id=1").fetchone()
+        assert run["status"] == "intents_ready"
+        assert run["llm_c_accepted"] == 0
+
+
 def _seed_requirement(client):
     fixture = Path("tests/fixtures/minimal_requirements.xlsx")
     with open(fixture, "rb") as f:
