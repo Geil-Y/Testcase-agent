@@ -56,9 +56,11 @@ from structured requirements.
 - **Missing Information Fallback** — a secondary safeguard where case writing
   marks requirement semantic gaps that were missed during earlier analysis.
 
-- **Review Comment** — human-supplied clarification attached to a
-  reject/regenerate action. Takes priority over the original requirement text
-  when regenerating the case.
+- **Review Comment** — human-supplied clarification attached to a Regenerate
+  action, explaining why the LLM output was unsatisfactory and what the
+  expected result is. Required (mandatory) for every Regenerate. Injected
+  into the Regenerate prompt with explicit priority markers. Takes precedence
+  over the original requirement text and the LLM's previous output.
 
 - **Supplementary Info** — a catch-all field holding additional Excel column
   content beyond the core requirement fields. It is preserved for human review
@@ -144,13 +146,45 @@ from structured requirements.
 - **Review Stage Configuration** — a per-Run setting (`review_required`) that
   specifies which LLM stages (a, b, c) require human review before advancing.
   Any subset may be set: none (full auto-approve), a only, b only, c only,
-  a+b, a+c, b+c, or all three. Locked at Run creation time.
+  a+b, a+c, b+c, or all three. Locked at Run creation time. Stages not in the
+  set are auto-accepted: their LLM output is used as-is and the pipeline
+  advances immediately.
 
 - **Stage Advance** — the action of completing review on the current stage and
-  triggering the next LLM stage. When consecutive downstream stages are
-  configured as auto-approve, the backend chains them in a single synchronous
-  request. User-edited test basis items override LLM-A's original output when
-  advancing to LLM-B.
+  triggering the next LLM stage. Requires the stage to be in Accepted state.
+  When consecutive downstream stages are configured as auto-approve, the
+  backend chains them in a single synchronous request. User-edited or
+  regenerated test basis items override LLM-A's original output when advancing
+  to LLM-B.
+
+- **Accept** — a human review action that confirms the current stage's output
+  as authoritative. Accept is a whole-stage decision (not per-item): clicking
+  "Accept" locks all items in that stage and enables Stage Advance. Accept is
+  reversible via Unlock. Accepted output becomes immutable downstream
+  authority.
+
+- **Regenerate** — a human review action that requests the LLM to re-produce
+  output with a mandatory Review Comment explaining the deficiency. LLM-A
+  supports per-item Regenerate (single test basis item re-extraction); LLM-B
+  supports whole-plan Regenerate (entire intent plan re-planned, old versions
+  preserved with a version number); LLM-C has no Regenerate. LLM-B Regenerate
+  is capped at 3 attempts per Run; exceeding the limit forces the stage into
+  Force Edit state.
+
+- **Edit** — a human review action that directly modifies LLM output in-place
+  without invoking the LLM. Available at all three stages. Edited content
+  carries the same authority as Accepted content.
+
+- **Force Edit** — a terminal review state entered when LLM-B Regenerate has
+  been used 3 times without reaching Accept. In this state, Regenerate is
+  disabled and the human must manually edit or delete intents to finalize the
+  plan. Accept remains available.
+
+- **Unlock** — an explicit action that reverses a stage-level Accept, returning
+  all items in that stage to editable/regeneratable state. When Unlocking an
+  upstream stage (e.g. LLM-A) while downstream data exists (LLM-B intents,
+  LLM-C cases), a confirmation dialog warns that all downstream data will be
+  cascaded as stale and must be regenerated.
 
 ## Retired Concepts
 
