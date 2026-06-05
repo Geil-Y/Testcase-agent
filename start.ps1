@@ -14,7 +14,7 @@ $backend = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "test
 
 # Frontend
 Write-Host "[frontend] Starting Vite on http://localhost:5173 ..." -ForegroundColor Green
-$frontend = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory "$PSScriptRoot\console-ui" -NoNewWindow -PassThru
+$frontend = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run dev" -WorkingDirectory "$PSScriptRoot\console-ui" -NoNewWindow -PassThru
 
 Write-Host ""
 Write-Host "----------------------------------------" -ForegroundColor Cyan
