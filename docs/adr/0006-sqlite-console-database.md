@@ -22,9 +22,7 @@ requirements, runs, run status, all LLM-A/B/C artifacts (test basis sections
 and items, case intents, test cases with steps), review decisions, and
 evaluation results.
 
-The CLI batch workflow (`run_eval_batch.py`) continues to produce JSON file
-artifacts for its own evaluation purposes. The Console database is a separate
-data path; it does not replace the CLI's file output.
+The Console database is the sole data path for pipeline artifacts.
 
 LLM artifacts that were previously only in JSON files now have normalized
 relational schemas (sections → items, intents, cases → steps), enabling

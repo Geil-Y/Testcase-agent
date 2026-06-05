@@ -124,7 +124,35 @@ from structured requirements.
   output. Lives at `src/testcase_agent/quality/evaluator.py` and is called by
   `src/testcase_agent/pipeline/evaluate.py` and the Pipeline Console.
 
-## Retired Concepts (Review Pipeline)
+## Pipeline Console
+
+- **Pipeline Console** — a local web UI (React/Vite) for importing requirements,
+  running the ABC pipeline with optional per-stage human review, and viewing
+  generated test cases. Live at `console-ui/` (frontend) and
+  `src/testcase_agent/console/` (FastAPI backend).
+
+- **Console Database** — a SQLite file (`pipeline_console.db`) at the project
+  root. Stores imported requirements, runs, LLM-A/B/C artifacts (test basis
+  items, case intents, test cases with steps), review decisions, and evaluation
+  results. Replaces the retired file-based artifact directory model.
+
+- **Run** — one pipeline execution for a single Requirement. Has a status
+  (`extraction_ready`, `intents_ready`, `cases_ready`, `evaluated`, `failed`)
+  and a per-stage review configuration. A Requirement may have multiple Runs
+  (1:N), preserving history.
+
+- **Review Stage Configuration** — a per-Run setting (`review_required`) that
+  specifies which LLM stages (a, b, c) require human review before advancing.
+  Any subset may be set: none (full auto-approve), a only, b only, c only,
+  a+b, a+c, b+c, or all three. Locked at Run creation time.
+
+- **Stage Advance** — the action of completing review on the current stage and
+  triggering the next LLM stage. When consecutive downstream stages are
+  configured as auto-approve, the backend chains them in a single synchronous
+  request. User-edited test basis items override LLM-A's original output when
+  advancing to LLM-B.
+
+## Retired Concepts
 
 The clarification-first review pipeline (ADR-0003) has been retired and
 superseded by the ABC pipeline. The following terms are historical:
@@ -136,26 +164,6 @@ superseded by the ABC pipeline. The following terms are historical:
 - **Case Intent Review** — [RETIRED] human review of proposed case intents.
 - **Approved Case Plan** — [RETIRED] final case-writer-ready intents.
 - **Review Workbench** — [RETIRED] interactive human review UI.
-- **Pipeline Console** — a local web UI for importing requirements, running the ABC
-  pipeline with optional per-stage human review, and viewing generated test cases.
-  Backed by a SQLite database that stores all artifacts.
-- **Console Database** — a SQLite file (`pipeline_console.db`) at the project
-  root. Stores imported requirements, runs, LLM-A/B/C artifacts (test basis
-  items, case intents, test cases with steps), review decisions, and evaluation
-  results. Replaces the retired file-based artifact directory model.
-- **Run** — one pipeline execution for a single Requirement. Has a status
-  (`extraction_ready`, `intents_ready`, `cases_ready`, `evaluated`, `failed`)
-  and a per-stage review configuration. A Requirement may have multiple Runs
-  (1:N), preserving history.
-- **Review Stage Configuration** — a per-Run setting (`review_required`) that
-  specifies which LLM stages (a, b, c) require human review before advancing.
-  Any subset may be set: none (full auto-approve), a only, b only, c only,
-  a+b, a+c, b+c, or all three. Locked at Run creation time.
-- **Stage Advance** — the action of completing review on the current stage and
-  triggering the next LLM stage. When consecutive downstream stages are
-  configured as auto-approve, the backend chains them in a single synchronous
-  request. User-edited test basis items override LLM-A's original output when
-  advancing to LLM-B.
 - **Confidence Routing** — [RETIRED] four-color confidence scoring system.
 - **Pattern Tag** — [RETIRED] deterministic memory index for review decisions.
 
@@ -179,8 +187,6 @@ superseded by the ABC pipeline. The following terms are historical:
 - The **ABC Pipeline** is the sole legal generation path. It produces
   **Test Cases** from **Requirements** through the three-stage linear flow.
 - The **Pipeline Console** reads and writes through the **Console Database**.
-  The CLI batch workflow (`run_eval_batch.py`) continues to use its own
-  file-based artifact output and is unaffected by the database.
 
 ## Architecture principles
 
