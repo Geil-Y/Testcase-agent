@@ -62,3 +62,38 @@ export async function listVersions(): Promise<VersionListResponse> {
 export async function readVersion(version: string): Promise<LearnedPromptSetVersion> {
   return apiGet<LearnedPromptSetVersion>(`/pl/versions/${version}`);
 }
+
+export interface RunResponse {
+  success: boolean;
+  version: string;
+  meta: {
+    version: string;
+    createdAt: string;
+    provider: string;
+    model: string;
+  };
+}
+
+/** Run Prompt Learning end-to-end. */
+export async function runPromptLearning(
+  reqFile: File,
+  caseFile: File,
+  reqSheet: string,
+  caseSheets: string[],
+  reqMapping: RequirementColMap,
+  caseMapping: RefTestCaseColMap,
+  learningInstruction?: string,
+): Promise<RunResponse> {
+  const formData = new FormData();
+  formData.append('req_file', reqFile);
+  formData.append('case_file', caseFile);
+  formData.append('req_sheet', reqSheet);
+  formData.append('case_sheets', JSON.stringify(caseSheets));
+  formData.append('req_mapping', JSON.stringify(reqMapping));
+  formData.append('case_mapping', JSON.stringify(caseMapping));
+  if (learningInstruction) {
+    formData.append('learning_instruction', learningInstruction);
+  }
+  const result = await apiUploadForm('/pl/run', formData);
+  return result as RunResponse;
+}

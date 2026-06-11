@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { inspectWorkbooks, parseAndResolve, listVersions, readVersion } from '../api/pl-api';
+import { inspectWorkbooks, parseAndResolve, listVersions, readVersion, runPromptLearning } from '../api/pl-api';
 import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap, LearnedPromptSetListItem, LearnedPromptSetVersion } from '../api/pl-types';
 import type { ParseAndResolveResponse } from '../api/pl-api';
 
@@ -76,6 +76,11 @@ export default function PromptLearning() {
   const [parseResult, setParseResult] = useState<ParseAndResolveResponse | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showIssues, setShowIssues] = useState(false);
+
+  // ── Run state ──
+  const [running, setRunning] = useState(false);
+  const [runStage, setRunStage] = useState('');
+  const [runError, setRunError] = useState<string | null>(null);
 
   // ── Version history state ──
   const [versions, setVersions] = useState<LearnedPromptSetListItem[]>([]);
@@ -187,6 +192,38 @@ export default function PromptLearning() {
     const colSet = new Set(sheet.columns);
     setReqCols(prev => sanitizeReqCols(prev, colSet));
   }, [reqSheet, reqInspect]);
+
+  // ── Run Prompt Learning ──
+  async function doReloadVersions() {
+    try {
+      const result = await listVersions();
+      setVersions(result.versions);
+    } catch { /* silent */ }
+  }
+
+  const handleRun = useCallback(async () => {
+    if (!reqFile || !caseFile) return;
+    setRunError(null);
+    setRunning(true);
+    try {
+      setRunStage('Running Prompt Learning…');
+      const result = await runPromptLearning(
+        reqFile, caseFile, reqSheet, caseSheets, reqCols, caseCols, undefined,
+      );
+      setRunStage('Saving…');
+      // Refresh version list
+      await doReloadVersions();
+      // Open the new version's rationale
+      const v = await readVersion(result.version);
+      setSelectedVersion(v);
+      setRunStage('');
+    } catch (e: any) {
+      setRunError(e?.message ?? 'Run failed');
+      setRunStage('');
+    } finally {
+      setRunning(false);
+    }
+  }, [reqFile, caseFile, reqSheet, caseSheets, reqCols, caseCols]);
 
   // ── Load version history on mount ──
   useEffect(() => {
@@ -398,6 +435,21 @@ export default function PromptLearning() {
                 )}
               </div>
             )}
+          </section>
+        )}
+
+        {/* ── Run Prompt Learning ── */}
+        {reqInspect && caseInspect && reqSheet && caseSheets.length > 0 && (
+          <section className="pl-section">
+            <h2 className="pl-section-title">5. Run Prompt Learning</h2>
+            <button
+              className="btn btn-primary"
+              disabled={running}
+              onClick={handleRun}
+            >
+              {running ? (runStage || 'Running…') : 'Run Prompt Learning'}
+            </button>
+            {runError && <div className="error-msg" style={{ marginTop: 12 }}>{runError}</div>}
           </section>
         )}
 

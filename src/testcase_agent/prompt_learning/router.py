@@ -163,6 +163,80 @@ def parse_and_resolve(
     }
 
 
+# ── Run Prompt Learning ──
+
+from ..provider.factory import create_provider  # noqa: E402
+from ..config import get_settings  # noqa: E402
+from .runner import run_prompt_learning  # noqa: E402
+
+
+@pl_router.post("/run")
+def run_pl(
+    req_file: UploadFile,
+    case_file: UploadFile,
+    req_sheet: str = Form(...),
+    case_sheets: str = Form(...),
+    req_mapping: str = Form(...),
+    case_mapping: str = Form(...),
+    learning_instruction: str = Form(""),
+):
+    """Run Prompt Learning end-to-end and return the saved version."""
+    try:
+        case_sheet_list: list[str] = json.loads(case_sheets)
+        req_map_raw = json.loads(req_mapping)
+        case_map_raw = json.loads(case_mapping)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=422, detail=f"Invalid JSON parameter: {e}")
+
+    req_map = RequirementColMap(
+        requirement_key=req_map_raw.get("requirementKey", ""),
+        description=req_map_raw.get("description", ""),
+        function_name=req_map_raw.get("functionName"),
+        requirement_type=req_map_raw.get("requirementType"),
+    )
+    case_map = RefTestCaseColMap(
+        case_id=case_map_raw.get("caseId"),
+        linked_requirements=case_map_raw.get("linkedRequirements", ""),
+        title=case_map_raw.get("title", ""),
+        action=case_map_raw.get("action", ""),
+        expected_result=case_map_raw.get("expectedResult", ""),
+        objective=case_map_raw.get("objective"),
+    )
+
+    req_contents = req_file.file.read()
+    case_contents = case_file.file.read()
+    req_file.file.seek(0)
+    case_file.file.seek(0)
+
+    settings = get_settings()
+    provider = create_provider(settings)
+
+    result = run_prompt_learning(
+        req_bytes=req_contents,
+        case_bytes=case_contents,
+        req_sheet=req_sheet,
+        case_sheets=case_sheet_list,
+        req_mapping=req_map,
+        case_mapping=case_map,
+        provider=provider,
+        learning_instruction=learning_instruction if learning_instruction else None,
+    )
+
+    if not result.success:
+        raise HTTPException(status_code=422, detail=result.error)
+
+    return {
+        "success": True,
+        "version": result.version,
+        "meta": {
+            "version": result.meta.version if result.meta else "",
+            "createdAt": result.meta.created_at if result.meta else "",
+            "provider": result.meta.provider if result.meta else "",
+            "model": result.meta.model if result.meta else "",
+        },
+    }
+
+
 # ── Learned Prompt Set Versions ──
 
 from .file_store import list_versions as fs_list, read_version as fs_read  # noqa: E402
