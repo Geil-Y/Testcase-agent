@@ -36,6 +36,9 @@ def create_app() -> FastAPI:
     from .console.router import console_router
     app.include_router(console_router, prefix=f"{settings.api_v1_prefix}/console")
 
+    from .prompt_learning.router import pl_router
+    app.include_router(pl_router, prefix=f"{settings.api_v1_prefix}/console")
+
     return app
 
 

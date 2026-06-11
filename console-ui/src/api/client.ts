@@ -47,3 +47,12 @@ export async function apiUpload<T>(path: string, file: File, sheetName?: string)
   }
   return res.json();
 }
+
+export async function apiUploadForm<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, { method: 'POST', body: formData });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(body || `${res.status}`);
+  }
+  return res.json();
+}
