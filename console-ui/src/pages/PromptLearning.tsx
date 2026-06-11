@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { inspectWorkbooks, parseAndResolve } from '../api/pl-api';
-import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap, DataIssue, ParsedSummary } from '../api/pl-types';
+import { inspectWorkbooks, parseAndResolve, listVersions, readVersion } from '../api/pl-api';
+import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap, LearnedPromptSetListItem, LearnedPromptSetVersion } from '../api/pl-types';
 import type { ParseAndResolveResponse } from '../api/pl-api';
 
 const LS_KEY = 'pl_column_mapping';
@@ -76,6 +76,11 @@ export default function PromptLearning() {
   const [parseResult, setParseResult] = useState<ParseAndResolveResponse | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showIssues, setShowIssues] = useState(false);
+
+  // ── Version history state ──
+  const [versions, setVersions] = useState<LearnedPromptSetListItem[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<LearnedPromptSetVersion | null>(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   // ── Track whether we've attempted restore ──
   const [restored, setRestored] = useState(false);
@@ -182,6 +187,34 @@ export default function PromptLearning() {
     const colSet = new Set(sheet.columns);
     setReqCols(prev => sanitizeReqCols(prev, colSet));
   }, [reqSheet, reqInspect]);
+
+  // ── Load version history on mount ──
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setVersionsLoading(true);
+      try {
+        const result = await listVersions();
+        if (!cancelled) setVersions(result.versions);
+      } catch {
+        // silent — version list is optional
+      } finally {
+        if (!cancelled) setVersionsLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ── Select a version to view ──
+  async function handleSelectVersion(version: string) {
+    try {
+      const v = await readVersion(version);
+      setSelectedVersion(v);
+    } catch {
+      // silent
+    }
+  }
 
   // Toggle a case sheet selection
   function toggleCaseSheet(name: string) {
@@ -367,6 +400,59 @@ export default function PromptLearning() {
             )}
           </section>
         )}
+
+        {/* ── Version history ── */}
+        <section className="pl-section">
+          <h2 className="pl-section-title">Learned Prompt Sets</h2>
+          {versionsLoading && <span className="text-muted">Loading…</span>}
+          {!versionsLoading && versions.length === 0 && (
+            <span className="text-muted">No learned prompt sets yet.</span>
+          )}
+          {versions.length > 0 && (
+            <div className="pl-version-list">
+              {versions.map(v => (
+                <div
+                  key={v.version}
+                  className={`pl-version-item${selectedVersion?.meta.version === v.version ? ' selected' : ''}`}
+                  onClick={() => handleSelectVersion(v.version)}
+                >
+                  <span className="pl-version-name">{v.version}</span>
+                  <span className="pl-version-date">{v.createdAt}</span>
+                  <span className="pl-version-model">{v.model}</span>
+                  <span className="pl-version-counts">
+                    {v.summary.requirementCount} req / {v.summary.refTestCaseCount} cases
+                    {v.summary.dataIssueCount > 0 && ` / ${v.summary.dataIssueCount} issues`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Version detail ── */}
+          {selectedVersion && (
+            <div className="pl-version-detail" style={{ marginTop: 16 }}>
+              <h3 className="pl-section-title">rationale.md</h3>
+              <pre className="pl-rationale">{selectedVersion.rationale}</pre>
+
+              <h3 className="pl-section-title" style={{ marginTop: 16 }}>Prompt Files</h3>
+              {selectedVersion.promptGroups.map(g => (
+                <details key={g.stage} className="pl-prompt-group" open>
+                  <summary className="pl-prompt-summary">
+                    LLM-{g.stage}: {g.stageLabel}
+                  </summary>
+                  <div className="pl-prompt-panel">
+                    <h4>{g.systemPrompt.filename}</h4>
+                    <pre className="pl-prompt-content">{g.systemPrompt.content}</pre>
+                  </div>
+                  <div className="pl-prompt-panel">
+                    <h4>{g.userPrompt.filename}</h4>
+                    <pre className="pl-prompt-content">{g.userPrompt.content}</pre>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

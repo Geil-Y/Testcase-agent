@@ -161,3 +161,75 @@ def parse_and_resolve(
         "styleOnlyCaseCount": len(style_only),
         "noTestRequirementCount": len(no_test),
     }
+
+
+# ── Learned Prompt Set Versions ──
+
+from .file_store import list_versions as fs_list, read_version as fs_read  # noqa: E402
+
+
+@pl_router.get("/versions")
+def get_versions():
+    """List all official Learned Prompt Set versions, newest first."""
+    versions = fs_list()
+    return {
+        "versions": [
+            {
+                "version": v.version,
+                "createdAt": v.created_at,
+                "provider": v.provider,
+                "model": v.model,
+                "learningInstruction": v.learning_instruction,
+                "summary": {
+                    "requirementCount": v.summary.requirement_count,
+                    "refTestCaseCount": v.summary.ref_test_case_count,
+                    "validLinkCount": v.summary.valid_link_count,
+                    "noTestRequirementCount": v.summary.no_test_requirement_count,
+                    "styleOnlyCaseCount": v.summary.style_only_case_count,
+                    "dataIssueCount": v.summary.data_issue_count,
+                },
+            }
+            for v in versions
+        ],
+    }
+
+
+@pl_router.get("/versions/{version}")
+def get_version(version: str):
+    """Read one Learned Prompt Set version with all prompt files."""
+    v = fs_read(version)
+    if v is None:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' not found")
+    return {
+        "meta": {
+            "version": v.meta.version,
+            "createdAt": v.meta.created_at,
+            "provider": v.meta.provider,
+            "model": v.meta.model,
+            "learningInstruction": v.meta.learning_instruction,
+            "summary": {
+                "requirementCount": v.meta.summary.requirement_count,
+                "refTestCaseCount": v.meta.summary.ref_test_case_count,
+                "validLinkCount": v.meta.summary.valid_link_count,
+                "noTestRequirementCount": v.meta.summary.no_test_requirement_count,
+                "styleOnlyCaseCount": v.meta.summary.style_only_case_count,
+                "dataIssueCount": v.meta.summary.data_issue_count,
+            },
+        },
+        "rationale": v.rationale,
+        "promptGroups": [
+            {
+                "stage": g.stage,
+                "stageLabel": g.stage_label,
+                "systemPrompt": {
+                    "filename": g.system_prompt.filename,
+                    "content": g.system_prompt.content,
+                },
+                "userPrompt": {
+                    "filename": g.user_prompt.filename,
+                    "content": g.user_prompt.content,
+                },
+            }
+            for g in v.prompt_groups
+        ],
+    }

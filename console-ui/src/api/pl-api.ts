@@ -1,5 +1,8 @@
-import { apiUploadForm } from './client';
-import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap, DataIssue, ParsedSummary } from './pl-types';
+import { apiUploadForm, apiGet } from './client';
+import type {
+  WorkbookInspection, RequirementColMap, RefTestCaseColMap,
+  DataIssue, ParsedSummary, LearnedPromptSetListItem, LearnedPromptSetVersion,
+} from './pl-types';
 
 export interface InspectWorkbooksResponse {
   requirement: WorkbookInspection;
@@ -44,4 +47,18 @@ export async function parseAndResolve(
   formData.append('case_mapping', JSON.stringify(caseMapping));
   const result = await apiUploadForm('/pl/parse-and-resolve', formData);
   return result as ParseAndResolveResponse;
+}
+
+export interface VersionListResponse {
+  versions: LearnedPromptSetListItem[];
+}
+
+/** List all official Learned Prompt Set versions. */
+export async function listVersions(): Promise<VersionListResponse> {
+  return apiGet<VersionListResponse>('/pl/versions');
+}
+
+/** Read one Learned Prompt Set version with all prompt files. */
+export async function readVersion(version: string): Promise<LearnedPromptSetVersion> {
+  return apiGet<LearnedPromptSetVersion>(`/pl/versions/${version}`);
 }
