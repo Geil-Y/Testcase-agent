@@ -44,24 +44,41 @@ body {
 button { font-family: var(--font); cursor: pointer; }
 input, textarea, select { font-family: var(--font); }
 
-.nav {
-  height: 44px; min-height: 44px;
+/* ── App Shell (left nav + main content) ── */
+.app-shell { display: flex; flex: 1; min-height: 0; }
+
+.app-nav {
+  width: 200px; min-width: 200px;
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
-  display: flex; align-items: center;
-  padding: 0 20px; gap: 16px;
-  z-index: 10;
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  z-index: 10; user-select: none;
 }
-.nav-brand { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-.nav-brand span { color: var(--accent); }
-.nav-sep { width: 1px; height: 18px; background: var(--border); }
-.nav-item {
+.app-nav-brand {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  letter-spacing: -0.01em; padding: 16px 20px 12px;
+}
+.app-nav-brand span { color: var(--accent); }
+.app-nav-items {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0 8px;
+}
+.app-nav-item {
+  width: 100%; text-align: left;
   font-size: 13px; color: var(--text-secondary); cursor: pointer;
-  padding: 4px 10px; border-radius: var(--radius-sm); border: none;
+  padding: 8px 12px; border-radius: var(--radius-sm); border: none;
   background: none; transition: all 0.12s;
+  font-family: var(--font);
 }
-.nav-item:hover { color: var(--text); background: var(--bg-hover); }
-.nav-item.active { color: var(--text); background: var(--bg-hover); }
+.app-nav-item:hover { color: var(--text); background: var(--bg-hover); }
+.app-nav-item.active { color: var(--text); background: var(--bg-hover); font-weight: 500; }
+
+.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
+/* ── Prompt Learning page ── */
+.prompt-learning { display: flex; flex-direction: column; width: 100%; height: 100%; }
+.pl-header { padding: 32px 32px 0; }
+.pl-header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
