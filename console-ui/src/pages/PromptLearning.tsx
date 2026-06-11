@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { inspectWorkbooks } from '../api/pl-api';
-import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap } from '../api/pl-types';
+import { inspectWorkbooks, parseAndResolve } from '../api/pl-api';
+import type { WorkbookInspection, RequirementColMap, RefTestCaseColMap, DataIssue, ParsedSummary } from '../api/pl-types';
+import type { ParseAndResolveResponse } from '../api/pl-api';
 
 const LS_KEY = 'pl_column_mapping';
 
@@ -69,6 +70,12 @@ export default function PromptLearning() {
   // ── Column mapping ──
   const [reqCols, setReqCols] = useState<RequirementColMap>({ requirementKey: '', description: '' });
   const [caseCols, setCaseCols] = useState<RefTestCaseColMap>({ linkedRequirements: '', title: '', action: '', expectedResult: '' });
+
+  // ── Parse & resolve state ──
+  const [parsing, setParsing] = useState(false);
+  const [parseResult, setParseResult] = useState<ParseAndResolveResponse | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [showIssues, setShowIssues] = useState(false);
 
   // ── Track whether we've attempted restore ──
   const [restored, setRestored] = useState(false);
@@ -149,6 +156,23 @@ export default function PromptLearning() {
       setInspecting(false);
     }
   }, [reqFile, caseFile]);
+
+  // ── Parse & Resolve ──
+  const handleParseResolve = useCallback(async () => {
+    if (!reqFile || !caseFile) return;
+    setParseError(null);
+    setParsing(true);
+    try {
+      const result = await parseAndResolve(
+        reqFile, caseFile, reqSheet, caseSheets, reqCols, caseCols,
+      );
+      setParseResult(result);
+    } catch (e: any) {
+      setParseError(e?.message ?? 'Parse failed');
+    } finally {
+      setParsing(false);
+    }
+  }, [reqFile, caseFile, reqSheet, caseSheets, reqCols, caseCols]);
 
   // When reqSheet changes and a stored mapping was restored, keep columns in sync
   useEffect(() => {
@@ -289,7 +313,70 @@ export default function PromptLearning() {
             <span className="pl-hint">* Required columns. Unmapped optional columns are omitted from parsing.</span>
           </section>
         )}
+
+        {/* ── Step 4: Parse & Resolve ── */}
+        {reqInspect && caseInspect && reqSheet && caseSheets.length > 0 && (
+          <section className="pl-section">
+            <h2 className="pl-section-title">4. Parse &amp; Resolve</h2>
+            <button
+              className="btn btn-primary"
+              disabled={parsing}
+              onClick={handleParseResolve}
+            >
+              {parsing ? 'Parsing…' : 'Parse & Resolve Links'}
+            </button>
+            {parseError && <div className="error-msg" style={{ marginTop: 12 }}>{parseError}</div>}
+
+            {/* ── Summary display ── */}
+            {parseResult && (
+              <div className="pl-summary" style={{ marginTop: 16 }}>
+                <div className="pl-summary-grid">
+                  <SummaryCard label="Requirements" value={parseResult.summary.requirementCount} />
+                  <SummaryCard label="Reference Cases" value={parseResult.summary.refTestCaseCount} />
+                  <SummaryCard label="Valid Links" value={parseResult.summary.validLinkCount} />
+                  <SummaryCard label="No-Test" value={parseResult.summary.noTestRequirementCount} />
+                  <SummaryCard label="Style-Only Cases" value={parseResult.summary.styleOnlyCaseCount} />
+                  <SummaryCard label="Data Issues" value={parseResult.summary.dataIssueCount} accent={parseResult.summary.dataIssueCount > 0} />
+                </div>
+
+                {/* ── Data issue details ── */}
+                {parseResult.dataIssues.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => setShowIssues(!showIssues)}
+                    >
+                      {showIssues ? 'Hide' : 'Show'} Data Issues ({parseResult.dataIssues.length})
+                    </button>
+                    {showIssues && (
+                      <div className="pl-issues-list" style={{ marginTop: 8 }}>
+                        {parseResult.dataIssues.map((issue, i) => (
+                          <div key={i} className="pl-issue-item">
+                            <span className="pl-issue-type">{issue.issueType}</span>
+                            <span className="pl-issue-loc">
+                              {issue.fileType} / {issue.sheet}{issue.row != null ? ` row ${issue.row}` : ''}
+                            </span>
+                            <span className="pl-issue-msg">{issue.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
       </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <div className={`pl-summary-card${accent ? ' pl-summary-accent' : ''}`}>
+      <div className="pl-summary-value">{value}</div>
+      <div className="pl-summary-label">{label}</div>
     </div>
   );
 }

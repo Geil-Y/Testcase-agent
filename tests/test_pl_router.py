@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -141,3 +142,127 @@ class TestInspectWorkbooks:
     def test_health_endpoint_still_works(self, client):
         res = client.get("/api/v1/health")
         assert res.status_code == 200
+
+
+class TestParseAndResolve:
+    def test_parse_and_resolve_returns_summary(self, client):
+        req_buf = _make_xlsx({
+            "Requirements": [
+                ["Key", "Desc"],
+                ["REQ-1", "Overvoltage"],
+                ["REQ-2", "Undervoltage"],
+            ],
+        })
+        case_buf = _make_xlsx({
+            "Cases": [
+                ["CID", "Link", "Title", "Action", "Expected"],
+                ["TC-1", "REQ-1", "Test OV", "Set 4.2V", "Cuts off"],
+                ["TC-2", "REQ-2", "Test UV", "Set 2.5V", "Restores"],
+            ],
+        })
+
+        res = client.post(
+            "/api/v1/console/pl/parse-and-resolve",
+            files=[
+                ("req_file", ("req.xlsx", req_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("case_file", ("case.xlsx", case_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            ],
+            data={
+                "req_sheet": "Requirements",
+                "case_sheets": json.dumps(["Cases"]),
+                "req_mapping": json.dumps({"requirementKey": "Key", "description": "Desc"}),
+                "case_mapping": json.dumps({
+                    "caseId": "CID",
+                    "linkedRequirements": "Link",
+                    "title": "Title",
+                    "action": "Action",
+                    "expectedResult": "Expected",
+                }),
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        summary = body["summary"]
+        assert summary["requirementCount"] == 2
+        assert summary["refTestCaseCount"] == 2
+        assert summary["validLinkCount"] == 2
+        assert summary["noTestRequirementCount"] == 0
+        assert summary["styleOnlyCaseCount"] == 0
+        assert summary["dataIssueCount"] == 0
+
+    def test_parse_and_resolve_includes_data_issues(self, client):
+        req_buf = _make_xlsx({
+            "Requirements": [
+                ["Key", "Desc"],
+                ["", "Missing key"],
+                ["REQ-1", "Valid"],
+            ],
+        })
+        case_buf = _make_xlsx({
+            "Cases": [
+                ["CID", "Link", "Title", "Action", "Expected"],
+                ["TC-1", "REQ-1", "OK", "Action", "Expected"],
+            ],
+        })
+
+        res = client.post(
+            "/api/v1/console/pl/parse-and-resolve",
+            files=[
+                ("req_file", ("req.xlsx", req_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("case_file", ("case.xlsx", case_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            ],
+            data={
+                "req_sheet": "Requirements",
+                "case_sheets": json.dumps(["Cases"]),
+                "req_mapping": json.dumps({"requirementKey": "Key", "description": "Desc"}),
+                "case_mapping": json.dumps({
+                    "caseId": "CID",
+                    "linkedRequirements": "Link",
+                    "title": "Title",
+                    "action": "Action",
+                    "expectedResult": "Expected",
+                }),
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["summary"]["requirementCount"] == 1  # missing key excluded
+        assert body["summary"]["dataIssueCount"] == 1
+
+    def test_parse_and_resolve_rejects_invalid_json(self, client):
+        req_buf = _make_xlsx({"S": [["A"]]})
+        case_buf = _make_xlsx({"S": [["A"]]})
+
+        res = client.post(
+            "/api/v1/console/pl/parse-and-resolve",
+            files=[
+                ("req_file", ("r.xlsx", req_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("case_file", ("c.xlsx", case_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            ],
+            data={
+                "req_sheet": "S",
+                "case_sheets": "not-json",
+                "req_mapping": json.dumps({"requirementKey": "A", "description": "A"}),
+                "case_mapping": json.dumps({"linkedRequirements": "A", "title": "A", "action": "A", "expectedResult": "A"}),
+            },
+        )
+        assert res.status_code == 422
+
+    def test_parse_and_resolve_rejects_missing_sheet(self, client):
+        req_buf = _make_xlsx({"S": [["A"]]})
+        case_buf = _make_xlsx({"S": [["A"]]})
+
+        res = client.post(
+            "/api/v1/console/pl/parse-and-resolve",
+            files=[
+                ("req_file", ("r.xlsx", req_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+                ("case_file", ("c.xlsx", case_buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
+            ],
+            data={
+                "req_sheet": "NonExistent",
+                "case_sheets": json.dumps(["S"]),
+                "req_mapping": json.dumps({"requirementKey": "A", "description": "A"}),
+                "case_mapping": json.dumps({"linkedRequirements": "A", "title": "A", "action": "A", "expectedResult": "A"}),
+            },
+        )
+        assert res.status_code == 422
